@@ -1,0 +1,13 @@
+# Large InTAS dataset (clone separately from https://github.com/silaslobo/InTAS)
+InTAS/
+
+# Large cached SUMO traces (regenerated on first run)
+results/intas_trace_*.npz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS / editor
+.DS_Store
