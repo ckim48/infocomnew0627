@@ -156,7 +156,19 @@ def train_hgat(cfg, road, mob, device="cpu", warmup_rounds=40):
 
 @torch.no_grad()
 def future_contact_scores(cfg, road, mob, model, road_ei, device="cpu"):
-    """Gamma_j^road(k) for every vehicle (Eq. 10) via learned transition probs."""
+    """
+    Gamma_j^road(k): the expected number of *future V2V co-locations* of vehicle
+    j (Eq. 10), computed from learned road-aware transition probabilities.
+
+    For every vehicle we propagate a distribution over road segments h hops into
+    the future, P_j^(h)(e). The predicted cohort occupancy of a segment is
+    O^(h)(e) = sum_j P_j^(h)(e). The future contact potential of vehicle j is the
+    discounted expected co-location with other cohort vehicles along its
+    predicted trajectory:
+        Gamma_j = sum_h gamma^h  sum_e  P_j^(h)(e) * (O^(h)(e) - P_j^(h)(e)).
+    This is road-aware (paths follow the topology) and traffic-aware (it counts
+    where the cohort is actually heading), unlike a topology-blind density count.
+    """
     z = mob.traffic_state()
     x, com_ei = build_features(mob)
     zt = torch.tensor(z, device=device)
@@ -166,42 +178,49 @@ def future_contact_scores(cfg, road, mob, model, road_ei, device="cpu"):
     road_emb = model.encode_road(zt, road_ei)
     veh_emb = model.encode_veh(xt, com_ei_t, road_emb, segt)
     turn_lab = road.turn
+    N = mob.N
 
-    density = mob.density()
-    reward = density * road.L                                    # rho_e * L_e
-    reward_t = torch.tensor(reward, device=device, dtype=torch.float32)
+    # transition-prob cache per (vehicle, segment)
+    tcache = {}
+    def trans(i, e):
+        key = (i, e)
+        if key not in tcache:
+            succ = road.successors[e]
+            if len(succ) <= 1:
+                tcache[key] = (succ, np.array([1.0]) if succ else np.array([]))
+            else:
+                logit = model.transition_logits(veh_emb, road_emb, i, e, succ, turn_lab)
+                tcache[key] = (succ, torch.softmax(logit, dim=0).cpu().numpy())
+        return tcache[key]
 
-    # cache transition prob per (vehicle, edge) lazily
-    gamma = np.zeros(mob.N)
-    for i in range(mob.N):
-        e0 = int(mob.seg[i])
-        Pcur = {e0: 1.0}
-        score = 0.0
-        cache = {}
-        for h in range(1, cfg.H_max + 1):
-            Pnext = {}
-            for e, p_e in Pcur.items():
+    # h=0 distributions: each vehicle at its current segment
+    dists = [{int(mob.seg[i]): 1.0} for i in range(N)]
+    gamma = np.zeros(N)
+    for h in range(1, cfg.H_max + 1):
+        # advance every vehicle's segment distribution by one hop
+        new_dists = []
+        for i in range(N):
+            nd = {}
+            for e, p_e in dists[i].items():
                 if p_e <= 1e-6:
                     continue
-                succ = road.successors[e]
-                if len(succ) == 0:
-                    continue
-                if e not in cache:
-                    if len(succ) == 1:
-                        cache[e] = np.array([1.0])
-                    else:
-                        logit = model.transition_logits(veh_emb, road_emb, i, e, succ, turn_lab)
-                        cache[e] = torch.softmax(logit, dim=0).cpu().numpy()
-                pi = cache[e]
+                succ, pi = trans(i, e)
                 for idx, e2 in enumerate(succ):
-                    Pnext[e2] = Pnext.get(e2, 0.0) + p_e * float(pi[idx])
-            # discounted reward accumulation
+                    nd[e2] = nd.get(e2, 0.0) + p_e * float(pi[idx])
+            new_dists.append(nd)
+        dists = new_dists
+        # predicted cohort occupancy O^(h)(e)
+        occ = {}
+        for i in range(N):
+            for e, p in dists[i].items():
+                occ[e] = occ.get(e, 0.0) + p
+        # expected co-locations (exclude self)
+        disc = cfg.gamma_disc ** h
+        for i in range(N):
             s = 0.0
-            for e2, p2 in Pnext.items():
-                s += p2 * reward[e2]
-            score += (cfg.gamma_disc ** h) * s
-            Pcur = Pnext
-        gamma[i] = score
+            for e, p in dists[i].items():
+                s += p * (occ.get(e, 0.0) - p)
+            gamma[i] += disc * s
     if gamma.max() > 0:
         gamma = gamma / (gamma.mean() + 1e-9)
     return gamma

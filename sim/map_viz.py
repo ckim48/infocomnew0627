@@ -27,6 +27,166 @@ from .algorithm import CachingForwarding
 from .simulator import make_modality_availability
 
 
+def _prepare(cfg, device):
+    """Shared prep: InTAS trace, road graph, trained GAT, per-round Gamma."""
+    cache_path = os.path.join(cfg.results_dir, f"intas_trace_N{cfg.num_vehicles}_K{cfg.K}.npz")
+    trace = get_or_build_trace(cfg, cache_path, begin=34050.0, dt=2.0, warmup_s=480.0)
+    road = RoadNetwork(trace)
+    mob = MobilitySim(cfg, road, trace)
+    print("  [map] training GAT predictor ...")
+    model, road_ei = train_hgat(cfg, road, mob, device=device, warmup_rounds=40)
+    gammas = []
+    for k in range(mob.Krounds):
+        mob.k = k
+        gammas.append(future_contact_scores(cfg, road, mob, model, road_ei, device=device))
+    return road, mob, np.array(gammas)
+
+
+def _net_segs_centred(road):
+    """Real road polylines centred to match the trace coordinate frame."""
+    segs, raw_mid0 = _edge_polylines(np.zeros(2))
+    ctr = raw_mid0 - road.mid[0]
+    return [s - ctr for s in segs], ctr
+
+
+def _pick_source(cfg, mob, r0="camera"):
+    """Pick a strong-encoder owner of modality r0 with high cumulative contact."""
+    avail0 = make_modality_availability(cfg, np.random.default_rng(cfg.seed + 7))
+    mfl0 = MultimodalFL(cfg, np.random.default_rng(cfg.seed), avail0)
+    # cumulative V2V degree over the trace
+    cum_deg = np.zeros(mob.N)
+    for k in range(mob.Krounds):
+        mob.k = k
+        A = mob.v2v_graph()
+        cum_deg += A.sum(1)
+    mob.k = 0
+    cand = [i for i in range(mob.N)
+            if (i, r0) in mfl0.strength and mfl0.strength[(i, r0)] >= 0.85]
+    if not cand:
+        cand = [i for i in range(mob.N) if (i, r0) in mfl0.strength]
+    src = max(cand, key=lambda i: cum_deg[i])
+    return src, r0, mfl0, avail0
+
+
+def _run_track(cfg, mob, gammas, scheme, src, r0, avail, snaps):
+    """Run a scheme tracking which vehicles hold the source encoder over time."""
+    rng = np.random.default_rng(cfg.seed)
+    mfl = MultimodalFL(cfg, rng, avail)
+    alg = CachingForwarding(cfg, mfl, mob, scheme, seed=cfg.seed)
+    reached = {}
+    for k in range(mob.Krounds):
+        mob.k = k
+        mfl.local_train()
+        g = gammas[k] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
+            else np.zeros(mob.N)
+        alg.run_round(k, g)
+        if k in snaps:
+            have = set()
+            for i in range(mob.N):
+                got = ((i, r0) in mfl.acquired and src in mfl.acquired[(i, r0)]) \
+                    or ((src, r0) in alg.cache[i])
+                if got:
+                    have.add(i)
+            reached[k] = have
+    return reached
+
+
+def make_propagation_timelapse(cfg=None, device="cpu", snaps=(20, 60, 120)):
+    """Map time-lapse of one strong encoder spreading: road-aware vs agnostic."""
+    cfg = cfg or Config()
+    os.makedirs(cfg.figures_dir, exist_ok=True)
+    road, mob, gammas = _prepare(cfg, device)
+    net_segs, ctr = _net_segs_centred(road)
+    src, r0, mfl0, avail = _pick_source(cfg, mob, "camera")
+    print(f"  [map] tracking source vehicle {src} (modality {r0})")
+
+    reach_prop = _run_track(cfg, mob, gammas, "Proposed", src, r0, avail, set(snaps))
+    reach_cach = _run_track(cfg, mob, gammas, "Caching-assisted", src, r0, avail, set(snaps))
+
+    # camera-equipped vehicles (potential receivers)
+    cam = np.array([(i, r0) in mfl0.strength for i in range(mob.N)])
+
+    # viewport over the whole cohort trajectory
+    allxy = mob.veh_xy.reshape(-1, 2)
+    pad = 500
+    x0, x1 = allxy[:, 0].min() - pad, allxy[:, 0].max() + pad
+    y0, y1 = allxy[:, 1].min() - pad, allxy[:, 1].max() + pad
+    seg_in = [s for s in net_segs
+              if x0 <= s[:, 0].mean() <= x1 and y0 <= s[:, 1].mean() <= y1]
+
+    rows = [("Proposed (road-topology & traffic-aware)", reach_prop, True),
+            ("Caching-assisted (road/traffic-agnostic)", reach_cach, False)]
+    fig, axes = plt.subplots(2, len(snaps), figsize=(4.0 * len(snaps), 8.2),
+                             sharex=True, sharey=True)
+    for ri, (rlabel, reach, road_aware) in enumerate(rows):
+        for ci, k in enumerate(snaps):
+            ax = axes[ri, ci]
+            ax.add_collection(LineCollection(seg_in, colors="0.84", linewidths=0.4,
+                                             alpha=0.9, zorder=0))
+            mob.k = k
+            xy = mob.vehicle_xy()
+            have = reach[k]
+            have_mask = np.array([i in have for i in range(mob.N)])
+            # source trajectory up to k
+            tr = mob.veh_xy[:k + 1, src]
+            ax.plot(tr[:, 0], tr[:, 1], "-", color="navy", lw=1.0, alpha=0.7, zorder=2)
+            # not-yet-reached camera vehicles
+            m = cam & ~have_mask
+            ax.scatter(xy[m, 0], xy[m, 1], c="0.6", s=12, zorder=3)
+            # reached vehicles
+            m = cam & have_mask
+            ax.scatter(xy[m, 0], xy[m, 1], c="#2ca02c", s=22, edgecolors="k",
+                       linewidths=0.25, zorder=4)
+            # source
+            ax.scatter([xy[src, 0]], [xy[src, 1]], c="red", marker="*", s=180,
+                       edgecolors="k", linewidths=0.5, zorder=5)
+            ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
+            ax.set_xticks([]); ax.set_yticks([]); ax.set_aspect("equal")
+            ax.text(0.03, 0.97, f"round k={k}\nreached: {len(have)}",
+                    transform=ax.transAxes, va="top", ha="left", fontsize=9,
+                    bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85))
+            if ci == 0:
+                ax.set_ylabel(rlabel, fontsize=10)
+    # shared legend
+    from matplotlib.lines import Line2D
+    handles = [
+        Line2D([0], [0], marker="*", color="w", markerfacecolor="red",
+               markeredgecolor="k", markersize=14, label="Source (strong encoder)"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="#2ca02c",
+               markeredgecolor="k", markersize=8, label="Reached vehicle"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="0.6", markersize=7,
+               label="Not yet reached"),
+        Line2D([0], [0], color="navy", lw=1.2, label="Source trajectory"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=9,
+               bbox_to_anchor=(0.5, -0.01))
+    fig.suptitle("Encoder propagation over the Ingolstadt (InTAS) road network",
+                 fontsize=13, y=0.995)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.98])
+    p = os.path.join(cfg.figures_dir, "fig_map_timelapse.png")
+    fig.savefig(p, dpi=190, bbox_inches="tight")
+    fig.savefig(p.replace(".png", ".pdf"), bbox_inches="tight")
+    plt.close(fig)
+    # propagation curve: reached count vs round (full)
+    reach_prop_full = _run_track(cfg, mob, gammas, "Proposed", src, r0, avail,
+                                 set(range(mob.Krounds)))
+    reach_cach_full = _run_track(cfg, mob, gammas, "Caching-assisted", src, r0, avail,
+                                 set(range(mob.Krounds)))
+    fig, ax = plt.subplots(figsize=(5.2, 3.8))
+    xs = np.arange(mob.Krounds)
+    ax.plot(xs, [len(reach_prop_full[k]) for k in xs], "-r", lw=2,
+            label="Proposed (road/traffic-aware)")
+    ax.plot(xs, [len(reach_cach_full[k]) for k in xs], "--b", lw=2,
+            label="Caching-assisted (agnostic)")
+    ax.set_xlabel("Global round $k$"); ax.set_ylabel("Vehicles reached by source encoder")
+    ax.grid(True, ls=":", alpha=0.6); ax.legend(fontsize=9)
+    fig.tight_layout()
+    p2 = os.path.join(cfg.figures_dir, "fig_propagation_reach.png")
+    fig.savefig(p2, dpi=200); fig.savefig(p2.replace(".png", ".pdf"))
+    plt.close(fig)
+    print("  saved", p, "and", p2)
+
+
 def _edge_polylines(ctr):
     """Real road-segment polylines (centred by ctr) from the InTAS net."""
     net = sumolib.net.readNet(NET_FILE)

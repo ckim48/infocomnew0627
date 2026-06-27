@@ -108,7 +108,8 @@ class CachingForwarding:
         dis_prod = {}     # (m,r) -> running prod (1-beta_dis)
         used_contact = {} # (i,j) -> used tx time  (C1)
         received = set()  # (j,m,r) delivered  (C4: at most one sender per (j,m,r))
-        recv_pair = set() # (j,r) already satisfied once is still allowed (multiple modalities)
+        recv_mod = {}     # (j,r) -> count: receiver integrates <= 1 encoder per
+                          # modality per round (radio/compute reception limit)
 
         selected = []
         remaining = set(cands)
@@ -119,13 +120,14 @@ class CachingForwarding:
             for e in order:
                 i, j, m, r = e
                 d = info[e]
-                if (j, m, r) in received:
+                if (j, m, r) in received or recv_mod.get((j, r), 0) >= 1:
                     continue
                 if used_contact.get((i, j), 0.0) + d["t_tx"] > cfg.contact_time_per_round:
                     continue
                 selected.append(e)
                 used_contact[(i, j)] = used_contact.get((i, j), 0.0) + d["t_tx"]
                 received.add((j, m, r))
+                recv_mod[(j, r)] = recv_mod.get((j, r), 0) + 1
             return selected
 
         while remaining:
@@ -133,7 +135,7 @@ class CachingForwarding:
             for e in remaining:
                 i, j, m, r = e
                 d = info[e]
-                if (j, m, r) in received:
+                if (j, m, r) in received or recv_mod.get((j, r), 0) >= 1:
                     continue
                 if used_contact.get((i, j), 0.0) + d["t_tx"] > cfg.contact_time_per_round:
                     continue
@@ -157,6 +159,7 @@ class CachingForwarding:
             remaining.discard(best_e)
             used_contact[(i, j)] = used_contact.get((i, j), 0.0) + d["t_tx"]
             received.add((j, m, r))
+            recv_mod[(j, r)] = recv_mod.get((j, r), 0) + 1
             learn_prod[(j, r)] = learn_prod.get((j, r), 1.0) * (1.0 - d["beta_learn"])
             if fl["use_dis"]:
                 dis_prod[(m, r)] = dis_prod.get((m, r), 1.0) * (1.0 - d["beta_dis"])

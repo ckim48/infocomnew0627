@@ -43,13 +43,45 @@ Ingolstadt Traffic Scenario for SUMO*, arXiv:2011.11995).
 ## Run
 
 ```bash
-pip install eclipse-sumo libsumo sumolib traci numpy scipy matplotlib networkx torch
-python -m sim.simulator          # runs 3 seeds, writes results/metrics.npz
-python -m sim.plotting           # writes Figures/fig_*.{png,pdf}
+pip install eclipse-sumo libsumo sumolib traci numpy scipy matplotlib networkx torch pillow
+
+# (1) abstract large-scale simulation (150 vehicles) + figures
+python -m sim.simulator          # 3 seeds -> results/metrics.npz
+python -m sim.plotting           # Figures/fig_*.{png,pdf}
+
+# (2) road-awareness demonstration (mobility prediction: road vs straight-line)
+python -m sim.mobility_prediction    # Figures/fig_mobpred_*.{png,pdf}
+
+# (3) map visualizations on the real Ingolstadt network
+python -m sim.map_viz                # Figures/fig_map_*.{png,pdf}
+
+# (4) REAL multimodal FL on KITTI (camera + LiDAR)
+python -m sim.kitti_dataset          # build the multimodal object dataset
+python -m sim.real_fl                # 3 seeds -> results/metrics_real.npz + Figures/fig_real_*
 ```
 
 The first run invokes SUMO and caches the trace to
 `results/intas_trace_N{N}_K{K}.npz`; later runs reuse it.
+
+### Real multimodal FL on KITTI (`sim/real_fl.py`, `sim/kitti_dataset.py`, `sim/multimodal_model.py`)
+
+Real vehicular multimodal data (KITTI object detection benchmark): each labeled
+object becomes a multimodal sample of a **camera** RGB patch + the **LiDAR**
+points inside its 3D box, classified into Car/Pedestrian/Cyclist. `RealMFL`
+holds real CNN/PointNet encoders + a local fusion head per vehicle and plugs
+into the *same* caching/forwarding algorithm, performing **real FedAvg of
+encoder weights (Eq. 2), real local SGD, and reporting real classification
+accuracy**. Data-poor vehicles (few samples) freeze their encoder and adapt only
+their local head, so they depend on receiving a strong encoder from others.
+Download is automatic from the public KITTI S3 mirror (~40 GB; not committed).
+
+### Road-awareness demonstration (`sim/mobility_prediction.py`)
+
+Predicts each vehicle's future position H seconds ahead two ways — constrained
+to the road network (using the GAT turn probabilities) vs straight-line
+constant-velocity extrapolation — and compares displacement error against the
+realized SUMO trajectory. For turning vehicles the road-aware prediction is
+13–16% more accurate at every horizon.
 
 ## Outputs (`Figures/`)
 

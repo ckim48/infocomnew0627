@@ -1,0 +1,355 @@
+"""
+Real multimodal federated learning on KITTI, driven by the InTAS mobility and
+the proposed encoder caching/forwarding algorithm.
+
+RealMFL holds genuine modality-specific encoders (camera CNN, LiDAR PointNet)
+and a local fusion head per vehicle. Encoders are exchanged through the SAME
+CachingForwarding decision logic used in the abstract simulator, but here:
+  * local_train() runs real SGD on each vehicle's KITTI data partition,
+  * commit() performs real FedAvg of encoder weights (Eq. 2),
+  * accuracy is the real classification accuracy of the fused model.
+Modality/quality heterogeneity is realized by corrupting poor vehicles' data
+(blurred/low-light camera, sparse LiDAR), so poor vehicles genuinely need to
+receive strong encoders from others.
+"""
+
+import os
+import copy
+import numpy as np
+import torch
+import torch.nn as nn
+
+from .config import Config, SCHEMES
+from .multimodal_model import make_encoder, FusionHead, encoder_forward, FEAT, NCLS
+from .kitti_dataset import build as build_kitti, CLASSES
+
+
+def _device():
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def _fedavg(state_dicts, weights):
+    w = np.array(weights, dtype=np.float64); w = w / w.sum()
+    out = copy.deepcopy(state_dicts[0])
+    for k in out:
+        out[k] = sum(float(w[i]) * state_dicts[i][k].float() for i in range(len(state_dicts)))
+    return out
+
+
+class RealMFL:
+    """Real multimodal FL backend exposing the interface CachingForwarding needs."""
+
+    def __init__(self, cfg, rng, modality_avail, data, device=None):
+        self.cfg = cfg
+        self.rng = rng
+        self.R = cfg.modalities                       # ["camera", "lidar"]
+        self.N = cfg.num_vehicles
+        self.avail = [sorted(a) for a in modality_avail]   # deterministic ordered lists
+        self.device = device or _device()
+        img, lid, y = data["img"], data["lid"], data["y"]
+        self.val = data["val"]; self.test = data["test"]
+
+        # Data-volume heterogeneity. A minority of "rich" vehicles hold large
+        # local datasets and train full modality encoders (strong encoders).
+        # The majority "poor" vehicles hold only a handful of samples: they
+        # cannot train a useful encoder, so they FREEZE their encoder and only
+        # adapt their lightweight local fusion head -- relying on a strong
+        # encoder received from others. Reaching poor vehicles with a good
+        # encoder is therefore what determines their accuracy.
+        self.D, self.Q, self.strength, self.theta, self.pairs = {}, {}, {}, {}, []
+        self.enc, self.head, self.opt, self.local, self.rich = {}, {}, {}, {}, {}
+        riches = [rng.random() < cfg.frac_good for _ in range(self.N)]
+        n_rich = max(sum(riches), 1)
+        pool = rng.permutation(data["train_idx"])
+        poor_sizes = {i: int(rng.integers(4, 12)) for i in range(self.N) if not riches[i]}
+        rich_budget = len(pool) - sum(poor_sizes.values())
+        rich_each = max(rich_budget // n_rich, 30)
+        cur = 0
+        for i in range(self.N):
+            if riches[i]:
+                e = min(cur + rich_each, len(pool)); self.local[i] = pool[cur:e]; cur = e
+            else:
+                e = min(cur + poor_sizes[i], len(pool)); self.local[i] = pool[cur:e]; cur = e
+            if len(self.local[i]) == 0:
+                self.local[i] = pool[:5]
+            self.rich[i] = riches[i]
+            for r in self.avail[i]:
+                self.D[(i, r)] = len(self.local[i])
+                self.Q[(i, r)] = rng.uniform(0.8, 1.0) if riches[i] else rng.uniform(0.1, 0.3)
+                self.strength[(i, r)] = self.Q[(i, r)]
+                self.theta[(i, r)] = self.Q[(i, r)]
+                self.pairs.append((i, r))
+            # encoders: trainable for rich vehicles, frozen for poor vehicles
+            self.enc[i] = {r: make_encoder(r).to(self.device) for r in self.avail[i]}
+            self.head[i] = FusionHead(self.avail[i]).to(self.device)
+            params = list(self.head[i].parameters())
+            if riches[i]:
+                for r in self.avail[i]:
+                    params += list(self.enc[i][r].parameters())
+            else:
+                for r in self.avail[i]:
+                    for p in self.enc[i][r].parameters():
+                        p.requires_grad_(False)
+            self.opt[i] = torch.optim.Adam(params, lr=1e-3)
+        # registry of current encoder weights (for forwarding/aggregation)
+        self.img_t = torch.tensor(img, device=self.device)
+        self.lid_t = torch.tensor(lid, device=self.device)
+        self.y_t = torch.tensor(y, device=self.device, dtype=torch.long)
+        self.acc = np.zeros(self.N)
+        self._corrupt = {i: (self.Q[(i, self.avail[i][0])] < 0.5) for i in range(self.N)}
+
+    # ---- data access with per-vehicle quality corruption ----
+    def _batch(self, idx, vehicle):
+        img = self.img_t[idx].clone()
+        lid = self.lid_t[idx].clone()
+        if self._corrupt.get(vehicle, False):
+            img = img + 0.25 * torch.randn_like(img)           # noisy/low-quality camera
+            img = torch.clamp(img * 0.6, 0, 1)                 # low light
+            mask = (torch.rand_like(lid[..., :1]) < 0.6).float()
+            lid = lid * mask                                   # sparse LiDAR
+        return img, lid, self.y_t[idx]
+
+    def Dmr(self, m, r):
+        return self.D.get((m, r), 1)
+
+    # ---- real local training (Eq. 1) ----
+    def local_train(self):
+        ce = nn.CrossEntropyLoss()
+        for i in range(self.N):
+            idx = self.local[i]
+            if len(idx) == 0:
+                continue
+            self._set_train(i, True)
+            for _ in range(self.cfg.local_epochs):
+                b = idx[self.rng.choice(len(idx), min(64, len(idx)), replace=False)]
+                img, lid, y = self._batch(b, i)
+                feats = {r: encoder_forward(self.enc[i][r], r, img, lid) for r in self.avail[i]}
+                logits = self.head[i](feats)
+                loss = ce(logits, y)
+                self.opt[i].zero_grad(); loss.backward(); self.opt[i].step()
+
+    def _set_train(self, i, t):
+        self.head[i].train(t)
+        for r in self.avail[i]:
+            self.enc[i][r].train(t)
+
+    # ---- real evaluation on the shared clean test/val split ----
+    @torch.no_grad()
+    def evaluate(self, which="val"):
+        idx, yv = (self.val if which == "val" else self.test)
+        idx_t = torch.tensor(idx, device=self.device)
+        y_t = torch.tensor(yv, device=self.device, dtype=torch.long)
+        img = self.img_t[idx_t]; lid = self.lid_t[idx_t]
+        accs = np.zeros(self.N)
+        for i in range(self.N):
+            self._set_train(i, False)
+            feats = {r: encoder_forward(self.enc[i][r], r, img, lid) for r in self.avail[i]}
+            pred = self.head[i](feats).argmax(1)
+            accs[i] = float((pred == y_t).float().mean())
+        return accs
+
+    def refresh_strengths(self):
+        self.acc = self.evaluate("val")
+        for (i, r) in self.pairs:
+            self.strength[(i, r)] = float(self.acc[i])
+            self.theta[(i, r)] = float(self.acc[i])
+
+    # ---- decision proxies used by CachingForwarding ----
+    def q_eff(self, i, r, extra=None):
+        return float(self.strength[(i, r)])
+
+    def val_loss(self, i, r, q_eff=None):
+        qe = self.q_eff(i, r) if q_eff is None else q_eff
+        return float((1.0 - qe) ** 2)
+
+    def local_val_loss(self, i, r):
+        return self.val_loss(i, r)
+
+    def gain_single(self, i, r, m, s_m):
+        g = max(float(s_m) - float(self.strength[(i, r)]), 0.0)
+        return g, None, None
+
+    # ---- real FedAvg aggregation of received encoders (Eq. 2) ----
+    def commit(self, i, r, received):
+        if not received or r not in self.avail[i]:
+            return
+        sds = [self.enc[i][r].state_dict()]
+        ws = [self.Dmr(i, r)]
+        for (m, s_m) in received:
+            if r in self.enc.get(m, {}):
+                sds.append(self.enc[m][r].state_dict())
+                ws.append(self.Dmr(m, r))
+        if len(sds) > 1:
+            self.enc[i][r].load_state_dict(_fedavg(sds, ws))
+
+    # ---- real metrics ----
+    def mean_accuracy(self):
+        return float(self.evaluate("test").mean())
+
+    def poor_accuracy(self, thr=0.5):
+        accs = self.evaluate("test")
+        poor = [i for i in range(self.N)
+                if self.Q[(i, self.avail[i][0])] < thr]
+        return float(np.mean(accs[poor])) if poor else 0.0
+
+    def tail_accuracy(self, q=0.1):
+        accs = self.evaluate("test")
+        thr = np.quantile(accs, q)
+        return float(accs[accs <= thr].mean())
+
+    def poor_mask(self, thr=0.5):
+        return np.array([self.Q[(i, self.avail[i][0])] < thr for i in range(self.N)])
+
+
+def _prep_data(cfg, seed, cache="results/kitti_mm_all.npz", per_class=None):
+    """Load KITTI objects and class-balance them so the task is non-trivial
+    (the raw set is ~84% Car). Returns balanced img/lid/y plus train/val/test."""
+    img, lid, y, frame, boxh = build_kitti(cache=cache)
+    rng = np.random.default_rng(seed)
+    counts = np.bincount(y, minlength=NCLS)
+    cap = per_class if per_class else int(counts.min())
+    keep = []
+    for c in range(NCLS):
+        ci = np.where(y == c)[0]
+        keep.append(rng.choice(ci, min(cap, len(ci)), replace=False))
+    keep = rng.permutation(np.concatenate(keep))
+    img, lid, y = img[keep], lid[keep], y[keep]
+    n = len(y); perm = rng.permutation(n)
+    n_test = int(0.20 * n); n_val = int(0.12 * n)
+    test_idx = perm[:n_test]; val_idx = perm[n_test:n_test + n_val]
+    train_idx = perm[n_test + n_val:]
+    print(f"  [data] balanced classes {np.bincount(y)}  "
+          f"train {len(train_idx)} val {len(val_idx)} test {len(test_idx)}")
+    return dict(img=img, lid=lid, y=y,
+                val=(val_idx, y[val_idx]), test=(test_idx, y[test_idx]),
+                train_idx=train_idx)
+
+
+def run_real_all(cfg=None, seeds=None, device=None):
+    """Real multimodal FL over InTAS mobility for all schemes; real KITTI accuracy."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from .simulator import prepare, make_modality_availability
+    from .algorithm import CachingForwarding
+    from .plotting import STYLE
+
+    cfg = cfg or Config()
+    cfg.modalities = ["camera", "lidar"]
+    cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
+    device = device or _device()
+    seeds = seeds or [cfg.seed]
+    os.makedirs(cfg.figures_dir, exist_ok=True)
+
+    road, mob, gammas = prepare(cfg, device)
+    data = _prep_data(cfg, cfg.seed)
+
+    metric_keys = ["acc", "poor", "tx", "qlen"]
+    stacks = {s: {m: [] for m in metric_keys} for s in SCHEMES}
+    for sd in seeds:
+        avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
+        for scheme in SCHEMES:
+            rng = np.random.default_rng(sd)
+            mfl = RealMFL(cfg, rng, avail, data, device=device)
+            alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
+            pm = mfl.poor_mask()
+            acc_h, poor_h, tx_h, q_h = [], [], [], []
+            for k in range(mob.Krounds):
+                mob.k = k
+                mfl.local_train()
+                mfl.refresh_strengths()
+                g = gammas[k] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
+                    else np.zeros(mob.N)
+                selected = alg.run_round(k, g)
+                accs = mfl.evaluate("test")
+                acc_h.append(float(accs.mean()))
+                poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
+                tx_h.append(len(selected))
+                q_h.append(np.mean(list(alg.Q.values())))
+            stacks[scheme]["acc"].append(acc_h)
+            stacks[scheme]["poor"].append(poor_h)
+            stacks[scheme]["tx"].append(tx_h)
+            stacks[scheme]["qlen"].append(q_h)
+            print(f"  [real seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
+                  f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}")
+            del mfl, alg
+            if device == "cuda":
+                torch.cuda.empty_cache()
+
+    results = {}
+    for s in SCHEMES:
+        results[s] = {}
+        for m in metric_keys:
+            arr = np.stack(stacks[s][m])
+            results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
+    np.savez(os.path.join(cfg.results_dir, "metrics_real.npz"),
+             **{f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
+
+    # figures
+    K = mob.Krounds; x = np.arange(1, K + 1); mi = np.arange(0, K, max(K // 12, 1))
+    for key, ylab, fname, loc in [
+            ("acc", "Mean test accuracy", "fig_real_accuracy.png", "lower right"),
+            ("poor", "Poor-data vehicle accuracy", "fig_real_poor_accuracy.png", "lower right")]:
+        fig, ax = plt.subplots(figsize=(5.2, 3.8))
+        for s in SCHEMES:
+            ax.plot(x, results[s][key], label=s, markevery=mi, ms=5, **STYLE[s])
+            ax.fill_between(x, results[s][key] - results[s][key + "_std"],
+                            results[s][key] + results[s][key + "_std"],
+                            color=STYLE[s]["color"], alpha=0.15, lw=0)
+        ax.set_xlabel("Global round $k$"); ax.set_ylabel(ylab)
+        ax.grid(True, ls=":", alpha=0.6); ax.legend(fontsize=9, loc=loc)
+        fig.tight_layout()
+        p = os.path.join(cfg.figures_dir, fname)
+        fig.savefig(p, dpi=200); fig.savefig(p.replace(".png", ".pdf")); plt.close(fig)
+        print("  saved", p)
+
+    print("=== REAL multimodal FL (KITTI) final ===")
+    for s in SCHEMES:
+        print(f"  {s:16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")
+    return results
+
+
+def centralized_sanity(epochs=8):
+    """Quick centralized check that the multimodal model learns KITTI objects."""
+    cfg = Config()
+    dev = _device()
+    d = _prep_data(cfg, cfg.seed)
+    img = torch.tensor(d["img"], device=dev); lid = torch.tensor(d["lid"], device=dev)
+    y = torch.tensor(d["y"], device=dev, dtype=torch.long)
+    tr = d["train_idx"]; te, yte = d["test"]
+    enc = {r: make_encoder(r).to(dev) for r in ["camera", "lidar"]}
+    head = FusionHead(["camera", "lidar"]).to(dev)
+    params = list(head.parameters())
+    for r in enc: params += list(enc[r].parameters())
+    opt = torch.optim.Adam(params, lr=1e-3); ce = nn.CrossEntropyLoss()
+    rng = np.random.default_rng(0)
+    for ep in range(epochs):
+        for _ in range(max(1, len(tr) // 128)):
+            b = tr[rng.choice(len(tr), 128, replace=False)]
+            feats = {"camera": enc["camera"](img[b]), "lidar": enc["lidar"](lid[b])}
+            loss = ce(head(feats), y[b])
+            opt.zero_grad(); loss.backward(); opt.step()
+        with torch.no_grad():
+            te_t = torch.tensor(te, device=dev)
+            feats = {"camera": enc["camera"](img[te_t]), "lidar": enc["lidar"](lid[te_t])}
+            acc = float((head(feats).argmax(1) == torch.tensor(yte, device=dev)).float().mean())
+        print(f"  [sanity] epoch {ep}  test acc {acc:.3f}")
+    return acc
+
+
+def main():
+    """Reproduce the real multimodal FL (KITTI) comparison from the paper."""
+    cfg = Config()
+    cfg.num_vehicles = 80
+    cfg.K = 40
+    cfg.comm_range = 220.0          # moderate density -> receiver-side contention
+    cfg.gat_epochs = 30
+    cfg.local_epochs = 3
+    cfg.frac_good = 0.15            # scarce strong (data-rich) sources
+    cfg.cache_capacity_mb = 30.0
+    cfg.contact_time_per_round = 1.8
+    run_real_all(cfg, seeds=[2026, 2027, 2028])
+
+
+if __name__ == "__main__":
+    main()
