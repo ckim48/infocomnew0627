@@ -93,44 +93,14 @@ def make(cfg=None, rate=2.0):
     A = _adj_stack(cfg, mob)
     dt = mob.dt
 
-    # ---------- Figure 1 ----------
+    # ---------- compute all panel data ----------
     durs = _contact_durations(A, dt)
-    # cumulative encoder sizes (MB) for 1..4 modalities, ascending sizes
     sizes = np.sort([cfg.encoder_size[r] for r in ["camera", "lidar", "radar", "gps"]])
-    cum = np.cumsum(sizes)                                  # MB to send 1..4 encoders
-    cap = durs * rate                                       # MB transferable per contact
+    cum = np.cumsum(sizes)
+    cap = durs * rate
     frac_all = [float((cap >= cum[n - 1]).mean()) for n in range(1, 5)]
 
-    fig, ax = plt.subplots(1, 2, figsize=(7.2, 3.0))
-    xs = np.sort(durs); cdf = np.arange(1, len(xs) + 1) / len(xs)
-    ax[0].plot(xs, cdf, color=RED)
-    ax[0].axvline(np.median(durs), color=BLK, ls=":", lw=1.2)
-    ax[0].text(np.median(durs) * 1.05, 0.2, f"median\n{np.median(durs):.0f}s", fontsize=9)
-    ax[0].set_xlabel("V2V contact duration (s)", labelpad=6); ax[0].set_ylabel("CDF")
-    ax[0].set_xlim(0, np.quantile(durs, 0.98)); ax[0].set_ylim(0, 1)
-    ax[0].grid(True, ls="--", lw=0.6, alpha=0.5)
-    ax[0].set_title("(a)", y=-0.46, fontsize=12)
-
-    ax[1].bar(range(1, 5), frac_all, color=[GRN, BLU, "#f0a020", RED], width=0.6,
-              edgecolor="k", linewidth=0.6)
-    for n, f in zip(range(1, 5), frac_all):
-        ax[1].text(n, f + 0.02, f"{f:.2f}", ha="center", fontsize=9)
-    ax[1].set_xticks(range(1, 5))
-    ax[1].set_xlabel("Number of modality encoders", labelpad=6)
-    ax[1].set_ylabel("Frac. contacts able to\nexchange all encoders")
-    ax[1].set_ylim(0, 1.05); ax[1].grid(True, axis="y", ls="--", lw=0.6, alpha=0.5)
-    ax[1].set_title("(b)", y=-0.46, fontsize=12)
-    fig.tight_layout(); fig.subplots_adjust(bottom=0.30, wspace=0.32)
-    for ext in ("png", "pdf"):
-        fig.savefig(os.path.join(cfg.figures_dir, f"fig_motiv_contacts.{ext}"),
-                    dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # ---------- Figure 2 ----------
-    rng = np.random.default_rng(cfg.seed)
-    N = mob.N
-    nseed = 8
-    # (a) reach over rounds, direct vs carry, at frac_good=0.15
+    rng = np.random.default_rng(cfg.seed); N = mob.N; nseed = 8
     n_src = max(int(0.15 * N), 1)
     direct_runs, carry_runs = [], []
     for _ in range(nseed):
@@ -140,17 +110,6 @@ def make(cfg=None, rate=2.0):
     direct = np.mean(direct_runs, 0); carry = np.mean(carry_runs, 0)
     x = np.arange(1, mob.Krounds + 1); mi = np.arange(0, mob.Krounds, 12)
 
-    fig, ax = plt.subplots(1, 2, figsize=(7.2, 3.0))
-    ax[0].plot(x, carry, color=RED, marker="o", markevery=mi, ms=5,
-               markerfacecolor="white", markeredgewidth=1.2, label="Store-carry-forward")
-    ax[0].plot(x, direct, color=BLK, ls=":", marker="^", markevery=mi, ms=5,
-               markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
-    ax[0].set_xlabel("Global round $k$", labelpad=6); ax[0].set_ylabel("Frac. vehicles reached")
-    ax[0].set_xlim(0, mob.Krounds); ax[0].set_ylim(0, 1.02)
-    ax[0].grid(True, ls="--", lw=0.6, alpha=0.5); ax[0].legend(fontsize=9, loc="lower right")
-    ax[0].set_title("(a)", y=-0.46, fontsize=12)
-
-    # (b) final reach vs fraction of strong-encoder owners
     fracs = [0.05, 0.10, 0.15, 0.20, 0.30]
     fd, fc = [], []
     for fg in fracs:
@@ -160,18 +119,51 @@ def make(cfg=None, rate=2.0):
             dd.append(_reach(A, src, carry=False)[-1])
             cc.append(_reach(A, src, carry=True)[-1])
         fd.append(np.mean(dd)); fc.append(np.mean(cc))
-    ax[1].plot(np.array(fracs) * 100, fc, color=RED, marker="o", ms=6,
-               markerfacecolor="white", markeredgewidth=1.2, label="Store-carry-forward")
-    ax[1].plot(np.array(fracs) * 100, fd, color=BLK, ls=":", marker="^", ms=6,
-               markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
-    ax[1].set_xlabel("Strong-encoder owners (\\%)", labelpad=6)
-    ax[1].set_ylabel("Final frac. reached")
-    ax[1].set_ylim(0, 1.02); ax[1].grid(True, ls="--", lw=0.6, alpha=0.5)
-    ax[1].legend(fontsize=9, loc="lower right")
-    ax[1].set_title("(b)", y=-0.46, fontsize=12)
-    fig.tight_layout(); fig.subplots_adjust(bottom=0.30, wspace=0.32)
+
+    # ---------- single 2x2 figure ----------
+    fig, ax = plt.subplots(2, 2, figsize=(7.2, 5.8))
+    # (a) contact-duration CDF
+    xs = np.sort(durs); cdf = np.arange(1, len(xs) + 1) / len(xs)
+    ax[0, 0].plot(xs, cdf, color=RED)
+    ax[0, 0].axvline(np.median(durs), color=BLK, ls=":", lw=1.2)
+    ax[0, 0].text(np.median(durs) * 1.07, 0.18, f"median\n{np.median(durs):.0f}s", fontsize=9)
+    ax[0, 0].set_xlabel("V2V contact duration (s)", labelpad=6); ax[0, 0].set_ylabel("CDF")
+    ax[0, 0].set_xlim(0, np.quantile(durs, 0.98)); ax[0, 0].set_ylim(0, 1)
+    ax[0, 0].grid(True, ls="--", lw=0.6, alpha=0.5)
+    ax[0, 0].set_title("(a)", y=-0.40, fontsize=12)
+    # (b) multimodal exchange burden
+    ax[0, 1].bar(range(1, 5), frac_all, color=[GRN, BLU, "#f0a020", RED], width=0.6,
+                 edgecolor="k", linewidth=0.6)
+    for n, f in zip(range(1, 5), frac_all):
+        ax[0, 1].text(n, f + 0.02, f"{f:.2f}", ha="center", fontsize=9)
+    ax[0, 1].set_xticks(range(1, 5))
+    ax[0, 1].set_xlabel("Number of modality encoders", labelpad=6)
+    ax[0, 1].set_ylabel("Frac. contacts able to\nexchange all encoders")
+    ax[0, 1].set_ylim(0, 1.08); ax[0, 1].grid(True, axis="y", ls="--", lw=0.6, alpha=0.5)
+    ax[0, 1].set_title("(b)", y=-0.40, fontsize=12)
+    # (c) reach over rounds
+    ax[1, 0].plot(x, carry, color=RED, marker="o", markevery=mi, ms=5,
+                  markerfacecolor="white", markeredgewidth=1.2, label="Store-carry-forward")
+    ax[1, 0].plot(x, direct, color=BLK, ls=":", marker="^", markevery=mi, ms=5,
+                  markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
+    ax[1, 0].set_xlabel("Global round $k$", labelpad=6); ax[1, 0].set_ylabel("Frac. vehicles reached")
+    ax[1, 0].set_xlim(0, mob.Krounds); ax[1, 0].set_ylim(0, 1.02)
+    ax[1, 0].grid(True, ls="--", lw=0.6, alpha=0.5); ax[1, 0].legend(fontsize=9, loc="lower right")
+    ax[1, 0].set_title("(c)", y=-0.40, fontsize=12)
+    # (d) effect of encoder scarcity
+    ax[1, 1].plot(np.array(fracs) * 100, fc, color=RED, marker="o", ms=6,
+                  markerfacecolor="white", markeredgewidth=1.2, label="Store-carry-forward")
+    ax[1, 1].plot(np.array(fracs) * 100, fd, color=BLK, ls=":", marker="^", ms=6,
+                  markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
+    ax[1, 1].set_xlabel("Strong-encoder owners (\\%)", labelpad=6)
+    ax[1, 1].set_ylabel("Final frac. reached")
+    ax[1, 1].set_ylim(0, 1.02); ax[1, 1].grid(True, ls="--", lw=0.6, alpha=0.5)
+    ax[1, 1].legend(fontsize=9, loc="lower right")
+    ax[1, 1].set_title("(d)", y=-0.40, fontsize=12)
+
+    fig.tight_layout(); fig.subplots_adjust(hspace=0.55, wspace=0.34)
     for ext in ("png", "pdf"):
-        fig.savefig(os.path.join(cfg.figures_dir, f"fig_motiv_reach.{ext}"),
+        fig.savefig(os.path.join(cfg.figures_dir, f"fig_motivation.{ext}"),
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
 
@@ -181,7 +173,7 @@ def make(cfg=None, rate=2.0):
     print(f"  frac contacts exchanging all N encoders: "
           + ", ".join(f"N={n}:{f:.2f}" for n, f in zip(range(1, 5), frac_all)))
     print(f"  reach@end direct {direct[-1]:.2f} vs carry {carry[-1]:.2f}")
-    print("  saved fig_motiv_contacts, fig_motiv_reach")
+    print("  saved fig_motivation (2x2)")
 
 
 if __name__ == "__main__":
