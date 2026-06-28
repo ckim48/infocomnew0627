@@ -1,6 +1,8 @@
 % ======================================================================
-%  Result tables for the INFOCOM submission (requires \usepackage{booktabs}).
-%  Numbers from results/metrics.npz and results/metrics_real.npz (3-seed mean).
+%  Result tables for the INFOCOM submission.
+%  Requires: \usepackage{booktabs} and \usepackage{multirow}.
+%  Numbers from results/metrics*.npz (3-seed mean) and the InTAS trace
+%  statistics printed by `python -m sim.setup_stats`.
 % ======================================================================
 
 % --- Main comparison: real multimodal FL on two datasets ---
@@ -65,25 +67,43 @@ Horizon (s) & Road-aware & Straight-line & Imp.\ (turning) \\
 \end{tabular}
 \end{table}
 
-% --- Simulation setup ---
+% --- Simulation parameters and measured statistics ---
 \begin{table}[t]
 \centering
-\caption{Simulation setup.}
+\caption{Simulation parameters and measured mobility statistics
+(Ingolstadt InTAS trace).}
 \label{tab:setup}
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{ll}
+\begin{tabular}{lll}
 \toprule
-Parameter & Value \\
+Category & Parameter & Value \\
 \midrule
-Mobility scenario      & Ingolstadt InTAS (SUMO), dense hour \\
-Road network           & 3{,}342 nodes, 7{,}968 edges, 98 lights \\
-Vehicles $N$           & 150 (large-scale) / 80 (real KITTI) \\
-Global rounds $K$      & 150 / 40 \\
-Modalities             & camera, LiDAR, radar, GPS / camera, LiDAR \\
-Real dataset           & KITTI (Car/Pedestrian/Cyclist) \\
-Encoders               & 2D-CNN (camera), PointNet (LiDAR) \\
-Aggregation            & data-weighted FedAvg (Eq.~2) \\
-Mobility predictor     & hierarchical GAT \\
+\multirow{5}{*}{Mobility}
+ & Scenario              & Ingolstadt InTAS (SUMO) \\
+ & Road network          & 3{,}342 nodes / 7{,}968 edges \\
+ & Urban area            & 51.54 km$^2$ \\
+ & Avg.\ vehicle speed   & 32.4 km/h (8.99 m/s) \\
+ & Vehicles $N$          & 80--150 \\
+\midrule
+\multirow{4}{*}{Communication}
+ & V2V range             & 100 m \\
+ & V2V data rate         & 16 Mbps (2 MB/s) \\
+ & Avg.\ contact duration & 22.3 s (median 12 s) \\
+ & Avg.\ V2V degree      & 0.76 \\
+\midrule
+\multirow{5}{*}{Learning}
+ & Modalities            & camera, LiDAR, radar, GPS \\
+ & Encoder size $S_{m,r}$ & 12 / 18 / 6 / 1.5 MB (avg 9.4) \\
+ & Datasets              & KITTI, nuScenes \\
+ & Encoders              & 2D-CNN, PointNet \\
+ & Cache capacity $C^{\mathrm{cache}}$ & 30--45 MB \\
+ & Global rounds $K$     & up to 80 \\
+\midrule
+\multirow{4}{*}{Algorithm}
+ & Lyapunov weight $V$   & 2.0 \\
+ & Forwarding weight $\nu$ & 1.0 \\
+ & Discount $\gamma$     & 0.8 \\
+ & Cache-cost weight $\lambda$ & 0.02 \\
 \bottomrule
 \end{tabular}
 \end{table}
