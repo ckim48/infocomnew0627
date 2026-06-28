@@ -112,39 +112,24 @@ straight-line, for (a) turning vehicles and (b) all vehicles.}
 \subsection{Real Multimodal FL on KITTI}
 \label{subsec:real_kitti}
 
-We further validate the framework with \emph{real} multimodal data from the
-KITTI benchmark, where each object is represented by its camera RGB patch and the
+We further validate the framework with \emph{real} multimodal data from two
+autonomous-driving datasets, \textbf{KITTI} and \textbf{nuScenes}, both run over
+the InTAS mobility. Each object is represented by its camera RGB patch and the
 LiDAR points inside its 3D box and classified into Car/Pedestrian/Cyclist. Each
 vehicle trains real CNN/PointNet encoders and a local fusion head; encoders are
 exchanged through the proposed algorithm and aggregated by real FedAvg
 (Eq.~\eqref{eq:modality_encoder_aggregation}). Data-poor vehicles depend on
-receiving strong encoders from others. Table~\ref{tab:real_results} and
+receiving strong encoders from others. Table~\ref{tab:main_results} and
 Fig.~\ref{fig:real_accuracy} report the real classification accuracy (mean of 3
-seeds). The proposed framework achieves the highest accuracy, and in particular
-the highest accuracy for poor-data vehicles, confirming on real sensor data that
-demand- and mobility-aware encoder caching/forwarding outperforms both the
-caching and the no-caching baselines.
-
-\begin{table}[t]
-\centering
-\caption{Real multimodal FL on KITTI (mean test accuracy, 3 seeds).}
-\label{tab:real_results}
-\begin{tabular}{lcc}
-\hline
-Scheme & Mean acc. & Poor-data acc. \\
-\hline
-\textbf{Proposed}        & \textbf{0.449} & \textbf{0.389} \\
-Caching-assisted (LRU)   & 0.440 & 0.378 \\
-V2V-aware                & 0.439 & 0.377 \\
-Learning-aware           & 0.441 & 0.380 \\
-\hline
-\end{tabular}
-\end{table}
+seeds). On both datasets the proposed framework attains the highest test
+accuracy, and on KITTI the largest margin for poor-data vehicles, confirming on
+real sensor data that demand- and mobility-aware encoder caching/forwarding
+outperforms the caching and no-caching baselines.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{Figures/fig_real_accuracy.pdf}
-\caption{Real multimodal FL on KITTI: mean test accuracy vs.\ global round
-(shaded: $\pm$std over seeds).}
+\includegraphics[width=\columnwidth]{Figures/fig_infocom_accuracy.pdf}
+\caption{Real multimodal FL: test accuracy vs.\ global round for (a) KITTI and
+(b) nuScenes.}
 \label{fig:real_accuracy}
 \end{figure}

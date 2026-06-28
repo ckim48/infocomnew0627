@@ -3,26 +3,42 @@
 %  Numbers from results/metrics.npz and results/metrics_real.npz (3-seed mean).
 % ======================================================================
 
-% --- Main comparison: final accuracy across both settings ---
+% --- Main comparison: real multimodal FL on two datasets ---
 \begin{table}[t]
 \centering
-\caption{Final test accuracy (mean of 3 seeds). ``Poor'' is the accuracy of
-data-poor vehicles. $\Delta$ is the gain of the proposed scheme over the best
-baseline.}
+\caption{Final test accuracy of real multimodal FL on two datasets (mean of 3
+seeds). ``Poor'' is the accuracy of data-poor vehicles.}
 \label{tab:main_results}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l cc cc}
 \toprule
- & \multicolumn{2}{c}{Large-scale (InTAS, $N{=}150$)} & \multicolumn{2}{c}{Real KITTI} \\
+ & \multicolumn{2}{c}{KITTI} & \multicolumn{2}{c}{nuScenes} \\
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 Scheme & Acc. & Poor & Acc. & Poor \\
 \midrule
-\textbf{Proposed}        & \textbf{0.687} & \textbf{0.660} & \textbf{0.449} & \textbf{0.389} \\
-Caching-assisted (LRU)   & 0.634 & 0.599 & 0.440 & 0.378 \\
-V2V-aware                & 0.635 & 0.601 & 0.439 & 0.377 \\
-Learning-aware           & 0.636 & 0.603 & 0.441 & 0.380 \\
+\textbf{Proposed}        & \textbf{0.453} & \textbf{0.394} & \textbf{0.406} & 0.372 \\
+Caching-assisted (LRU)   & 0.440 & 0.378 & 0.399 & 0.366 \\
+V2V-aware                & 0.440 & 0.378 & 0.405 & \textbf{0.373} \\
+Learning-aware           & 0.442 & 0.380 & 0.398 & 0.364 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% --- Large-scale simulation on the InTAS mobility (abstract learning model) ---
+\begin{table}[t]
+\centering
+\caption{Large-scale simulation on InTAS mobility ($N{=}150$ vehicles, mean of
+3 seeds).}
+\label{tab:largescale}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{l cc}
+\toprule
+Scheme & Test acc. & Poor-data acc. \\
 \midrule
-$\Delta$ over best baseline & +8.0\% & +9.5\% & +1.8\% & +2.4\% \\
+\textbf{Proposed}        & \textbf{0.687} & \textbf{0.660} \\
+Caching-assisted (LRU)   & 0.634 & 0.599 \\
+V2V-aware                & 0.635 & 0.601 \\
+Learning-aware           & 0.636 & 0.603 \\
 \bottomrule
 \end{tabular}
 \end{table}

@@ -16,3 +16,4 @@ __pycache__/
 # OS / editor
 .DS_Store
 .claude/
+results/nuscenes_mm.npz

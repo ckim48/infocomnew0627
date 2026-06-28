@@ -65,16 +65,14 @@ def _legend(fig, axes):
 
 def main(outdir="Figures"):
     os.makedirs(outdir, exist_ok=True)
-    sim = _load("results/metrics.npz")
-    real = _load("results/metrics_real.npz")
+    kitti = _load("results/metrics_real_kitti.npz")
+    nusc = _load("results/metrics_real_nuscenes.npz")
 
-    # ---- Figure 1: mean accuracy, (a) large-scale InTAS, (b) real KITTI ----
+    # ---- Figure 1: test accuracy, (a) KITTI, (b) nuScenes (two datasets) ----
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
-    _plot_panel(axes[0], sim, "acc",
-                "(a) Large-scale simulation (InTAS, 150 vehicles)",
+    _plot_panel(axes[0], kitti, "acc", "(a) KITTI",
                 "Global round $k$", "Test accuracy")
-    _plot_panel(axes[1], real, "acc",
-                "(b) Real multimodal FL (KITTI)",
+    _plot_panel(axes[1], nusc, "acc", "(b) nuScenes",
                 "Global round $k$", "Test accuracy")
     _legend(fig, axes)
     fig.tight_layout(rect=[0, 0, 1, 0.98])
@@ -83,13 +81,11 @@ def main(outdir="Figures"):
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # ---- Figure 2: poor-data (needy) vehicle accuracy ----
+    # ---- Figure 2: poor-data (needy) vehicle accuracy, two datasets ----
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
-    _plot_panel(axes[0], sim, "tail",
-                "(a) Large-scale simulation (InTAS)",
+    _plot_panel(axes[0], kitti, "poor", "(a) KITTI",
                 "Global round $k$", "Poor-data accuracy")
-    _plot_panel(axes[1], real, "poor",
-                "(b) Real multimodal FL (KITTI)",
+    _plot_panel(axes[1], nusc, "poor", "(b) nuScenes",
                 "Global round $k$", "Poor-data accuracy")
     _legend(fig, axes)
     fig.tight_layout(rect=[0, 0, 1, 0.98])
@@ -98,32 +94,25 @@ def main(outdir="Figures"):
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # ---- Figure 3: convergence overhead (cumulative forwarded encoders) ----
+    # ---- Figure 3: large-scale InTAS simulation (separate scope) ----
+    sim = _load("results/metrics.npz")
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
-    sim_cum = {s: {"cum": np.cumsum(sim[s]["tx"])} for s in SCHEMES}
-    real_cum = {s: {"cum": np.cumsum(real[s]["tx"])} for s in SCHEMES}
-    _plot_panel(axes[0], sim_cum, "cum",
-                "(a) Large-scale simulation (InTAS)",
-                "Global round $k$", "Cumulative encoders", band=False)
-    _plot_panel(axes[1], real_cum, "cum",
-                "(b) Real multimodal FL (KITTI)",
-                "Global round $k$", "Cumulative encoders", band=False)
+    _plot_panel(axes[0], sim, "acc", "(a) Test accuracy",
+                "Global round $k$", "Test accuracy")
+    _plot_panel(axes[1], sim, "tail", "(b) Poor-data accuracy",
+                "Global round $k$", "Poor-data accuracy")
     _legend(fig, axes)
     fig.tight_layout(rect=[0, 0, 1, 0.98])
     for ext in ("png", "pdf"):
-        fig.savefig(os.path.join(outdir, f"fig_infocom_overhead.{ext}"),
+        fig.savefig(os.path.join(outdir, f"fig_infocom_largescale.{ext}"),
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # ---- summary table (LaTeX) ----
-    def row(name, s, src, acckey, poorkey):
-        a = src[s]["acc"][-1]; p = src[s][poorkey][-1]
-        return f"{name} & {a:.3f} & {p:.3f}"
-    print("=== final values ===")
+    print("=== final values (real datasets) ===")
     for s in SCHEMES:
-        print(f"  {s:16s} sim acc {sim[s]['acc'][-1]:.3f} poor {sim[s]['tail'][-1]:.3f} | "
-              f"real acc {real[s]['acc'][-1]:.3f} poor {real[s]['poor'][-1]:.3f}")
-    print("saved fig_infocom_accuracy / fig_infocom_poor / fig_infocom_overhead")
+        print(f"  {s:16s} KITTI acc {kitti[s]['acc'][-1]:.3f} poor {kitti[s]['poor'][-1]:.3f} | "
+              f"nuScenes acc {nusc[s]['acc'][-1]:.3f} poor {nusc[s]['poor'][-1]:.3f}")
+    print("saved fig_infocom_accuracy (KITTI/nuScenes) / fig_infocom_poor / fig_infocom_largescale")
 
 
 if __name__ == "__main__":

@@ -201,10 +201,14 @@ class RealMFL:
         return np.array([self.Q[(i, self.avail[i][0])] < thr for i in range(self.N)])
 
 
-def _prep_data(cfg, seed, cache="results/kitti_mm_all.npz", per_class=None):
-    """Load KITTI objects and class-balance them so the task is non-trivial
-    (the raw set is ~84% Car). Returns balanced img/lid/y plus train/val/test."""
-    img, lid, y, frame, boxh = build_kitti(cache=cache)
+def _prep_data(cfg, seed, dataset="kitti", per_class=None):
+    """Load a real multimodal dataset (KITTI or nuScenes) and class-balance it
+    so the task is non-trivial. Returns balanced img/lid/y plus train/val/test."""
+    if dataset == "nuscenes":
+        from .nuscenes_dataset import build as _bld
+        img, lid, y, frame, boxh = _bld(cache="results/nuscenes_mm.npz")
+    else:
+        img, lid, y, frame, boxh = build_kitti(cache="results/kitti_mm_all.npz")
     rng = np.random.default_rng(seed)
     counts = np.bincount(y, minlength=NCLS)
     cap = per_class if per_class else int(counts.min())
@@ -225,8 +229,8 @@ def _prep_data(cfg, seed, cache="results/kitti_mm_all.npz", per_class=None):
                 train_idx=train_idx)
 
 
-def run_real_all(cfg=None, seeds=None, device=None):
-    """Real multimodal FL over InTAS mobility for all schemes; real KITTI accuracy."""
+def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti"):
+    """Real multimodal FL over InTAS mobility for all schemes; real accuracy."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -242,7 +246,7 @@ def run_real_all(cfg=None, seeds=None, device=None):
     os.makedirs(cfg.figures_dir, exist_ok=True)
 
     road, mob, gammas = prepare(cfg, device)
-    data = _prep_data(cfg, cfg.seed)
+    data = _prep_data(cfg, cfg.seed, dataset=dataset)
 
     metric_keys = ["acc", "poor", "tx", "qlen"]
     stacks = {s: {m: [] for m in metric_keys} for s in SCHEMES}
@@ -282,14 +286,15 @@ def run_real_all(cfg=None, seeds=None, device=None):
         for m in metric_keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
-    np.savez(os.path.join(cfg.results_dir, "metrics_real.npz"),
+    tag = dataset
+    np.savez(os.path.join(cfg.results_dir, f"metrics_real_{tag}.npz"),
              **{f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
 
     # figures
     K = mob.Krounds; x = np.arange(1, K + 1); mi = np.arange(0, K, max(K // 12, 1))
     for key, ylab, fname, loc in [
-            ("acc", "Mean test accuracy", "fig_real_accuracy.png", "lower right"),
-            ("poor", "Poor-data vehicle accuracy", "fig_real_poor_accuracy.png", "lower right")]:
+            ("acc", "Mean test accuracy", f"fig_real_{tag}_accuracy.png", "lower right"),
+            ("poor", "Poor-data vehicle accuracy", f"fig_real_{tag}_poor.png", "lower right")]:
         fig, ax = plt.subplots(figsize=(5.2, 3.8))
         for s in SCHEMES:
             ax.plot(x, results[s][key], label=s, markevery=mi, ms=5, **STYLE[s])
@@ -303,7 +308,7 @@ def run_real_all(cfg=None, seeds=None, device=None):
         fig.savefig(p, dpi=200); fig.savefig(p.replace(".png", ".pdf")); plt.close(fig)
         print("  saved", p)
 
-    print("=== REAL multimodal FL (KITTI) final ===")
+    print(f"=== REAL multimodal FL ({tag}) final ===")
     for s in SCHEMES:
         print(f"  {s:16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")
     return results
@@ -348,7 +353,8 @@ def main():
     cfg.frac_good = 0.15            # scarce strong (data-rich) sources
     cfg.cache_capacity_mb = 30.0
     cfg.contact_time_per_round = 1.8
-    run_real_all(cfg, seeds=[2026, 2027, 2028])
+    for ds in ["kitti", "nuscenes"]:
+        run_real_all(cfg, seeds=[2026, 2027, 2028], dataset=ds)
 
 
 if __name__ == "__main__":
