@@ -106,21 +106,21 @@ def make(cfg=None, rate=2.0):
     ax[0].plot(xs, cdf, color=RED)
     ax[0].axvline(np.median(durs), color=BLK, ls=":", lw=1.2)
     ax[0].text(np.median(durs) * 1.05, 0.2, f"median\n{np.median(durs):.0f}s", fontsize=9)
-    ax[0].set_xlabel("V2V contact duration (s)"); ax[0].set_ylabel("CDF")
+    ax[0].set_xlabel("V2V contact duration (s)", labelpad=6); ax[0].set_ylabel("CDF")
     ax[0].set_xlim(0, np.quantile(durs, 0.98)); ax[0].set_ylim(0, 1)
     ax[0].grid(True, ls="--", lw=0.6, alpha=0.5)
-    ax[0].set_title("(a) Contact-duration CDF", y=-0.34, fontsize=12)
+    ax[0].set_title("(a)", y=-0.46, fontsize=12)
 
     ax[1].bar(range(1, 5), frac_all, color=[GRN, BLU, "#f0a020", RED], width=0.6,
               edgecolor="k", linewidth=0.6)
     for n, f in zip(range(1, 5), frac_all):
         ax[1].text(n, f + 0.02, f"{f:.2f}", ha="center", fontsize=9)
     ax[1].set_xticks(range(1, 5))
-    ax[1].set_xlabel("Number of modality encoders")
+    ax[1].set_xlabel("Number of modality encoders", labelpad=6)
     ax[1].set_ylabel("Frac. contacts able to\nexchange all encoders")
     ax[1].set_ylim(0, 1.05); ax[1].grid(True, axis="y", ls="--", lw=0.6, alpha=0.5)
-    ax[1].set_title("(b) Multimodal exchange burden", y=-0.34, fontsize=12)
-    fig.tight_layout()
+    ax[1].set_title("(b)", y=-0.46, fontsize=12)
+    fig.tight_layout(); fig.subplots_adjust(bottom=0.30, wspace=0.32)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(cfg.figures_dir, f"fig_motiv_contacts.{ext}"),
                     dpi=300, bbox_inches="tight")
@@ -145,10 +145,10 @@ def make(cfg=None, rate=2.0):
                markerfacecolor="white", markeredgewidth=1.2, label="Store-carry-forward")
     ax[0].plot(x, direct, color=BLK, ls=":", marker="^", markevery=mi, ms=5,
                markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
-    ax[0].set_xlabel("Global round $k$"); ax[0].set_ylabel("Frac. vehicles reached")
+    ax[0].set_xlabel("Global round $k$", labelpad=6); ax[0].set_ylabel("Frac. vehicles reached")
     ax[0].set_xlim(0, mob.Krounds); ax[0].set_ylim(0, 1.02)
     ax[0].grid(True, ls="--", lw=0.6, alpha=0.5); ax[0].legend(fontsize=9, loc="lower right")
-    ax[0].set_title("(a) Reach of strong encoders", y=-0.34, fontsize=12)
+    ax[0].set_title("(a)", y=-0.46, fontsize=12)
 
     # (b) final reach vs fraction of strong-encoder owners
     fracs = [0.05, 0.10, 0.15, 0.20, 0.30]
@@ -164,12 +164,12 @@ def make(cfg=None, rate=2.0):
                markerfacecolor="white", markeredgewidth=1.2, label="Store-carry-forward")
     ax[1].plot(np.array(fracs) * 100, fd, color=BLK, ls=":", marker="^", ms=6,
                markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
-    ax[1].set_xlabel("Strong-encoder owners (\\%)")
+    ax[1].set_xlabel("Strong-encoder owners (\\%)", labelpad=6)
     ax[1].set_ylabel("Final frac. reached")
     ax[1].set_ylim(0, 1.02); ax[1].grid(True, ls="--", lw=0.6, alpha=0.5)
     ax[1].legend(fontsize=9, loc="lower right")
-    ax[1].set_title("(b) Effect of encoder scarcity", y=-0.34, fontsize=12)
-    fig.tight_layout()
+    ax[1].set_title("(b)", y=-0.46, fontsize=12)
+    fig.tight_layout(); fig.subplots_adjust(bottom=0.30, wspace=0.32)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(cfg.figures_dir, f"fig_motiv_reach.{ext}"),
                     dpi=300, bbox_inches="tight")
