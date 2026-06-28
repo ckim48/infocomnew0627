@@ -6,8 +6,9 @@
 % --- Main comparison: real multimodal FL on two datasets ---
 \begin{table}[t]
 \centering
-\caption{Final test accuracy of real multimodal FL on two datasets (mean of 3
-seeds). ``Poor'' is the accuracy of data-poor vehicles.}
+\caption{Converged test accuracy of real multimodal FL on two datasets ($K{=}80$,
+mean of 3 seeds). ``Poor'' is the accuracy of data-poor vehicles. KITTI uses 3
+classes (Car/Pedestrian/Cyclist); nuScenes uses 2 (Car/Pedestrian).}
 \label{tab:main_results}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l cc cc}
@@ -16,10 +17,10 @@ seeds). ``Poor'' is the accuracy of data-poor vehicles.}
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 Scheme & Acc. & Poor & Acc. & Poor \\
 \midrule
-\textbf{Proposed}        & \textbf{0.453} & \textbf{0.394} & \textbf{0.406} & 0.372 \\
-Caching-assisted (LRU)   & 0.440 & 0.378 & 0.399 & 0.366 \\
-V2V-aware                & 0.440 & 0.378 & 0.405 & \textbf{0.373} \\
-Learning-aware           & 0.442 & 0.380 & 0.398 & 0.364 \\
+\textbf{Proposed}        & \textbf{0.510} & \textbf{0.458} & \textbf{0.662} & \textbf{0.625} \\
+Caching-assisted (LRU)   & 0.495 & 0.439 & 0.648 & 0.608 \\
+V2V-aware                & 0.497 & 0.442 & 0.656 & 0.618 \\
+Learning-aware           & 0.495 & 0.441 & 0.660 & 0.622 \\
 \bottomrule
 \end{tabular}
 \end{table}

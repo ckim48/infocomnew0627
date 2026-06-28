@@ -201,9 +201,12 @@ class RealMFL:
         return np.array([self.Q[(i, self.avail[i][0])] < thr for i in range(self.N)])
 
 
-def _prep_data(cfg, seed, dataset="kitti", per_class=None):
+def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
     """Load a real multimodal dataset (KITTI or nuScenes) and class-balance it
-    so the task is non-trivial. Returns balanced img/lid/y plus train/val/test."""
+    so the task is non-trivial. Classes with fewer than `min_class_count`
+    samples are dropped (e.g. the very rare nuScenes Cyclist class), which lets
+    the remaining classes keep far more data. Returns balanced img/lid/y plus
+    train/val/test."""
     if dataset == "nuscenes":
         from .nuscenes_dataset import build as _bld
         img, lid, y, frame, boxh = _bld(cache="results/nuscenes_mm.npz")
@@ -211,9 +214,10 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None):
         img, lid, y, frame, boxh = build_kitti(cache="results/kitti_mm_all.npz")
     rng = np.random.default_rng(seed)
     counts = np.bincount(y, minlength=NCLS)
-    cap = per_class if per_class else int(counts.min())
+    use_classes = [c for c in range(NCLS) if counts[c] >= max(min_class_count, 1)]
+    cap = per_class if per_class else int(min(counts[c] for c in use_classes))
     keep = []
-    for c in range(NCLS):
+    for c in use_classes:
         ci = np.where(y == c)[0]
         keep.append(rng.choice(ci, min(cap, len(ci)), replace=False))
     keep = rng.permutation(np.concatenate(keep))
@@ -229,7 +233,7 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None):
                 train_idx=train_idx)
 
 
-def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti"):
+def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_count=0):
     """Real multimodal FL over InTAS mobility for all schemes; real accuracy."""
     import matplotlib
     matplotlib.use("Agg")
@@ -246,7 +250,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti"):
     os.makedirs(cfg.figures_dir, exist_ok=True)
 
     road, mob, gammas = prepare(cfg, device)
-    data = _prep_data(cfg, cfg.seed, dataset=dataset)
+    data = _prep_data(cfg, cfg.seed, dataset=dataset, min_class_count=min_class_count)
 
     metric_keys = ["acc", "poor", "tx", "qlen"]
     stacks = {s: {m: [] for m in metric_keys} for s in SCHEMES}
@@ -353,8 +357,10 @@ def main():
     cfg.frac_good = 0.15            # scarce strong (data-rich) sources
     cfg.cache_capacity_mb = 30.0
     cfg.contact_time_per_round = 1.8
-    for ds in ["kitti", "nuscenes"]:
-        run_real_all(cfg, seeds=[2026, 2027, 2028], dataset=ds)
+    cfg.K = 80                         # run to convergence
+    # KITTI: 3 classes; nuScenes: drop the very rare Cyclist (<800) -> 2 classes
+    run_real_all(cfg, seeds=[2026, 2027, 2028], dataset="kitti", min_class_count=0)
+    run_real_all(cfg, seeds=[2026, 2027, 2028], dataset="nuscenes", min_class_count=800)
 
 
 if __name__ == "__main__":
