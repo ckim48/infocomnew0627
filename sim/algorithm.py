@@ -253,7 +253,7 @@ class CachingForwarding:
 
 # scheme feature flags (proposed + three baselines, Sec. V-A)
 SCHEME_FLAGS = {
-    "Proposed":         dict(use_link=True,  use_dis=True,  use_queue=True,
+    "Proposed":         dict(use_link=True,  use_dis=False, use_queue=True,
                              demand_aware=True,  carry=True,  cache_policy="psi"),
     "Caching-assisted": dict(use_link=True,  use_dis=False, use_queue=False,
                              demand_aware=False, carry=True,  cache_policy="lru"),
