@@ -1,0 +1,72 @@
+% ======================================================================
+%  Result tables for the INFOCOM submission (requires \usepackage{booktabs}).
+%  Numbers from results/metrics.npz and results/metrics_real.npz (3-seed mean).
+% ======================================================================
+
+% --- Main comparison: final accuracy across both settings ---
+\begin{table}[t]
+\centering
+\caption{Final test accuracy (mean of 3 seeds). ``Poor'' is the accuracy of
+data-poor vehicles. $\Delta$ is the gain of the proposed scheme over the best
+baseline.}
+\label{tab:main_results}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l cc cc}
+\toprule
+ & \multicolumn{2}{c}{Large-scale (InTAS, $N{=}150$)} & \multicolumn{2}{c}{Real KITTI} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Scheme & Acc. & Poor & Acc. & Poor \\
+\midrule
+\textbf{Proposed}        & \textbf{0.687} & \textbf{0.660} & \textbf{0.449} & \textbf{0.389} \\
+Caching-assisted (LRU)   & 0.634 & 0.599 & 0.440 & 0.378 \\
+V2V-aware                & 0.635 & 0.601 & 0.439 & 0.377 \\
+Learning-aware           & 0.636 & 0.603 & 0.441 & 0.380 \\
+\midrule
+$\Delta$ over best baseline & +8.0\% & +9.5\% & +1.8\% & +2.4\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% --- Road-aware mobility prediction ---
+\begin{table}[t]
+\centering
+\caption{Mobility-prediction displacement error (m) vs.\ horizon on the InTAS
+trace: road-aware vs.\ straight-line. Lower is better; ``Imp.'' is the error
+reduction for turning vehicles.}
+\label{tab:mobpred}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{c cc c}
+\toprule
+Horizon (s) & Road-aware & Straight-line & Imp.\ (turning) \\
+\midrule
+12  & 51.8  & 48.1  & +15.2\% \\
+20  & 101.0 & 96.8  & +13.8\% \\
+30  & 173.5 & 168.5 & +13.0\% \\
+40  & 250.9 & 245.4 & +12.1\% \\
+60  & 404.8 & 402.1 & +10.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% --- Simulation setup ---
+\begin{table}[t]
+\centering
+\caption{Simulation setup.}
+\label{tab:setup}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+Mobility scenario      & Ingolstadt InTAS (SUMO), dense hour \\
+Road network           & 3{,}342 nodes, 7{,}968 edges, 98 lights \\
+Vehicles $N$           & 150 (large-scale) / 80 (real KITTI) \\
+Global rounds $K$      & 150 / 40 \\
+Modalities             & camera, LiDAR, radar, GPS / camera, LiDAR \\
+Real dataset           & KITTI (Car/Pedestrian/Cyclist) \\
+Encoders               & 2D-CNN (camera), PointNet (LiDAR) \\
+Aggregation            & data-weighted FedAvg (Eq.~2) \\
+Mobility predictor     & hierarchical GAT \\
+\bottomrule
+\end{tabular}
+\end{table}

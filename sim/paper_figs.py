@@ -1,0 +1,130 @@
+"""
+INFOCOM-style result figures (two-panel, top legend, open markers, serif font),
+matching the requested template. Reads results/metrics.npz (large-scale InTAS
+simulation) and results/metrics_real.npz (real KITTI multimodal FL).
+"""
+
+import os
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "DejaVu Serif"],
+    "mathtext.fontset": "dejavuserif",
+    "font.size": 12,
+    "axes.linewidth": 0.9,
+    "lines.linewidth": 1.7,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.major.size": 4,
+    "ytick.major.size": 4,
+    "legend.frameon": False,
+})
+
+SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
+# style matched to the template: Proposed=red solid o, then green--s, blue-.D, black:^
+STY = {
+    "Proposed":         dict(color="#e8000b", ls="-",  marker="o"),
+    "Caching-assisted": dict(color="#1f9e3d", ls="--", marker="s"),
+    "V2V-aware":        dict(color="#1f5fd0", ls="-.", marker="D"),
+    "Learning-aware":   dict(color="#000000", ls=":",  marker="^"),
+}
+
+
+def _load(path):
+    d = np.load(path)
+    return {s: {k.split("__", 1)[1]: d[k] for k in d.files if k.startswith(s + "__")}
+            for s in SCHEMES}
+
+
+def _plot_panel(ax, res, key, title, xlabel, ylabel, nmark=11, band=False):
+    K = len(res["Proposed"][key]); x = np.arange(1, K + 1)
+    me = max(K // nmark, 1)
+    for s in SCHEMES:
+        y = res[s][key]
+        ax.plot(x, y, label=s, markevery=me, markersize=5.5,
+                markerfacecolor="white", markeredgewidth=1.2, **STY[s])
+        if band and (key + "_std") in res[s]:
+            sd = res[s][key + "_std"]
+            ax.fill_between(x, y - sd, y + sd, color=STY[s]["color"], alpha=0.10, lw=0)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(0, K)
+    ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+    ax.set_title(title, y=-0.32, fontsize=12)
+
+
+def _legend(fig, axes):
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.07),
+               columnspacing=1.4, handlelength=2.6, fontsize=11)
+
+
+def main(outdir="Figures"):
+    os.makedirs(outdir, exist_ok=True)
+    sim = _load("results/metrics.npz")
+    real = _load("results/metrics_real.npz")
+
+    # ---- Figure 1: mean accuracy, (a) large-scale InTAS, (b) real KITTI ----
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
+    _plot_panel(axes[0], sim, "acc",
+                "(a) Large-scale simulation (InTAS, 150 vehicles)",
+                "Global round $k$", "Test accuracy")
+    _plot_panel(axes[1], real, "acc",
+                "(b) Real multimodal FL (KITTI)",
+                "Global round $k$", "Test accuracy")
+    _legend(fig, axes)
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(outdir, f"fig_infocom_accuracy.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    # ---- Figure 2: poor-data (needy) vehicle accuracy ----
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
+    _plot_panel(axes[0], sim, "tail",
+                "(a) Large-scale simulation (InTAS)",
+                "Global round $k$", "Poor-data accuracy")
+    _plot_panel(axes[1], real, "poor",
+                "(b) Real multimodal FL (KITTI)",
+                "Global round $k$", "Poor-data accuracy")
+    _legend(fig, axes)
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(outdir, f"fig_infocom_poor.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    # ---- Figure 3: convergence overhead (cumulative forwarded encoders) ----
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
+    sim_cum = {s: {"cum": np.cumsum(sim[s]["tx"])} for s in SCHEMES}
+    real_cum = {s: {"cum": np.cumsum(real[s]["tx"])} for s in SCHEMES}
+    _plot_panel(axes[0], sim_cum, "cum",
+                "(a) Large-scale simulation (InTAS)",
+                "Global round $k$", "Cumulative encoders", band=False)
+    _plot_panel(axes[1], real_cum, "cum",
+                "(b) Real multimodal FL (KITTI)",
+                "Global round $k$", "Cumulative encoders", band=False)
+    _legend(fig, axes)
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(outdir, f"fig_infocom_overhead.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    # ---- summary table (LaTeX) ----
+    def row(name, s, src, acckey, poorkey):
+        a = src[s]["acc"][-1]; p = src[s][poorkey][-1]
+        return f"{name} & {a:.3f} & {p:.3f}"
+    print("=== final values ===")
+    for s in SCHEMES:
+        print(f"  {s:16s} sim acc {sim[s]['acc'][-1]:.3f} poor {sim[s]['tail'][-1]:.3f} | "
+              f"real acc {real[s]['acc'][-1]:.3f} poor {real[s]['poor'][-1]:.3f}")
+    print("saved fig_infocom_accuracy / fig_infocom_poor / fig_infocom_overhead")
+
+
+if __name__ == "__main__":
+    main()
