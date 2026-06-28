@@ -5,6 +5,30 @@
 %  statistics printed by `python -m sim.setup_stats`.
 % ======================================================================
 
+% --- Compact motivation table (for the Introduction) ---
+% Narrative: a median contact (12 s) transfers ~24 MB at 2 MB/s, which is below
+% the 37.5 MB needed for all four modality encoders -> they cannot all be shared.
+\begin{table}[t]
+\centering
+\caption{Measured V2V opportunity vs.\ multimodal encoder demand on the
+Ingolstadt InTAS trace.}
+\label{tab:motivation}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lc}
+\toprule
+Quantity & Value \\
+\midrule
+Avg.\ V2V contact duration         & 22.3 s (median 12 s) \\
+V2V data rate                      & 16 Mbps (2 MB/s) \\
+Data transferable per contact      & 44.6 MB (median 24 MB) \\
+Avg.\ V2V neighbors per round      & 0.76 \\
+\midrule
+Encoder size (cam/LiDAR/radar/GPS) & 12 / 18 / 6 / 1.5 MB \\
+All four encoders                  & 37.5 MB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 % --- Main comparison: real multimodal FL on two datasets ---
 \begin{table}[t]
 \centering
