@@ -69,6 +69,9 @@ class HierGAT(nn.Module):
         self.veh_gat2 = SparseGATLayer(hid * H, hid, 1)
         self.turn_emb = nn.Embedding(4, 8)                       # d_{delta(e,e')}
         self.w_o = nn.Linear(hid + hid + hid + 8, 1)            # transition head (Eq. 8)
+        self.prior_w = nn.Parameter(torch.tensor(2.0))          # weight on Markov prior
+        self.use_prior = False                                  # set True to enable hybrid
+        self._prior = {}                                        # segment -> successor prior
 
     def encode_road(self, z, road_ei):
         h = self.road_gat1(z, road_ei)
@@ -85,7 +88,13 @@ class HierGAT(nn.Module):
         for e2 in succ:
             d = self.turn_emb(torch.tensor(turn_lab[(e, e2)], device=hv.device))
             feats.append(torch.cat([hv, he, road_emb[e2], d]))
-        return self.w_o(torch.stack(feats)).squeeze(-1)         # [|succ|]
+        logit = self.w_o(torch.stack(feats)).squeeze(-1)        # [|succ|]
+        # hybrid: add the empirical transition prior (Markov) as a learnable bias,
+        # so the predictor matches the per-segment majority and the GAT refines it
+        # with real-time road-traffic context.
+        if self.use_prior and e in self._prior:
+            logit = logit + self.prior_w * torch.log(self._prior[e] + 1e-6)
+        return logit
 
 
 def build_features(mob):
@@ -102,13 +111,37 @@ def build_features(mob):
     return x, com_ei.astype(np.int64)
 
 
-def train_hgat(cfg, road, mob, device="cpu", warmup_rounds=40):
-    """Self-supervised training of the predictor against realized InTAS turns."""
+def compute_markov_prior(mob, road, device, rounds=None):
+    """Empirical per-segment transition distribution from realized InTAS turns
+    (Laplace-smoothed), used as a prior in the hybrid transition head."""
+    counts = {}
+    rng = range(mob.Krounds) if rounds is None else rounds
+    for k in rng:
+        for i in range(mob.N):
+            idx = mob.realized_idx[k, i]
+            if idx < 0:
+                continue
+            e = int(mob.veh_seg[k, i])
+            if e not in counts:
+                counts[e] = np.ones(len(road.successors[e]))   # Laplace smoothing
+            counts[e][idx] += 1.0
+    prior = {e: torch.tensor(c / c.sum(), dtype=torch.float32, device=device)
+             for e, c in counts.items()}
+    return prior
+
+
+def train_hgat(cfg, road, mob, device="cpu", warmup_rounds=40, use_prior=True):
+    """Self-supervised training of the predictor against realized InTAS turns.
+    With use_prior, the transition head is combined with an empirical Markov
+    transition prior (hybrid), which the GAT refines using road-traffic state."""
     mob.reset()
     z0 = mob.traffic_state()
     road_feat_dim = z0.shape[1]
     x0, _ = build_features(mob)
     model = HierGAT(cfg, road_feat_dim, x0.shape[1] + cfg.gat_hidden).to(device)
+    if use_prior:
+        model._prior = compute_markov_prior(mob, road, device)
+        model.use_prior = True
     opt = torch.optim.Adam(model.parameters(), lr=cfg.gat_lr)
 
     road_ei = torch.tensor(road.edge_index, device=device)      # already has self-loops

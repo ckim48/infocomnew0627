@@ -93,12 +93,11 @@ def run(cfg=None, device="cuda"):
         print(f"  {m:9s} {acc[m]:.3f}")
 
     # ---- figure: (a) overall top-1 bar, (b) accuracy vs #successors ----
-    # (Markov is a strong per-segment majority baseline; reported in text.)
     fig, ax = plt.subplots(1, 2, figsize=(7.2, 3.1))
-    methods = ["GAT", "Straight", "Random"]
-    cols = [RED, ORG, BLK]
+    methods = ["GAT", "Markov", "Straight", "Random"]
+    cols = [RED, BLU, ORG, BLK]
     ax[0].bar(range(len(methods)), [acc[m] for m in methods], color=cols, edgecolor="k",
-              linewidth=0.6, width=0.6)
+              linewidth=0.6, width=0.62)
     for i2, m in enumerate(methods):
         ax[0].text(i2, acc[m] + 0.01, f"{acc[m]:.2f}", ha="center", fontsize=9)
     ax[0].set_xticks(range(len(methods))); ax[0].set_xticklabels(methods, fontsize=10)
@@ -108,9 +107,12 @@ def run(cfg=None, device="cuda"):
 
     degs = sorted(by_deg.keys())
     gat_d = [by_deg[d][1] / by_deg[d][0] for d in degs]
+    mk_d = [by_deg[d][2] / by_deg[d][0] for d in degs]
     rnd_d = [1.0 / d for d in degs]
     ax[1].plot(degs, gat_d, "-o", color=RED, ms=6, markerfacecolor="white",
                markeredgewidth=1.2, label="GAT")
+    ax[1].plot(degs, mk_d, "--s", color=BLU, ms=6, markerfacecolor="white",
+               markeredgewidth=1.2, label="Markov")
     ax[1].plot(degs, rnd_d, ":^", color=BLK, ms=6, markerfacecolor="white",
                markeredgewidth=1.2, label="Random")
     ax[1].set_xticks(degs)
