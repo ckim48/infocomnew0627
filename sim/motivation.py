@@ -156,7 +156,7 @@ def make(cfg=None, rate=2.0):
     ax[1, 1].plot(np.array(fracs) * 100, fd, color=BLK, ls=":", marker="^", ms=6,
                   markerfacecolor="white", markeredgewidth=1.2, label="Direct V2V only")
     ax[1, 1].set_xlabel("Strong-encoder owners (\\%)", labelpad=6)
-    ax[1, 1].set_ylabel("Final reached ratio")
+    ax[1, 1].set_ylabel("Ratio of reached vehicles")
     ax[1, 1].set_ylim(0, 1.02); ax[1, 1].grid(True, ls="--", lw=0.6, alpha=0.5)
     ax[1, 1].legend(fontsize=9, loc="lower right")
     ax[1, 1].set_title("(d)", y=-0.40, fontsize=12)
