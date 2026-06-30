@@ -8,9 +8,11 @@ in the probabilistic-coverage form assumed by the paper's utilities (Eq. 13-17):
     set by the owner's local sensing quality Q_{m,r} and data size D_{m,r}
     (good, plentiful data -> strong encoder; occluded / scarce data -> weak).
   * A vehicle's achieved modality-r model quality after aggregating a set A of
-    encoders (its own + received, Eq. 2) follows a noisy-OR coverage:
-        Q^eff_{i,r} = 1 - prod_{m in A} (1 - s_{m,r}).
-    One strong encoder saturates the quality; many weak encoders help little.
+    encoders (its own + received, Eq. 2) is dominated by the single strongest
+    encoder adopted:
+        Q^eff_{i,r} = max_{m in A} s_{m,r}.
+    One strong encoder saturates the quality; many weak encoders do not
+    substitute for a strong one (a better modality encoder is plugged in).
   * Validation loss   L^val_{i,r} = (1 - Q^eff_{i,r})^2.
 
 Consequence (the paper's thesis): a vehicle with poor local modality-r data only
