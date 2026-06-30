@@ -23,17 +23,10 @@ from .v2x_trace import build_v2x_trace, SEOUL_NET
 from .map_viz import _run_one
 
 
-def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
-                        basemap="positron"):
+def _compute(cfg, device, snap_k, cache):
+    """Heavy step: trace + GAT + per-vehicle accuracy + geo positions. Cached."""
     import sumolib
-    import contextily as cx
     from pyproj import Transformer
-
-    cfg = cfg or Config()
-    cfg.num_vehicles = num_vehicles
-    fig_dir = cfg.figures_dir
-    os.makedirs(fig_dir, exist_ok=True)
-
     torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
     trace = build_v2x_trace(cfg)
     road = RoadNetwork(trace)
@@ -51,11 +44,10 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
                                             device=device))
     gammas = np.array(gammas)
 
-    print("  [v2x-map] running Proposed and Caching-assisted ...")
+    print("  [v2x-map] running FACE and Caching-assisted ...")
     acc_prop, _ = _run_one(cfg, mob, gammas, "Proposed", snap_k)
     acc_cach, _ = _run_one(cfg, mob, gammas, "Caching-assisted", snap_k)
 
-    # vehicle positions at the snapshot -> lon/lat -> Web Mercator
     mob.k = snap_k
     net = sumolib.net.readNet(SEOUL_NET)
     tf = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
@@ -65,6 +57,28 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         lon, lat = net.convertXY2LonLat(float(x), float(y))
         vm[i] = tf.transform(lon, lat)
 
+    np.savez(cache, vm=vm, acc_prop=acc_prop, acc_cach=acc_cach, snap_k=snap_k)
+    return vm, acc_prop, acc_cach, snap_k
+
+
+def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
+                        basemap="positron", use_cache=True):
+    import contextily as cx
+
+    cfg = cfg or Config()
+    cfg.num_vehicles = num_vehicles
+    fig_dir = cfg.figures_dir
+    os.makedirs(fig_dir, exist_ok=True)
+    cache = os.path.join(cfg.results_dir, "v2x_map_cache.npz")
+
+    if use_cache and os.path.exists(cache):
+        d = np.load(cache)
+        vm, acc_prop, acc_cach = d["vm"], d["acc_prop"], d["acc_cach"]
+        snap_k = int(d["snap_k"])
+        print(f"  [v2x-map] re-plotting from cache {cache}")
+    else:
+        vm, acc_prop, acc_cach, snap_k = _compute(cfg, device, snap_k, cache)
+
     providers = {
         "osm": cx.providers.OpenStreetMap.Mapnik,
         "satellite": cx.providers.Esri.WorldImagery,
@@ -73,7 +87,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     }
     src = providers.get(basemap, providers["positron"])
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 6.0), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 6.2), sharex=True, sharey=True)
     pad = 400
     xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
     ylim = (vm[:, 1].min() - pad, vm[:, 1].max() + pad)
@@ -86,9 +100,8 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
         cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=13,
                        attribution_size=5)
-        ax.text(0.03, 0.97, f"{name}\nmean acc = {acc.mean():.3f}",
-                transform=ax.transAxes, va="top", ha="left", fontsize=11,
-                bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.9))
+        # method label BELOW the panel (xlabel), so it never overlaps the dots
+        ax.set_xlabel(f"{name}\nmean acc = {acc.mean():.3f}", fontsize=12)
 
     cbar = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.02)
     cbar.set_label("Vehicle model accuracy")
@@ -97,7 +110,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     for ext in ("png", "pdf"):
         fig.savefig(out.replace(".png", "." + ext), dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print(f"  saved {out}  (Proposed {acc_prop.mean():.3f} vs "
+    print(f"  saved {out}  (FACE {acc_prop.mean():.3f} vs "
           f"Caching {acc_cach.mean():.3f})")
     return out
 
