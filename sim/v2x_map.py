@@ -77,23 +77,21 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     pad = 400
     xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
     ylim = (vm[:, 1].min() - pad, vm[:, 1].max() + pad)
-    panels = [("(a) Proposed (road/traffic-aware)", acc_prop),
-              ("(b) Caching-assisted (agnostic)", acc_cach)]
+    panels = [("FACE", acc_prop), ("Caching-assisted", acc_cach)]
     sc = None
-    for ax, (title, acc) in zip(axes, panels):
+    for ax, (name, acc) in zip(axes, panels):
         sc = ax.scatter(vm[:, 0], vm[:, 1], c=acc, cmap="RdYlGn", vmin=0.2,
                         vmax=1.0, s=42, edgecolors="k", linewidths=0.3, zorder=4)
         ax.set_xlim(*xlim); ax.set_ylim(*ylim)
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
         cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=13,
                        attribution_size=5)
-        ax.set_title(f"{title}\nmean acc = {acc.mean():.3f}", y=-0.16,
-                     fontsize=12)
+        ax.text(0.03, 0.97, f"{name}\nmean acc = {acc.mean():.3f}",
+                transform=ax.transAxes, va="top", ha="left", fontsize=11,
+                bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.9))
 
     cbar = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.02)
     cbar.set_label("Vehicle model accuracy")
-    fig.suptitle("Encoder propagation over the real Seoul road network "
-                 f"(V2X cohort, round k={snap_k})", fontsize=13, y=0.99)
 
     out = os.path.join(fig_dir, "fig_infocom_v2x_map.png")
     for ext in ("png", "pdf"):

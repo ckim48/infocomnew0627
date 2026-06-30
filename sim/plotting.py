@@ -17,6 +17,13 @@ STYLE = {
     "Learning-aware":   dict(color="#7f7f7f", marker="d", ls=":"),
 }
 
+# Display name for each scheme in legends/labels (the proposed scheme is FACE).
+DISPLAY = {"Proposed": "FACE"}
+
+
+def disp(scheme):
+    return DISPLAY.get(scheme, scheme)
+
 
 def _load(cfg):
     d = np.load(os.path.join(cfg.results_dir, "metrics.npz"))
@@ -61,34 +68,34 @@ def plot_all(cfg=None):
     # (a) mean validation loss vs round
     fig, ax = newfig()
     for s in SCHEMES:
-        ax.plot(x, res[s]["loss"], label=s, markevery=mi, ms=5, **STYLE[s])
+        ax.plot(x, res[s]["loss"], label=disp(s), markevery=mi, ms=5, **STYLE[s])
         _band(ax, x, res[s]["loss"], res[s].get("loss_std"), STYLE[s]["color"])
     finish(fig, ax, "Mean validation loss", "fig_loss.png")
 
     # (b) mean accuracy vs round
     fig, ax = newfig()
     for s in SCHEMES:
-        ax.plot(x, res[s]["acc"], label=s, markevery=mi, ms=5, **STYLE[s])
+        ax.plot(x, res[s]["acc"], label=disp(s), markevery=mi, ms=5, **STYLE[s])
         _band(ax, x, res[s]["acc"], res[s].get("acc_std"), STYLE[s]["color"])
     finish(fig, ax, "Mean model accuracy", "fig_accuracy.png", loc="lower right")
 
     # (c) worst-decile (most needy) accuracy vs round
     fig, ax = newfig()
     for s in SCHEMES:
-        ax.plot(x, res[s]["tail"], label=s, markevery=mi, ms=5, **STYLE[s])
+        ax.plot(x, res[s]["tail"], label=disp(s), markevery=mi, ms=5, **STYLE[s])
         _band(ax, x, res[s]["tail"], res[s].get("tail_std"), STYLE[s]["color"])
     finish(fig, ax, "Poor-data vehicle accuracy", "fig_poor_accuracy.png", loc="lower right")
 
     # (d) cumulative successful encoder deliveries
     fig, ax = newfig()
     for s in SCHEMES:
-        ax.plot(x, np.cumsum(res[s]["tx"]), label=s, markevery=mi, ms=5, **STYLE[s])
+        ax.plot(x, np.cumsum(res[s]["tx"]), label=disp(s), markevery=mi, ms=5, **STYLE[s])
     finish(fig, ax, "Cumulative forwarded encoders", "fig_forwarding.png", loc="upper left")
 
     # (e) virtual queue backlog (Lyapunov stability)
     fig, ax = newfig()
     for s in SCHEMES:
-        ax.plot(x, res[s]["qlen"], label=s, markevery=mi, ms=5, **STYLE[s])
+        ax.plot(x, res[s]["qlen"], label=disp(s), markevery=mi, ms=5, **STYLE[s])
     finish(fig, ax, "Avg. virtual queue backlog $\\bar Q(k)$", "fig_queue.png", loc="upper left")
 
     # (f) bar chart of final accuracy
@@ -97,7 +104,7 @@ def plot_all(cfg=None):
     bars = ax.bar(range(len(SCHEMES)), finals,
                   color=[STYLE[s]["color"] for s in SCHEMES])
     ax.set_xticks(range(len(SCHEMES)))
-    ax.set_xticklabels(SCHEMES, rotation=20, ha="right", fontsize=8)
+    ax.set_xticklabels([disp(s) for s in SCHEMES], rotation=20, ha="right", fontsize=8)
     ax.set_ylabel("Final mean accuracy")
     ax.set_ylim(min(finals) * 0.97, max(finals) * 1.01)
     for b, v in zip(bars, finals):

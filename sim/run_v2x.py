@@ -16,7 +16,7 @@ from .mobility import RoadNetwork, MobilitySim
 from .hgat import train_hgat, future_contact_scores
 from .simulator import run_schemes
 from .v2x_trace import build_v2x_trace
-from .plotting import STYLE as STY
+from .plotting import STYLE as STY, disp
 
 
 def run(cfg=None, device=None, num_vehicles=180, seeds=None):
@@ -68,21 +68,20 @@ def run(cfg=None, device=None, num_vehicles=180, seeds=None):
     return results
 
 
-def _panel(ax, results, key, title, ylabel):
+def _panel(ax, results, key, ylabel):
     K = len(results["Proposed"][key]); x = np.arange(1, K + 1)
     me = max(K // 11, 1)
     for s in SCHEMES:
-        ax.plot(x, results[s][key], label=s, markevery=me, markersize=5.5,
+        ax.plot(x, results[s][key], label=disp(s), markevery=me, markersize=5.5,
                 markerfacecolor="white", markeredgewidth=1.2, **STY[s])
     ax.set_xlabel("Global round $k$"); ax.set_ylabel(ylabel)
     ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-    ax.set_title(title, y=-0.32, fontsize=12)
 
 
 def _plot(results, cfg):
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
-    _panel(axes[0], results, "acc", "(a) Test accuracy", "Test accuracy")
-    _panel(axes[1], results, "tail", "(b) Poor-data accuracy", "Poor-data accuracy")
+    _panel(axes[0], results, "acc", "Test accuracy")
+    _panel(axes[1], results, "tail", "Poor-data accuracy")
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.07),
                columnspacing=1.4, handlelength=2.6, fontsize=11)
