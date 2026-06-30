@@ -63,28 +63,38 @@ def collect_trace(duration_s=120, interval_s=10, out=None, bbox=None):
     """
     out = out or os.path.join(os.path.dirname(os.path.dirname(__file__)),
                               "data", "gangnam", "seoul_v2x_trace.npz")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+
+    def _save(snaps, stamps):
+        ids = sorted({k for s in snaps for k in s})
+        idx = {k: i for i, k in enumerate(ids)}
+        pos = np.full((len(snaps), len(ids), 2), np.nan)
+        for t, s in enumerate(snaps):
+            for k, (lo, la) in s.items():
+                pos[t, idx[k]] = (lo, la)
+        np.savez_compressed(out, ids=np.array(ids), pos=pos,
+                            times=np.array(stamps))
+        return pos.shape
+
     snaps, stamps = [], []
     t0 = time.time()
     while time.time() - t0 < duration_s:
-        veh = fetch_vehicles()
+        try:
+            veh = fetch_vehicles()
+        except Exception as e:
+            print(f"  [v2x] fetch error {type(e).__name__}; retrying", flush=True)
+            time.sleep(interval_s); continue
         if bbox:
             lo0, la0, lo1, la1 = bbox
             veh = {k: v for k, v in veh.items()
                    if lo0 <= v[0] <= lo1 and la0 <= v[1] <= la1}
         snaps.append(veh)
         stamps.append(time.time() - t0)
-        print(f"  [v2x] t={stamps[-1]:5.0f}s  vehicles={len(veh)}")
+        shp = _save(snaps, stamps)                       # incremental, crash-safe
+        print(f"  [v2x] t={stamps[-1]:5.0f}s  vehicles={len(veh)}  trace{shp}",
+              flush=True)
         time.sleep(interval_s)
-    ids = sorted({k for s in snaps for k in s})
-    idx = {k: i for i, k in enumerate(ids)}
-    pos = np.full((len(snaps), len(ids), 2), np.nan)
-    for t, s in enumerate(snaps):
-        for k, (lo, la) in s.items():
-            pos[t, idx[k]] = (lo, la)
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    np.savez_compressed(out, ids=np.array(ids), pos=pos,
-                        times=np.array(stamps))
-    print(f"  [v2x] saved trace {pos.shape} -> {out}")
+    print(f"  [v2x] done -> {out}", flush=True)
     return out
 
 
