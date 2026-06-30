@@ -120,6 +120,7 @@ def build_v2x_trace(cfg, cache=None, min_cov=0.9, net_file=SEOUL_NET,
         **road,
         "veh_seg": veh_seg, "veh_xy": veh_xy, "veh_speed": veh_speed,
         "edge_count": edge_count, "edge_spd": edge_spd, "dt": dt,
+        "ctr": ctr,                      # net-XY = veh_xy + ctr (for geo-mapping)
     }
     os.makedirs(os.path.dirname(cache), exist_ok=True)
     np.savez_compressed(cache, **{k: (np.array(v, dtype=object) if isinstance(v, (list, dict))
