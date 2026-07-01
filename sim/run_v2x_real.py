@@ -36,7 +36,11 @@ def _prepare_v2x(cfg, device):
     return road, mob, np.array(gammas)
 
 
-def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti"):
+def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
+        rounds=250):
+    """Run REAL FL until convergence. `rounds` may exceed the mobility trace
+    length: the Seoul V2X window is replayed cyclically (steady-state traffic),
+    while FL keeps training/propagating so the accuracy curve plateaus."""
     cfg = cfg or Config()
     cfg.num_vehicles = num_vehicles
     cfg.modalities = ["camera", "lidar"]
@@ -48,6 +52,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti"):
     torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
     print("[1/3] Building real Seoul V2X mobility + GAT ...")
     road, mob, gammas = _prepare_v2x(cfg, device)
+    total = rounds or mob.Krounds
+    print(f"      running {total} FL rounds (trace K={mob.Krounds}, "
+          f"replayed cyclically)")
     print("[2/3] Loading real KITTI multimodal data ...")
     data = _prep_data(cfg, cfg.seed, dataset=dataset)
 
@@ -62,11 +69,12 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti"):
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h = [], [], []
-            for k in range(mob.Krounds):
-                mob.k = k
+            for k in range(total):
+                kk = k % mob.Krounds                    # replay the trace window
+                mob.k = kk
                 mfl.local_train()
                 mfl.refresh_strengths()
-                g = gammas[k] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
+                g = gammas[kk] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
                     else np.zeros(mob.N)
                 selected = alg.run_round(k, g)
                 accs = mfl.evaluate("test")
