@@ -1,9 +1,9 @@
 """
-Meaningful 1x2 map subfigure on the real Seoul map: the SAME vehicle cohort,
-coloured by the model accuracy each vehicle achieves under (a) the Proposed
-road/traffic-aware scheme vs (b) the road/traffic-agnostic Caching-assisted
-baseline. Greener = higher accuracy; the broader green coverage under Proposed
-shows strong encoders reach more vehicles across the real Seoul road network.
+Meaningful 1x4 map subfigure on the real Seoul map: the SAME vehicle cohort,
+coloured by the model accuracy each vehicle achieves under the Proposed
+road/traffic-aware scheme (FACE) vs the three baselines. Greener = higher
+accuracy; the broader green coverage under FACE shows strong encoders reach
+more vehicles across the real Seoul road network.
 
 Reuses the V2X trace (sim/v2x_trace) + the per-vehicle accuracy tracking from
 sim/map_viz, and georeferences vehicles onto a contextily basemap.
@@ -21,6 +21,9 @@ from .mobility import RoadNetwork, MobilitySim
 from .hgat import train_hgat, future_contact_scores
 from .v2x_trace import build_v2x_trace, SEOUL_NET
 from .map_viz import _run_one
+from .plotting import disp
+
+MAP_SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
 
 
 def _compute(cfg, device, snap_k, cache):
@@ -44,9 +47,10 @@ def _compute(cfg, device, snap_k, cache):
                                             device=device))
     gammas = np.array(gammas)
 
-    print("  [v2x-map] running FACE and Caching-assisted ...")
-    acc_prop, _ = _run_one(cfg, mob, gammas, "Proposed", snap_k)
-    acc_cach, _ = _run_one(cfg, mob, gammas, "Caching-assisted", snap_k)
+    accs = {}
+    for s in MAP_SCHEMES:
+        print(f"  [v2x-map] running {s} ...")
+        accs[s], _ = _run_one(cfg, mob, gammas, s, snap_k)
 
     mob.k = snap_k
     net = sumolib.net.readNet(SEOUL_NET)
@@ -57,12 +61,13 @@ def _compute(cfg, device, snap_k, cache):
         lon, lat = net.convertXY2LonLat(float(x), float(y))
         vm[i] = tf.transform(lon, lat)
 
-    np.savez(cache, vm=vm, acc_prop=acc_prop, acc_cach=acc_cach, snap_k=snap_k)
-    return vm, acc_prop, acc_cach, snap_k
+    np.savez(cache, vm=vm, snap_k=snap_k,
+             **{f"acc_{s}": accs[s] for s in MAP_SCHEMES})
+    return vm, accs, snap_k
 
 
 def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
-                        basemap="positron", use_cache=True):
+                        basemap="voyager", use_cache=True):
     import contextily as cx
 
     cfg = cfg or Config()
@@ -71,13 +76,13 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     os.makedirs(fig_dir, exist_ok=True)
     cache = os.path.join(cfg.results_dir, "v2x_map_cache.npz")
 
-    if use_cache and os.path.exists(cache):
-        d = np.load(cache)
-        vm, acc_prop, acc_cach = d["vm"], d["acc_prop"], d["acc_cach"]
-        snap_k = int(d["snap_k"])
+    d = np.load(cache) if (use_cache and os.path.exists(cache)) else None
+    if d is not None and all(f"acc_{s}" in d.files for s in MAP_SCHEMES):
+        vm = d["vm"]; snap_k = int(d["snap_k"])
+        accs = {s: d[f"acc_{s}"] for s in MAP_SCHEMES}
         print(f"  [v2x-map] re-plotting from cache {cache}")
     else:
-        vm, acc_prop, acc_cach, snap_k = _compute(cfg, device, snap_k, cache)
+        vm, accs, snap_k = _compute(cfg, device, snap_k, cache)
 
     providers = {
         "osm": cx.providers.OpenStreetMap.Mapnik,
@@ -85,33 +90,36 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         "positron": cx.providers.CartoDB.Positron,
         "voyager": cx.providers.CartoDB.Voyager,
     }
-    src = providers.get(basemap, providers["positron"])
+    src = providers.get(basemap, providers["voyager"])
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 6.2), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, len(MAP_SCHEMES), figsize=(18, 4.9),
+                             sharex=True, sharey=True)
     pad = 400
     xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
     ylim = (vm[:, 1].min() - pad, vm[:, 1].max() + pad)
-    panels = [("FACE", acc_prop), ("Caching-assisted", acc_cach)]
     sc = None
-    for ax, (name, acc) in zip(axes, panels):
+    for ax, s in zip(axes, MAP_SCHEMES):
+        acc = accs[s]
         sc = ax.scatter(vm[:, 0], vm[:, 1], c=acc, cmap="RdYlGn", vmin=0.2,
-                        vmax=1.0, s=42, edgecolors="k", linewidths=0.3, zorder=4)
+                        vmax=1.0, s=30, edgecolors="k", linewidths=0.3,
+                        alpha=0.95, zorder=4)
         ax.set_xlim(*xlim); ax.set_ylim(*ylim)
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
-        cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=13,
-                       attribution_size=5)
+        cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=14,
+                       attribution_size=4)
         # method label BELOW the panel (xlabel), so it never overlaps the dots
-        ax.set_xlabel(f"{name}\nmean acc = {acc.mean():.3f}", fontsize=12)
+        ax.set_xlabel(f"{disp(s)}\nmean acc = {acc.mean():.3f}", fontsize=12)
 
-    cbar = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.02)
+    fig.subplots_adjust(wspace=0.04)
+    cbar = fig.colorbar(sc, ax=axes, fraction=0.018, pad=0.015)
     cbar.set_label("Vehicle model accuracy")
 
     out = os.path.join(fig_dir, "fig_infocom_v2x_map.png")
     for ext in ("png", "pdf"):
         fig.savefig(out.replace(".png", "." + ext), dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print(f"  saved {out}  (FACE {acc_prop.mean():.3f} vs "
-          f"Caching {acc_cach.mean():.3f})")
+    print("  saved", out, " ".join(f"{disp(s)}={accs[s].mean():.3f}"
+                                   for s in MAP_SCHEMES))
     return out
 
 
