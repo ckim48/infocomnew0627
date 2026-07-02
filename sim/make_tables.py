@@ -139,7 +139,9 @@ def _mobility_table():
         return [(acc, None), (poor, None)]
 
     schemes = [x for x in SCHEMES if x in intas and x in seoul]
-    data = {s: cells(intas, s, True) + cells(seoul, s, False) for s in schemes}
+    seoul_multi = bool(seoul["Proposed"]["acc_std"][-TAIL:].mean() > 0)
+    data = {s: cells(intas, s, True) + cells(seoul, s, seoul_multi)
+            for s in schemes}
     best = [max(data[s][c][0] for s in schemes) for c in range(4)]
 
     def row(s):
@@ -153,9 +155,9 @@ def _mobility_table():
         "\\begin{table}[t]",
         "    \\centering",
         "    \\caption{Generality across mobility environments: real multimodal"
-        " FL (KITTI) over the InTAS (Munich) trace (mean $\\pm$ std over 3"
-        " seeds) and over the real Seoul-Gangnam V2X trace ($N{=}180$,"
-        " 250 rounds). Accuracies in \\%, averaged over the final"
+        " FL (KITTI) over the InTAS (Munich) trace and the real"
+        " Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds); mean $\\pm$ std"
+        " over 3 seeds. Accuracies in \\%, averaged over the final"
         f" {TAIL} rounds.}}",
         "    \\label{tab:mobility}",
         "    \\renewcommand{\\arraystretch}{1.15}",
@@ -184,12 +186,15 @@ def _seoul_table():
     schemes = [x for x in SCHEMES if x in res]
     tau = 0.95 * max(res[s]["acc"][-1] for s in schemes)
     K = len(res["Proposed"]["acc"])
+    multi = bool(res["Proposed"]["acc_std"][-TAIL:].mean() > 0)
     st = {}
     for s in schemes:
         acc = res[s]["acc"][-TAIL:].mean(); poor = res[s]["poor"][-TAIL:].mean()
         reached = res[s]["acc"] >= tau
         rounds = int(np.argmax(reached)) + 1 if reached.any() else None
         st[s] = dict(acc=acc, poor=poor, gap=acc - poor, rounds=rounds,
+                     acc_sd=res[s]["acc_std"][-TAIL:].mean(),
+                     poor_sd=res[s]["poor_std"][-TAIL:].mean(),
                      cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None)
     best = dict(acc=max(st[s]["acc"] for s in schemes),
                 poor=max(st[s]["poor"] for s in schemes),
@@ -203,8 +208,10 @@ def _seoul_table():
     def row(s):
         e = st[s]
         cells = [
-            b(f"{100*e['acc']:.1f}", e["acc"] == best["acc"]),
-            b(f"{100*e['poor']:.1f}", e["poor"] == best["poor"]),
+            _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best["acc"]) if multi
+            else b(f"{100*e['acc']:.1f}", e["acc"] == best["acc"]),
+            _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best["poor"]) if multi
+            else b(f"{100*e['poor']:.1f}", e["poor"] == best["poor"]),
             b(f"{100*e['gap']:.1f}", e["gap"] == best["gap"]),
             _fmt_int(e["rounds"], e["rounds"] == best["rounds"], K),
             _fmt_int(e["cumtx"], e["cumtx"] == best["cumtx"]),
@@ -215,8 +222,9 @@ def _seoul_table():
         "\\begin{table}[t]",
         "    \\centering",
         "    \\caption{Performance on the real Seoul-Gangnam V2X trace"
-        " (real multimodal FL on KITTI, $N{=}180$, single 250-round run;"
-        f" \\%, averaged over the final {TAIL} rounds;"
+        " (real multimodal FL on KITTI, $N{=}180$, 250 rounds;"
+        + (" mean $\\pm$ std over 3 seeds;" if multi else " single run;")
+        + f" \\%, averaged over the final {TAIL} rounds;"
         f" $\\tau={100*tau:.1f}\\%$).}}",
         "    \\label{tab:seoul_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
