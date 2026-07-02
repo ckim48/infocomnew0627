@@ -258,7 +258,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
     road, mob, gammas = prepare(cfg, device)
     data = _prep_data(cfg, cfg.seed, dataset=dataset, min_class_count=min_class_count)
 
-    metric_keys = ["acc", "poor", "loss", "tloss", "tx", "qlen"]
+    metric_keys = ["acc", "poor", "loss", "vloss", "tloss", "tx", "qlen"]
     stacks = {s: {m: [] for m in metric_keys} for s in SCHEMES}
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
@@ -267,7 +267,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
-            acc_h, poor_h, loss_h, tloss_h, tx_h, q_h = [], [], [], [], [], []
+            acc_h, poor_h, loss_h, vloss_h, tloss_h, tx_h, q_h = [], [], [], [], [], [], []
             for k in range(mob.Krounds):
                 mob.k = k
                 train_loss = mfl.local_train()
@@ -279,12 +279,17 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
                 acc_h.append(float(accs.mean()))
                 poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
                 loss_h.append(train_loss)
+                # paper-defined validation loss L^val = (1 - Q^eff)^2 (Eq. in
+                # mfl.py), with Q^eff the real per-vehicle validation accuracy
+                # captured by refresh_strengths()
+                vloss_h.append(float(np.mean((1.0 - mfl.acc) ** 2)))
                 tloss_h.append(float(losses.mean()))
                 tx_h.append(len(selected))
                 q_h.append(np.mean(list(alg.Q.values())))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["loss"].append(loss_h)
+            stacks[scheme]["vloss"].append(vloss_h)
             stacks[scheme]["tloss"].append(tloss_h)
             stacks[scheme]["tx"].append(tx_h)
             stacks[scheme]["qlen"].append(q_h)

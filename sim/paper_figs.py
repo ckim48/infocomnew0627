@@ -94,12 +94,12 @@ def main(outdir="Figures"):
 
     # ---- Figure: 2x2 convergence -- test loss (top) and test accuracy
     # (bottom) on the two real multimodal datasets (columns) ----
-    if "loss" in kitti["Proposed"] and "loss" in nusc["Proposed"]:
+    if "vloss" in kitti["Proposed"] and "vloss" in nusc["Proposed"]:
         fig, axes = plt.subplots(2, 2, figsize=(7.2, 6.4))
-        _plot_panel(axes[0, 0], kitti, "loss", "(a) KITTI",
-                    "Global round $k$", "Training loss", smooth=5)
-        _plot_panel(axes[0, 1], nusc, "loss", "(b) nuScenes",
-                    "Global round $k$", "Training loss", smooth=5)
+        _plot_panel(axes[0, 0], kitti, "vloss", "(a) KITTI",
+                    "Global round $k$", "Validation loss")
+        _plot_panel(axes[0, 1], nusc, "vloss", "(b) nuScenes",
+                    "Global round $k$", "Validation loss")
         _plot_panel(axes[1, 0], kitti, "acc", "(c) KITTI",
                     "Global round $k$", "Test accuracy")
         _plot_panel(axes[1, 1], nusc, "acc", "(d) nuScenes",
@@ -111,7 +111,7 @@ def main(outdir="Figures"):
                         dpi=300, bbox_inches="tight")
         plt.close(fig)
     else:
-        print("  [skip] fig_infocom_convergence: no 'loss' in metrics "
+        print("  [skip] fig_infocom_convergence: no 'vloss' in metrics "
               "(re-run sim.real_fl to record it)")
 
     # ---- Figure 2: poor-data (needy) vehicle accuracy, two datasets ----
