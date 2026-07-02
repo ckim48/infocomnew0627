@@ -64,14 +64,12 @@ def _combined_table(datasets):
         st, tau, K = _stats(res)
         taus[label] = tau
         for s in SCHEMES:
-            st[s]["txrd"] = float(res[s]["tx"].mean())
             st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
         best_acc = max(st[s]["acc"] for s in SCHEMES)
         best_poor = max(st[s]["poor"] for s in SCHEMES)
         best_gap = min(st[s]["gap"] for s in SCHEMES)
         best_rounds = min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"])
         best_tx = min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"])
-        best_txrd = min(st[s]["txrd"] for s in SCHEMES)
         block = []
         for s in SCHEMES:
             e = st[s]
@@ -82,8 +80,6 @@ def _combined_table(datasets):
                  else f"{100*e['gap']:.1f}"),
                 _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
                 _fmt_int(e["cumtx"], e["cumtx"] == best_tx),
-                (f"\\textbf{{{e['txrd']:.1f}}}" if e["txrd"] == best_txrd
-                 else f"{e['txrd']:.1f}"),
             ]
             block.append(f"        & \\textsc{{{DISPLAY.get(s, s)}}} & "
                          + " & ".join(cells) + " \\\\")
@@ -101,16 +97,15 @@ def _combined_table(datasets):
         " rounds). \\textsc{Gap} is the mean-to-poor accuracy gap;"
         " \\textsc{Rounds@$\\tau$} / \\textsc{Tx@$\\tau$} are the rounds and"
         " cumulative encoder transmissions to reach $\\tau$ (95\\% of the best"
-        f" final accuracy; {tau_txt}); \\textsc{{Tx/Rd}} is the mean"
-        " transmissions per round.}",
+        f" final accuracy; {tau_txt}).}}",
         "    \\label{tab:real_dataset_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{5pt}",
-        "    \\begin{tabular}{c|c|c|c|c|c|c|c}",
+        "    \\begin{tabular}{c|c|c|c|c|c|c}",
         "        \\hline",
         "        \\textsc{Dataset} & \\textsc{Method} & \\textsc{Acc} &"
         " \\textsc{Poor Acc} & \\textsc{Gap} & \\textsc{Rounds@$\\tau$} &"
-        " \\textsc{Tx@$\\tau$} & \\textsc{Tx/Rd} \\\\",
+        " \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
         rows[0],
         "        \\hline",
@@ -185,14 +180,12 @@ def _seoul_table():
         reached = res[s]["acc"] >= tau
         rounds = int(np.argmax(reached)) + 1 if reached.any() else None
         st[s] = dict(acc=acc, poor=poor, gap=acc - poor, rounds=rounds,
-                     cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None,
-                     txrd=float(res[s]["tx"].mean()))
+                     cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None)
     best = dict(acc=max(st[s]["acc"] for s in SCHEMES),
                 poor=max(st[s]["poor"] for s in SCHEMES),
                 gap=min(st[s]["gap"] for s in SCHEMES),
                 rounds=min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"]),
-                cumtx=min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"]),
-                txrd=min(st[s]["txrd"] for s in SCHEMES))
+                cumtx=min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"]))
 
     def b(txt, is_best):
         return f"\\textbf{{{txt}}}" if is_best else txt
@@ -205,7 +198,6 @@ def _seoul_table():
             b(f"{100*e['gap']:.1f}", e["gap"] == best["gap"]),
             _fmt_int(e["rounds"], e["rounds"] == best["rounds"], K),
             _fmt_int(e["cumtx"], e["cumtx"] == best["cumtx"]),
-            b(f"{e['txrd']:.1f}", e["txrd"] == best["txrd"]),
         ]
         return f"        \\textsc{{{DISPLAY.get(s, s)}}} & " + " & ".join(cells) + " \\\\"
 
@@ -219,11 +211,10 @@ def _seoul_table():
         "    \\label{tab:seoul_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",
-        "    \\begin{tabular}{c|c|c|c|c|c|c}",
+        "    \\begin{tabular}{c|c|c|c|c|c}",
         "        \\hline",
         "        \\textsc{Method} & \\textsc{Acc} & \\textsc{Poor Acc} &"
-        " \\textsc{Gap} & \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} &"
-        " \\textsc{Tx/Rd} \\\\",
+        " \\textsc{Gap} & \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
     ]
     for s in SCHEMES[:-1]:
@@ -262,7 +253,6 @@ def _ablation_table(dataset="kitti", label="KITTI"):
             _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
             dacc,
             _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
-            f"{e['txrd']:.1f}",
         ]
         return f"        \\textsc{{{v}}} & " + " & ".join(cells) + " \\\\"
 
@@ -275,10 +265,10 @@ def _ablation_table(dataset="kitti", label="KITTI"):
         "    \\label{tab:ablation}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",
-        "    \\begin{tabular}{c|c|c|c|c}",
+        "    \\begin{tabular}{c|c|c|c}",
         "        \\hline",
         "        \\textsc{Variant} & \\textsc{Acc} & $\\Delta$\\textsc{Acc}"
-        " & \\textsc{Poor Acc} & \\textsc{Tx/Rd} \\\\",
+        " & \\textsc{Poor Acc} \\\\",
         "        \\hline",
     ]
     for v in ABL_VARIANTS[:-1]:
