@@ -97,12 +97,66 @@ def _table(res, dataset_label, K_label):
     return "\n".join(lines)
 
 
+def _mobility_table():
+    """Cross-city generality: the same real multimodal FL (KITTI) pipeline on
+    the InTAS (Munich) mobility versus the real Seoul-Gangnam V2X trace.
+    InTAS cells: mean +- std over 3 seeds; Seoul: single 250-round run."""
+    intas = _load("results/metrics_real_kitti.npz")
+    seoul = _load("results/metrics_v2x_real.npz")
+
+    def cells(res, s, with_sd):
+        acc = res[s]["acc"][-TAIL:].mean(); poor = res[s]["poor"][-TAIL:].mean()
+        if with_sd:
+            return [(acc, res[s]["acc_std"][-TAIL:].mean()),
+                    (poor, res[s]["poor_std"][-TAIL:].mean())]
+        return [(acc, None), (poor, None)]
+
+    data = {s: cells(intas, s, True) + cells(seoul, s, False) for s in SCHEMES}
+    best = [max(data[s][c][0] for s in SCHEMES) for c in range(4)]
+
+    def row(s):
+        out = []
+        for c, (v, sd) in enumerate(data[s]):
+            cell = f"{100*v:.1f}" if sd is None else f"{100*v:.1f} $\\pm$ {100*sd:.1f}"
+            out.append(f"\\textbf{{{cell}}}" if data[s][c][0] == best[c] else cell)
+        return f"        \\textsc{{{DISPLAY.get(s, s)}}} & " + " & ".join(out) + " \\\\"
+
+    lines = [
+        "\\begin{table}[t]",
+        "    \\centering",
+        "    \\caption{Generality across mobility environments: real multimodal"
+        " FL (KITTI) over the InTAS (Munich) trace (mean $\\pm$ std over 3"
+        " seeds) and over the real Seoul-Gangnam V2X trace ($N{=}180$,"
+        " 250 rounds). Accuracies in \\%, averaged over the final"
+        f" {TAIL} rounds.}}",
+        "    \\label{tab:mobility}",
+        "    \\renewcommand{\\arraystretch}{1.15}",
+        "    \\setlength{\\tabcolsep}{4.5pt}",
+        "    \\begin{tabular}{c|c|c|c|c}",
+        "        \\hline",
+        "        \\multirow{2}{*}{\\textsc{Method}} &"
+        " \\multicolumn{2}{c|}{\\textsc{InTAS (Munich)}} &"
+        " \\multicolumn{2}{c}{\\textsc{Seoul V2X (Gangnam)}} \\\\",
+        "        & \\textsc{Acc} & \\textsc{Poor Acc}"
+        " & \\textsc{Acc} & \\textsc{Poor Acc} \\\\",
+        "        \\hline",
+    ]
+    for s in SCHEMES[:-1]:
+        lines.append(row(s))
+    lines += ["        \\hline", row("Proposed"), "        \\hline",
+              "    \\end{tabular}", "\\end{table}"]
+    return "\n".join(lines)
+
+
 def main(outdir="Tables"):
     os.makedirs(outdir, exist_ok=True)
+    outputs = []
     for tag, label in [("kitti", "KITTI"), ("nuscenes", "nuScenes")]:
         res = _load(f"results/metrics_real_{tag}.npz")
-        tex = _table(res, label, tag)
-        path = os.path.join(outdir, f"tab_real_{tag}.tex")
+        outputs.append((f"tab_real_{tag}.tex", _table(res, label, tag)))
+    outputs.append(("tab_mobility.tex", _mobility_table()))
+    for fname, tex in outputs:
+        path = os.path.join(outdir, fname)
         with open(path, "w") as f:
             f.write(tex + "\n")
         print(f"--- {path} ---")

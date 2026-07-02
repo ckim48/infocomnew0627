@@ -1,0 +1,19 @@
+\begin{table}[t]
+    \centering
+    \caption{Generality across mobility environments: real multimodal FL (KITTI) over the InTAS (Munich) trace (mean $\pm$ std over 3 seeds) and over the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds). Accuracies in \%, averaged over the final 20 rounds.}
+    \label{tab:mobility}
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{4.5pt}
+    \begin{tabular}{c|c|c|c|c}
+        \hline
+        \multirow{2}{*}{\textsc{Method}} & \multicolumn{2}{c|}{\textsc{InTAS (Munich)}} & \multicolumn{2}{c}{\textsc{Seoul V2X (Gangnam)}} \\
+        & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Acc} & \textsc{Poor Acc} \\
+        \hline
+        \textsc{Caching-assisted} & 56.3 $\pm$ 2.2 & 51.4 $\pm$ 0.7 & 49.7 & 45.4 \\
+        \textsc{V2V-aware} & 58.9 $\pm$ 2.1 & 54.5 $\pm$ 0.7 & 51.5 & 47.3 \\
+        \textsc{Learning-aware} & 59.4 $\pm$ 3.5 & 55.1 $\pm$ 2.2 & 51.9 & 47.6 \\
+        \hline
+        \textsc{FACE} & \textbf{62.2 $\pm$ 2.3} & \textbf{58.5 $\pm$ 1.0} & \textbf{55.5} & \textbf{52.3} \\
+        \hline
+    \end{tabular}
+\end{table}
