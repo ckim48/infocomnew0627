@@ -305,6 +305,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
         for m in metric_keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
+            results[s][m + "_all"] = arr        # per-seed curves (for paired stats)
     tag = dataset
     np.savez(os.path.join(cfg.results_dir, f"metrics_real_{tag}.npz"),
              **{f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
