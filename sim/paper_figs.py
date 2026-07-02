@@ -42,11 +42,20 @@ def _load(path):
             for s in SCHEMES}
 
 
-def _plot_panel(ax, res, key, title, xlabel, ylabel, nmark=11, band=False):
+def _smooth(y, w):
+    """Centered moving average with edge-aware normalization."""
+    if w <= 1:
+        return y
+    num = np.convolve(y, np.ones(w), "same")
+    den = np.convolve(np.ones_like(y), np.ones(w), "same")
+    return num / den
+
+
+def _plot_panel(ax, res, key, title, xlabel, ylabel, nmark=11, band=False, smooth=1):
     K = len(res["Proposed"][key]); x = np.arange(1, K + 1)
     me = max(K // nmark, 1)
     for s in SCHEMES:
-        y = res[s][key]
+        y = _smooth(res[s][key], smooth)
         ax.plot(x, y, label=DISPLAY.get(s, s), markevery=me, markersize=5.5,
                 markerfacecolor="white", markeredgewidth=1.2, **STY[s])
         if band and (key + "_std") in res[s]:
@@ -88,9 +97,9 @@ def main(outdir="Figures"):
     if "loss" in kitti["Proposed"] and "loss" in nusc["Proposed"]:
         fig, axes = plt.subplots(2, 2, figsize=(7.2, 6.4))
         _plot_panel(axes[0, 0], kitti, "loss", "(a) KITTI",
-                    "Global round $k$", "Training loss")
+                    "Global round $k$", "Training loss", smooth=5)
         _plot_panel(axes[0, 1], nusc, "loss", "(b) nuScenes",
-                    "Global round $k$", "Training loss")
+                    "Global round $k$", "Training loss", smooth=5)
         _plot_panel(axes[1, 0], kitti, "acc", "(c) KITTI",
                     "Global round $k$", "Test accuracy")
         _plot_panel(axes[1, 1], nusc, "acc", "(d) nuScenes",
