@@ -55,45 +55,69 @@ def _fmt_int(v, bold, K=None):
     return f"\\textbf{{{v}}}" if bold else f"{v}"
 
 
-def _table(res, dataset_label, K_label):
-    st, tau, K = _stats(res)
-    best_acc = max(st[s]["acc"] for s in SCHEMES)
-    best_poor = max(st[s]["poor"] for s in SCHEMES)
-    best_rounds = min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"])
-    best_tx = min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"])
+def _combined_table(datasets):
+    """Single table* over all datasets (Dataset | Method | metric columns),
+    with per-dataset best entries in bold."""
+    rows, taus = [], {}
+    for tag, label in datasets:
+        res = _load(f"results/metrics_real_{tag}.npz")
+        st, tau, K = _stats(res)
+        taus[label] = tau
+        for s in SCHEMES:
+            st[s]["txrd"] = float(res[s]["tx"].mean())
+            st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
+        best_acc = max(st[s]["acc"] for s in SCHEMES)
+        best_poor = max(st[s]["poor"] for s in SCHEMES)
+        best_gap = min(st[s]["gap"] for s in SCHEMES)
+        best_rounds = min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"])
+        best_tx = min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"])
+        best_txrd = min(st[s]["txrd"] for s in SCHEMES)
+        block = []
+        for s in SCHEMES:
+            e = st[s]
+            cells = [
+                _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
+                _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
+                (f"\\textbf{{{100*e['gap']:.1f}}}" if e["gap"] == best_gap
+                 else f"{100*e['gap']:.1f}"),
+                _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
+                _fmt_int(e["cumtx"], e["cumtx"] == best_tx),
+                (f"\\textbf{{{e['txrd']:.1f}}}" if e["txrd"] == best_txrd
+                 else f"{e['txrd']:.1f}"),
+            ]
+            block.append(f"        & \\textsc{{{DISPLAY.get(s, s)}}} & "
+                         + " & ".join(cells) + " \\\\")
+        block[0] = block[0].replace(
+            "        &", f"        \\multirow{{4}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
+        rows.append("\n".join(block))
 
-    def row(s):
-        e = st[s]
-        cells = [
-            _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
-            _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
-            _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
-            _fmt_int(e["cumtx"], e["cumtx"] == best_tx),
-        ]
-        return f"        \\textsc{{{DISPLAY.get(s, s)}}} & " + " & ".join(cells) + " \\\\"
-
+    tau_txt = ", ".join(f"{lb}: {100*t:.1f}\\%" for lb, t in taus.items())
     lines = [
-        "\\begin{table}[t]",
+        "\\begin{table*}[t]",
         "    \\centering",
-        f"    \\caption{{Real multimodal FL on {dataset_label}: test accuracy and"
-        f" poor-data vehicle accuracy (\\%, mean $\\pm$ std over 3 seeds, averaged"
-        f" over the final {TAIL} rounds), rounds and cumulative encoder"
-        f" transmissions to reach $\\tau={100*tau:.1f}\\%$.}}",
-        f"    \\label{{tab:real_{K_label}}}",
+        "    \\caption{Performance comparison on KITTI and nuScenes"
+        f" (\\%, mean $\\pm$ std over 3 seeds, averaged over the final {TAIL}"
+        " rounds). \\textsc{Gap} is the mean-to-poor accuracy gap;"
+        " \\textsc{Rounds@$\\tau$} / \\textsc{Tx@$\\tau$} are the rounds and"
+        " cumulative encoder transmissions to reach $\\tau$ (95\\% of the best"
+        f" final accuracy; {tau_txt}); \\textsc{{Tx/Rd}} is the mean"
+        " transmissions per round.}",
+        "    \\label{tab:real_dataset_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
-        "    \\setlength{\\tabcolsep}{4.5pt}",
-        "    \\begin{tabular}{c|c|c|c|c}",
+        "    \\setlength{\\tabcolsep}{5pt}",
+        "    \\begin{tabular}{c|c|c|c|c|c|c|c}",
         "        \\hline",
-        "        \\multirow{2}{*}{\\textsc{Method}} &"
-        " \\multicolumn{4}{c}{\\textsc{Performance on " + dataset_label + "}} \\\\",
-        "        & \\textsc{Acc} & \\textsc{Poor Acc} &"
-        " \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} \\\\",
+        "        \\textsc{Dataset} & \\textsc{Method} & \\textsc{Acc} &"
+        " \\textsc{Poor Acc} & \\textsc{Gap} & \\textsc{Rounds@$\\tau$} &"
+        " \\textsc{Tx@$\\tau$} & \\textsc{Tx/Rd} \\\\",
         "        \\hline",
+        rows[0],
+        "        \\hline",
+        rows[1],
+        "        \\hline",
+        "    \\end{tabular}",
+        "\\end{table*}",
     ]
-    for s in SCHEMES[:-1]:
-        lines.append(row(s))
-    lines += ["        \\hline", row("Proposed"), "        \\hline",
-              "    \\end{tabular}", "\\end{table}"]
     return "\n".join(lines)
 
 
@@ -150,11 +174,11 @@ def _mobility_table():
 
 def main(outdir="Tables"):
     os.makedirs(outdir, exist_ok=True)
-    outputs = []
-    for tag, label in [("kitti", "KITTI"), ("nuscenes", "nuScenes")]:
-        res = _load(f"results/metrics_real_{tag}.npz")
-        outputs.append((f"tab_real_{tag}.tex", _table(res, label, tag)))
-    outputs.append(("tab_mobility.tex", _mobility_table()))
+    outputs = [
+        ("tab_real_combined.tex",
+         _combined_table([("kitti", "KITTI"), ("nuscenes", "nuScenes")])),
+        ("tab_mobility.tex", _mobility_table()),
+    ]
     for fname, tex in outputs:
         path = os.path.join(outdir, fname)
         with open(path, "w") as f:

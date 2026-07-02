@@ -1,0 +1,24 @@
+\begin{table*}[t]
+    \centering
+    \caption{Performance comparison on KITTI and nuScenes (\%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds). \textsc{Gap} is the mean-to-poor accuracy gap; \textsc{Rounds@$\tau$} / \textsc{Tx@$\tau$} are the rounds and cumulative encoder transmissions to reach $\tau$ (95\% of the best final accuracy; KITTI: 59.8\%, nuScenes: 78.2\%); \textsc{Tx/Rd} is the mean transmissions per round.}
+    \label{tab:real_dataset_results}
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{5pt}
+    \begin{tabular}{c|c|c|c|c|c|c|c}
+        \hline
+        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} & \textsc{Tx/Rd} \\
+        \hline
+        \multirow{4}{*}{\textsc{KITTI}}
+        & \textsc{Caching-assisted} & 56.3 $\pm$ 2.2 & 51.4 $\pm$ 0.7 & 4.9 & $>150$ & -- & 42.3 \\
+        & \textsc{V2V-aware} & 58.9 $\pm$ 2.1 & 54.5 $\pm$ 0.7 & 4.3 & 145 & 3366 & 23.3 \\
+        & \textsc{Learning-aware} & 59.4 $\pm$ 3.5 & 55.1 $\pm$ 2.2 & 4.2 & 143 & 3320 & 23.3 \\
+        & \textsc{FACE} & \textbf{62.2 $\pm$ 2.3} & \textbf{58.5 $\pm$ 1.0} & \textbf{3.8} & \textbf{98} & \textbf{2023} & \textbf{23.1} \\
+        \hline
+        \multirow{4}{*}{\textsc{nuScenes}}
+        & \textsc{Caching-assisted} & 74.5 $\pm$ 2.1 & 71.7 $\pm$ 1.4 & 2.8 & $>150$ & -- & 42.3 \\
+        & \textsc{V2V-aware} & 80.3 $\pm$ 1.4 & 78.2 $\pm$ 2.1 & 2.0 & 111 & 2221 & 20.8 \\
+        & \textsc{Learning-aware} & 80.0 $\pm$ 1.9 & 78.0 $\pm$ 2.4 & 2.0 & 105 & 2094 & 21.5 \\
+        & \textsc{FACE} & \textbf{81.9 $\pm$ 1.1} & \textbf{80.2 $\pm$ 0.9} & \textbf{1.7} & \textbf{85} & \textbf{1509} & \textbf{20.3} \\
+        \hline
+    \end{tabular}
+\end{table*}
