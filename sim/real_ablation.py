@@ -52,6 +52,7 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None,
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
         for name, flags in todo.items():
+            torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, "Proposed", seed=sd)
@@ -115,6 +116,7 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
         for name, flags in VARIANTS.items():
+            torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, "Proposed", seed=sd)

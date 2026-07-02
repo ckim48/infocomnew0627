@@ -94,7 +94,7 @@ def build_gammas(cfg, road, mob, variant, device):
         return np.zeros((K, mob.N))
     if variant == "HGAT":
         model, road_ei = train_hgat(cfg, road, mob, device=device,
-                                    warmup_rounds=30)
+                                    warmup_rounds=40)
         gam = []
         for k in range(K):
             mob.k = k
@@ -152,6 +152,7 @@ def main(seeds=(2026, 2027, 2028), dataset="kitti"):
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
         for v in VARIANTS:
+            torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, "Proposed", seed=sd)

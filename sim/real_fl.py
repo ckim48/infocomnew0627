@@ -267,6 +267,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
         for scheme in REAL_SCHEMES:
+            torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
