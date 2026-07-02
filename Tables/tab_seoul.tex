@@ -1,0 +1,18 @@
+\begin{table}[t]
+    \centering
+    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL on KITTI, $N{=}180$, single 250-round run; \%, averaged over the final 20 rounds; $\tau=52.4\%$).}
+    \label{tab:seoul_results}
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{4.5pt}
+    \begin{tabular}{c|c|c|c|c|c|c}
+        \hline
+        \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} & \textsc{Tx/Rd} \\
+        \hline
+        \textsc{Caching-assisted} & 49.7 & 45.4 & 4.3 & $>250$ & -- & 87.2 \\
+        \textsc{V2V-aware} & 51.5 & 47.3 & 4.2 & $>250$ & -- & \textbf{50.6} \\
+        \textsc{Learning-aware} & 51.9 & 47.6 & 4.3 & 250 & 12787 & 51.1 \\
+        \hline
+        \textsc{FACE} & \textbf{55.5} & \textbf{52.3} & \textbf{3.2} & \textbf{193} & \textbf{12147} & 65.9 \\
+        \hline
+    \end{tabular}
+\end{table}

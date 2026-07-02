@@ -362,19 +362,24 @@ def centralized_sanity(epochs=8):
     return acc
 
 
-def main():
-    """Reproduce the real multimodal FL (KITTI) comparison from the paper."""
+def main_config():
+    """Operating point of the paper's real multimodal FL comparison."""
     cfg = Config()
     cfg.num_vehicles = 80
-    cfg.K = 40
     cfg.comm_range = 220.0          # moderate density -> receiver-side contention
     cfg.gat_epochs = 30
-    cfg.local_epochs = 3
     cfg.frac_good = 0.15            # scarce strong (data-rich) sources
-    cfg.cache_capacity_mb = 30.0
+    cfg.cache_capacity_mb = 45.0    # operating point: room to carry a full
+                                    # extra modality pair (camera+lidar=30MB)
     cfg.contact_time_per_round = 1.8
     cfg.K = 150                        # enough rounds to reach convergence
     cfg.local_epochs = 6              # more local steps/round -> earlier plateau
+    return cfg
+
+
+def main():
+    """Reproduce the real multimodal FL (KITTI) comparison from the paper."""
+    cfg = main_config()
     # KITTI: 3 classes; nuScenes: drop the very rare Cyclist (<800) -> 2 classes
     run_real_all(cfg, seeds=[2026, 2027, 2028], dataset="kitti", min_class_count=0)
     run_real_all(cfg, seeds=[2026, 2027, 2028], dataset="nuscenes", min_class_count=800)

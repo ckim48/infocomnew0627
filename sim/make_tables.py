@@ -95,7 +95,8 @@ def _combined_table(datasets):
     lines = [
         "\\begin{table*}[t]",
         "    \\centering",
-        "    \\caption{Performance comparison on KITTI and nuScenes"
+        "    \\caption{Performance comparison on KITTI and nuScenes over the"
+        " InTAS (Munich) mobility trace"
         f" (\\%, mean $\\pm$ std over 3 seeds, averaged over the final {TAIL}"
         " rounds). \\textsc{Gap} is the mean-to-poor accuracy gap;"
         " \\textsc{Rounds@$\\tau$} / \\textsc{Tx@$\\tau$} are the rounds and"
@@ -172,13 +173,134 @@ def _mobility_table():
     return "\n".join(lines)
 
 
+def _seoul_table():
+    """Same metric columns as the combined table, for the real Seoul-Gangnam
+    V2X trace run (KITTI, N=180, single 250-round run -> no seed std)."""
+    res = _load("results/metrics_v2x_real.npz")
+    tau = 0.95 * max(res[s]["acc"][-1] for s in SCHEMES)
+    K = len(res["Proposed"]["acc"])
+    st = {}
+    for s in SCHEMES:
+        acc = res[s]["acc"][-TAIL:].mean(); poor = res[s]["poor"][-TAIL:].mean()
+        reached = res[s]["acc"] >= tau
+        rounds = int(np.argmax(reached)) + 1 if reached.any() else None
+        st[s] = dict(acc=acc, poor=poor, gap=acc - poor, rounds=rounds,
+                     cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None,
+                     txrd=float(res[s]["tx"].mean()))
+    best = dict(acc=max(st[s]["acc"] for s in SCHEMES),
+                poor=max(st[s]["poor"] for s in SCHEMES),
+                gap=min(st[s]["gap"] for s in SCHEMES),
+                rounds=min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"]),
+                cumtx=min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"]),
+                txrd=min(st[s]["txrd"] for s in SCHEMES))
+
+    def b(txt, is_best):
+        return f"\\textbf{{{txt}}}" if is_best else txt
+
+    def row(s):
+        e = st[s]
+        cells = [
+            b(f"{100*e['acc']:.1f}", e["acc"] == best["acc"]),
+            b(f"{100*e['poor']:.1f}", e["poor"] == best["poor"]),
+            b(f"{100*e['gap']:.1f}", e["gap"] == best["gap"]),
+            _fmt_int(e["rounds"], e["rounds"] == best["rounds"], K),
+            _fmt_int(e["cumtx"], e["cumtx"] == best["cumtx"]),
+            b(f"{e['txrd']:.1f}", e["txrd"] == best["txrd"]),
+        ]
+        return f"        \\textsc{{{DISPLAY.get(s, s)}}} & " + " & ".join(cells) + " \\\\"
+
+    lines = [
+        "\\begin{table}[t]",
+        "    \\centering",
+        "    \\caption{Performance on the real Seoul-Gangnam V2X trace"
+        " (real multimodal FL on KITTI, $N{=}180$, single 250-round run;"
+        f" \\%, averaged over the final {TAIL} rounds;"
+        f" $\\tau={100*tau:.1f}\\%$).}}",
+        "    \\label{tab:seoul_results}",
+        "    \\renewcommand{\\arraystretch}{1.15}",
+        "    \\setlength{\\tabcolsep}{4.5pt}",
+        "    \\begin{tabular}{c|c|c|c|c|c|c}",
+        "        \\hline",
+        "        \\textsc{Method} & \\textsc{Acc} & \\textsc{Poor Acc} &"
+        " \\textsc{Gap} & \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} &"
+        " \\textsc{Tx/Rd} \\\\",
+        "        \\hline",
+    ]
+    for s in SCHEMES[:-1]:
+        lines.append(row(s))
+    lines += ["        \\hline", row("Proposed"), "        \\hline",
+              "    \\end{tabular}", "\\end{table}"]
+    return "\n".join(lines)
+
+
+ABL_VARIANTS = ["w/o caching", "w/o demand", "w/o queue", "FACE (full)"]
+
+
+def _ablation_table(dataset="kitti", label="KITTI"):
+    """Component ablation on the real FL backend (Tables/tab_ablation.tex)."""
+    path = f"results/metrics_real_ablation_{dataset}.npz"
+    if not os.path.exists(path):
+        return None
+    d = np.load(path)
+    res = {v: {k.split("__", 1)[1]: d[k] for k in d.files if k.startswith(v + "__")}
+           for v in ABL_VARIANTS}
+    st = {}
+    for v in ABL_VARIANTS:
+        st[v] = dict(acc=res[v]["acc"][-TAIL:].mean(),
+                     acc_sd=res[v]["acc_std"][-TAIL:].mean(),
+                     poor=res[v]["poor"][-TAIL:].mean(),
+                     poor_sd=res[v]["poor_std"][-TAIL:].mean(),
+                     txrd=float(res[v]["tx"].mean()))
+    full = st["FACE (full)"]
+    best_acc = max(st[v]["acc"] for v in ABL_VARIANTS)
+    best_poor = max(st[v]["poor"] for v in ABL_VARIANTS)
+
+    def row(v):
+        e = st[v]
+        dacc = "--" if v == "FACE (full)" else f"{100*(e['acc']-full['acc']):+.1f}"
+        cells = [
+            _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
+            dacc,
+            _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
+            f"{e['txrd']:.1f}",
+        ]
+        return f"        \\textsc{{{v}}} & " + " & ".join(cells) + " \\\\"
+
+    lines = [
+        "\\begin{table}[t]",
+        "    \\centering",
+        f"    \\caption{{Component ablation of FACE (real multimodal FL,"
+        f" {label} over InTAS; \\%, mean $\\pm$ std over 3 seeds, averaged"
+        f" over the final {TAIL} rounds).}}",
+        "    \\label{tab:ablation}",
+        "    \\renewcommand{\\arraystretch}{1.15}",
+        "    \\setlength{\\tabcolsep}{4.5pt}",
+        "    \\begin{tabular}{c|c|c|c|c}",
+        "        \\hline",
+        "        \\textsc{Variant} & \\textsc{Acc} & $\\Delta$\\textsc{Acc}"
+        " & \\textsc{Poor Acc} & \\textsc{Tx/Rd} \\\\",
+        "        \\hline",
+    ]
+    for v in ABL_VARIANTS[:-1]:
+        lines.append(row(v))
+    lines += ["        \\hline", row("FACE (full)"), "        \\hline",
+              "    \\end{tabular}", "\\end{table}"]
+    return "\n".join(lines)
+
+
 def main(outdir="Tables"):
     os.makedirs(outdir, exist_ok=True)
     outputs = [
         ("tab_real_combined.tex",
          _combined_table([("kitti", "KITTI"), ("nuscenes", "nuScenes")])),
         ("tab_mobility.tex", _mobility_table()),
+        ("tab_seoul.tex", _seoul_table()),
     ]
+    abl = _ablation_table()
+    if abl:
+        outputs.append(("tab_ablation.tex", abl))
+    else:
+        print("  [skip] tab_ablation: run `python3 -m sim.real_ablation` first")
     for fname, tex in outputs:
         path = os.path.join(outdir, fname)
         with open(path, "w") as f:
