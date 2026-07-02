@@ -78,5 +78,72 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None):
     return results
 
 
+def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
+              num_vehicles=180):
+    """Same component ablation over the real Seoul-Gangnam V2X trace (sparse
+    contacts), mirroring run_v2x_real.run's setup. Single seed by default:
+    the point is the w/o-caching drop under sparse mobility, not tight CIs."""
+    from .run_v2x_real import _prepare_v2x
+    cfg = Config()
+    cfg.num_vehicles = num_vehicles
+    cfg.modalities = ["camera", "lidar"]
+    cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
+    device = device or _device()
+    torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
+    road, mob, gammas = _prepare_v2x(cfg, device)
+    data = _prep_data(cfg, cfg.seed, dataset=dataset)
+
+    metric_keys = ["acc", "poor", "tx"]
+    stacks = {v: {m: [] for m in metric_keys} for v in VARIANTS}
+    for sd in seeds:
+        avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
+        for name, flags in VARIANTS.items():
+            rng = np.random.default_rng(sd)
+            mfl = RealMFL(cfg, rng, avail, data, device=device)
+            alg = CachingForwarding(cfg, mfl, mob, "Proposed", seed=sd)
+            alg.flags = flags
+            pm = mfl.poor_mask()
+            acc_h, poor_h, tx_h = [], [], []
+            for k in range(rounds):
+                kk = k % mob.Krounds                # cyclic trace replay
+                mob.k = kk
+                mfl.local_train()
+                mfl.refresh_strengths()
+                g = gammas[kk] if flags["use_dis"] or flags["cache_policy"] == "psi" \
+                    else np.zeros(mob.N)
+                selected = alg.run_round(k, g)
+                accs = mfl.evaluate("test")
+                acc_h.append(float(accs.mean()))
+                poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
+                tx_h.append(len(selected))
+            for m, h in zip(metric_keys, [acc_h, poor_h, tx_h]):
+                stacks[name][m].append(h)
+            print(f"  [seoul-abl seed {sd}] {name:14s} acc {acc_h[-1]:.3f} "
+                  f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
+            del mfl, alg
+            if device == "cuda":
+                torch.cuda.empty_cache()
+
+    results = {}
+    for v in VARIANTS:
+        results[v] = {}
+        for m in metric_keys:
+            arr = np.stack(stacks[v][m])
+            results[v][m] = arr.mean(0)
+            results[v][m + "_std"] = arr.std(0)
+            results[v][m + "_all"] = arr
+    np.savez(os.path.join(cfg.results_dir, "metrics_real_ablation_seoul.npz"),
+             **{f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
+    print("=== REAL ablation (Seoul V2X) final ===")
+    for v in VARIANTS:
+        print(f"  {v:14s} acc {results[v]['acc'][-1]:.3f} "
+              f"poor {results[v]['poor'][-1]:.3f}")
+    return results
+
+
 if __name__ == "__main__":
-    run()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "seoul":
+        run_seoul()
+    else:
+        run()

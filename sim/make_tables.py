@@ -238,48 +238,70 @@ def _seoul_table():
 ABL_VARIANTS = ["w/o caching", "w/o demand", "w/o queue", "FACE (full)"]
 
 
-def _ablation_table(dataset="kitti", label="KITTI"):
-    """Component ablation on the real FL backend (Tables/tab_ablation.tex)."""
-    path = f"results/metrics_real_ablation_{dataset}.npz"
+def _abl_stats(path):
     if not os.path.exists(path):
         return None
     d = np.load(path)
     res = {v: {k.split("__", 1)[1]: d[k] for k in d.files if k.startswith(v + "__")}
            for v in ABL_VARIANTS}
-    st = {}
-    for v in ABL_VARIANTS:
-        st[v] = dict(acc=res[v]["acc"][-TAIL:].mean(),
-                     acc_sd=res[v]["acc_std"][-TAIL:].mean(),
-                     poor=res[v]["poor"][-TAIL:].mean(),
-                     poor_sd=res[v]["poor_std"][-TAIL:].mean(),
-                     txrd=float(res[v]["tx"].mean()))
-    full = st["FACE (full)"]
-    best_acc = max(st[v]["acc"] for v in ABL_VARIANTS)
-    best_poor = max(st[v]["poor"] for v in ABL_VARIANTS)
+    return {v: dict(acc=res[v]["acc"][-TAIL:].mean(),
+                    acc_sd=res[v]["acc_std"][-TAIL:].mean(),
+                    poor=res[v]["poor"][-TAIL:].mean(),
+                    poor_sd=res[v]["poor_std"][-TAIL:].mean())
+            for v in ABL_VARIANTS}
+
+
+def _ablation_table():
+    """Component ablation on the real FL backend, on the dense InTAS trace
+    and (when available) the sparse Seoul V2X trace where store-carry-forward
+    is expected to matter (Tables/tab_ablation.tex)."""
+    intas = _abl_stats("results/metrics_real_ablation_kitti.npz")
+    if intas is None:
+        return None
+    seoul = _abl_stats("results/metrics_real_ablation_seoul.npz")
+
+    def block(st):
+        full = st["FACE (full)"]
+        best = max(st[v]["acc"] for v in ABL_VARIANTS)
+
+        def cells(v):
+            e = st[v]
+            dacc = "--" if v == "FACE (full)" \
+                else f"{100*(e['acc']-full['acc']):+.1f}"
+            return [_fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best), dacc]
+        return cells
+
+    c_in = block(intas)
+    c_se = block(seoul) if seoul else None
 
     def row(v):
-        e = st[v]
-        dacc = "--" if v == "FACE (full)" else f"{100*(e['acc']-full['acc']):+.1f}"
-        cells = [
-            _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
-            dacc,
-            _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
-        ]
+        cells = c_in(v) + (c_se(v) if c_se else [])
         return f"        \\textsc{{{v}}} & " + " & ".join(cells) + " \\\\"
+
+    if seoul:
+        colspec, header = "c|c|c|c|c", (
+            "        \\multirow{2}{*}{\\textsc{Variant}} &"
+            " \\multicolumn{2}{c|}{\\textsc{InTAS (Munich)}} &"
+            " \\multicolumn{2}{c}{\\textsc{Seoul V2X}} \\\\\n"
+            "        & \\textsc{Acc} & $\\Delta$ & \\textsc{Acc} & $\\Delta$ \\\\")
+        cap_extra = (" InTAS: mean $\\pm$ std over 3 seeds; Seoul V2X"
+                     " (sparse contacts): single 250-round run.")
+    else:
+        colspec, header = "c|c|c", (
+            "        \\textsc{Variant} & \\textsc{Acc} & $\\Delta$\\textsc{Acc} \\\\")
+        cap_extra = " Mean $\\pm$ std over 3 seeds."
 
     lines = [
         "\\begin{table}[t]",
         "    \\centering",
-        f"    \\caption{{Component ablation of FACE (real multimodal FL,"
-        f" {label} over InTAS; \\%, mean $\\pm$ std over 3 seeds, averaged"
-        f" over the final {TAIL} rounds).}}",
+        "    \\caption{Component ablation of FACE (real multimodal FL on"
+        f" KITTI; \\%, averaged over the final {TAIL} rounds).{cap_extra}}}",
         "    \\label{tab:ablation}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",
-        "    \\begin{tabular}{c|c|c|c}",
+        f"    \\begin{{tabular}}{{{colspec}}}",
         "        \\hline",
-        "        \\textsc{Variant} & \\textsc{Acc} & $\\Delta$\\textsc{Acc}"
-        " & \\textsc{Poor Acc} \\\\",
+        header,
         "        \\hline",
     ]
     for v in ABL_VARIANTS[:-1]:
