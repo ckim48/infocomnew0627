@@ -1,0 +1,18 @@
+\begin{table}[t]
+    \centering
+    \caption{Component ablation of FACE (real multimodal FL, KITTI over InTAS; \%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds).}
+    \label{tab:ablation}
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{4.5pt}
+    \begin{tabular}{c|c|c|c}
+        \hline
+        \textsc{Variant} & \textsc{Acc} & $\Delta$\textsc{Acc} & \textsc{Poor Acc} \\
+        \hline
+        \textsc{w/o caching} & 63.1 $\pm$ 3.4 & -0.2 & 59.4 $\pm$ 2.5 \\
+        \textsc{w/o demand} & 56.6 $\pm$ 2.4 & -6.7 & 51.8 $\pm$ 0.9 \\
+        \textsc{w/o queue} & 58.9 $\pm$ 3.5 & -4.3 & 54.6 $\pm$ 2.2 \\
+        \hline
+        \textsc{FACE (full)} & \textbf{63.3 $\pm$ 2.5} & -- & \textbf{59.6 $\pm$ 1.6} \\
+        \hline
+    \end{tabular}
+\end{table}
