@@ -15,6 +15,8 @@ STYLE = {
     "Caching-assisted": dict(color="#1f77b4", marker="s", ls="--"),
     "V2V-aware":        dict(color="#2ca02c", marker="^", ls="-."),
     "Learning-aware":   dict(color="#7f7f7f", marker="d", ls=":"),
+    "mmFedMC":          dict(color="#e8850c", marker="v", ls=(0, (5, 2))),
+    "AutoFed":          dict(color="#8c2fbf", marker="P", ls=(0, (1, 1))),
 }
 
 # Display name for each scheme in legends/labels (the proposed scheme is FACE).

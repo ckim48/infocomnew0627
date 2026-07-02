@@ -24,7 +24,8 @@ plt.rcParams.update({
     "legend.frameon": False,
 })
 
-SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
+SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware",
+           "mmFedMC", "AutoFed"]
 # Display name in legends (the proposed scheme is FACE).
 DISPLAY = {"Proposed": "FACE"}
 # style matched to the template: Proposed=red solid o, then green--s, blue-.D, black:^
@@ -33,6 +34,8 @@ STY = {
     "Caching-assisted": dict(color="#1f9e3d", ls="--", marker="s"),
     "V2V-aware":        dict(color="#1f5fd0", ls="-.", marker="D"),
     "Learning-aware":   dict(color="#000000", ls=":",  marker="^"),
+    "mmFedMC":          dict(color="#e8850c", ls=(0, (5, 2)), marker="v"),
+    "AutoFed":          dict(color="#8c2fbf", ls=(0, (1, 1)), marker="P"),
 }
 
 
@@ -55,6 +58,8 @@ def _plot_panel(ax, res, key, title, xlabel, ylabel, nmark=11, band=False, smoot
     K = len(res["Proposed"][key]); x = np.arange(1, K + 1)
     me = max(K // nmark, 1)
     for s in SCHEMES:
+        if key not in res.get(s, {}):
+            continue                    # scheme absent from this metrics file
         y = _smooth(res[s][key], smooth)
         ax.plot(x, y, label=DISPLAY.get(s, s), markevery=me, markersize=5.5,
                 markerfacecolor="white", markeredgewidth=1.2, **STY[s])
@@ -143,6 +148,8 @@ def main(outdir="Figures"):
 
     print("=== final values (real datasets) ===")
     for s in SCHEMES:
+        if "acc" not in kitti.get(s, {}):
+            continue
         print(f"  {s:16s} KITTI acc {kitti[s]['acc'][-1]:.3f} poor {kitti[s]['poor'][-1]:.3f} | "
               f"nuScenes acc {nusc[s]['acc'][-1]:.3f} poor {nusc[s]['poor'][-1]:.3f}")
     print("saved fig_infocom_accuracy (KITTI/nuScenes) / fig_infocom_poor / fig_infocom_largescale")

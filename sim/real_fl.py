@@ -23,6 +23,10 @@ from .config import Config, SCHEMES
 from .multimodal_model import make_encoder, FusionHead, encoder_forward, FEAT, NCLS
 from .kitti_dataset import build as build_kitti, CLASSES
 
+# schemes compared on the real FL backend: ours + framework baselines +
+# published multimodal-FL benchmarks (mmFedMC IEEE ICC'24, AutoFed MobiCom'23)
+REAL_SCHEMES = SCHEMES + ["mmFedMC", "AutoFed"]
+
 
 def _device():
     return "cuda" if torch.cuda.is_available() else "cpu"
@@ -259,10 +263,10 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
     data = _prep_data(cfg, cfg.seed, dataset=dataset, min_class_count=min_class_count)
 
     metric_keys = ["acc", "poor", "loss", "vloss", "tloss", "tx", "qlen"]
-    stacks = {s: {m: [] for m in metric_keys} for s in SCHEMES}
+    stacks = {s: {m: [] for m in metric_keys} for s in REAL_SCHEMES}
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
-        for scheme in SCHEMES:
+        for scheme in REAL_SCHEMES:
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
@@ -300,7 +304,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
                 torch.cuda.empty_cache()
 
     results = {}
-    for s in SCHEMES:
+    for s in REAL_SCHEMES:
         results[s] = {}
         for m in metric_keys:
             arr = np.stack(stacks[s][m])
@@ -316,7 +320,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
             ("acc", "Mean test accuracy", f"fig_real_{tag}_accuracy.png", "lower right"),
             ("poor", "Poor-data vehicle accuracy", f"fig_real_{tag}_poor.png", "lower right")]:
         fig, ax = plt.subplots(figsize=(5.2, 3.8))
-        for s in SCHEMES:
+        for s in REAL_SCHEMES:
             ax.plot(x, results[s][key], label=s, markevery=mi, ms=5, **STYLE[s])
             ax.fill_between(x, results[s][key] - results[s][key + "_std"],
                             results[s][key] + results[s][key + "_std"],
@@ -329,7 +333,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
         print("  saved", p)
 
     print(f"=== REAL multimodal FL ({tag}) final ===")
-    for s in SCHEMES:
+    for s in REAL_SCHEMES:
         print(f"  {s:16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")
     return results
 
@@ -369,8 +373,7 @@ def main_config():
     cfg.comm_range = 220.0          # moderate density -> receiver-side contention
     cfg.gat_epochs = 30
     cfg.frac_good = 0.15            # scarce strong (data-rich) sources
-    cfg.cache_capacity_mb = 45.0    # operating point: room to carry a full
-                                    # extra modality pair (camera+lidar=30MB)
+    cfg.cache_capacity_mb = 30.0
     cfg.contact_time_per_round = 1.8
     cfg.K = 150                        # enough rounds to reach convergence
     cfg.local_epochs = 6              # more local steps/round -> earlier plateau

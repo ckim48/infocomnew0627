@@ -14,23 +14,28 @@ schemes that never reach tau.
 import os
 import numpy as np
 
-SCHEMES = ["Caching-assisted", "V2V-aware", "Learning-aware", "Proposed"]
+SCHEMES = ["Caching-assisted", "V2V-aware", "Learning-aware",
+           "mmFedMC", "AutoFed", "Proposed"]
 DISPLAY = {"Proposed": "FACE"}
 TAIL = 20  # rounds averaged for the accuracy cells
 
 
 def _load(path):
+    """Load metrics keyed by scheme; schemes absent from the file (e.g. runs
+    predating the published benchmarks) are dropped from the table."""
     d = np.load(path)
-    return {s: {k.split("__", 1)[1]: d[k] for k in d.files if k.startswith(s + "__")}
-            for s in SCHEMES}
+    res = {s: {k.split("__", 1)[1]: d[k] for k in d.files if k.startswith(s + "__")}
+           for s in SCHEMES}
+    return {s: v for s, v in res.items() if v}
 
 
 def _stats(res):
     """Per-scheme table entries for one dataset."""
-    tau = 0.95 * max(res[s]["acc"][-1] for s in SCHEMES)
+    schemes = [x for x in SCHEMES if x in res]
+    tau = 0.95 * max(res[s]["acc"][-1] for s in schemes)
     K = len(res["Proposed"]["acc"])
     out = {}
-    for s in SCHEMES:
+    for s in schemes:
         acc = res[s]["acc"][-TAIL:].mean()
         acc_sd = res[s]["acc_std"][-TAIL:].mean()
         poor = res[s]["poor"][-TAIL:].mean()
@@ -61,17 +66,18 @@ def _combined_table(datasets):
     rows, taus = [], {}
     for tag, label in datasets:
         res = _load(f"results/metrics_real_{tag}.npz")
+        schemes = [x for x in SCHEMES if x in res]
         st, tau, K = _stats(res)
         taus[label] = tau
-        for s in SCHEMES:
+        for s in schemes:
             st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
-        best_acc = max(st[s]["acc"] for s in SCHEMES)
-        best_poor = max(st[s]["poor"] for s in SCHEMES)
-        best_gap = min(st[s]["gap"] for s in SCHEMES)
-        best_rounds = min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"])
-        best_tx = min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"])
+        best_acc = max(st[s]["acc"] for s in schemes)
+        best_poor = max(st[s]["poor"] for s in schemes)
+        best_gap = min(st[s]["gap"] for s in schemes)
+        best_rounds = min(st[s]["rounds"] for s in schemes if st[s]["rounds"])
+        best_tx = min(st[s]["cumtx"] for s in schemes if st[s]["cumtx"])
         block = []
-        for s in SCHEMES:
+        for s in schemes:
             e = st[s]
             cells = [
                 _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
@@ -84,7 +90,8 @@ def _combined_table(datasets):
             block.append(f"        & \\textsc{{{DISPLAY.get(s, s)}}} & "
                          + " & ".join(cells) + " \\\\")
         block[0] = block[0].replace(
-            "        &", f"        \\multirow{{4}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
+            "        &",
+            f"        \\multirow{{{len(schemes)}}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
         rows.append("\n".join(block))
 
     tau_txt = ", ".join(f"{lb}: {100*t:.1f}\\%" for lb, t in taus.items())
@@ -131,8 +138,9 @@ def _mobility_table():
                     (poor, res[s]["poor_std"][-TAIL:].mean())]
         return [(acc, None), (poor, None)]
 
-    data = {s: cells(intas, s, True) + cells(seoul, s, False) for s in SCHEMES}
-    best = [max(data[s][c][0] for s in SCHEMES) for c in range(4)]
+    schemes = [x for x in SCHEMES if x in intas and x in seoul]
+    data = {s: cells(intas, s, True) + cells(seoul, s, False) for s in schemes}
+    best = [max(data[s][c][0] for s in schemes) for c in range(4)]
 
     def row(s):
         out = []
@@ -161,8 +169,9 @@ def _mobility_table():
         " & \\textsc{Acc} & \\textsc{Poor Acc} \\\\",
         "        \\hline",
     ]
-    for s in SCHEMES[:-1]:
-        lines.append(row(s))
+    for s in schemes:
+        if s != "Proposed":
+            lines.append(row(s))
     lines += ["        \\hline", row("Proposed"), "        \\hline",
               "    \\end{tabular}", "\\end{table}"]
     return "\n".join(lines)
@@ -172,20 +181,21 @@ def _seoul_table():
     """Same metric columns as the combined table, for the real Seoul-Gangnam
     V2X trace run (KITTI, N=180, single 250-round run -> no seed std)."""
     res = _load("results/metrics_v2x_real.npz")
-    tau = 0.95 * max(res[s]["acc"][-1] for s in SCHEMES)
+    schemes = [x for x in SCHEMES if x in res]
+    tau = 0.95 * max(res[s]["acc"][-1] for s in schemes)
     K = len(res["Proposed"]["acc"])
     st = {}
-    for s in SCHEMES:
+    for s in schemes:
         acc = res[s]["acc"][-TAIL:].mean(); poor = res[s]["poor"][-TAIL:].mean()
         reached = res[s]["acc"] >= tau
         rounds = int(np.argmax(reached)) + 1 if reached.any() else None
         st[s] = dict(acc=acc, poor=poor, gap=acc - poor, rounds=rounds,
                      cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None)
-    best = dict(acc=max(st[s]["acc"] for s in SCHEMES),
-                poor=max(st[s]["poor"] for s in SCHEMES),
-                gap=min(st[s]["gap"] for s in SCHEMES),
-                rounds=min(st[s]["rounds"] for s in SCHEMES if st[s]["rounds"]),
-                cumtx=min(st[s]["cumtx"] for s in SCHEMES if st[s]["cumtx"]))
+    best = dict(acc=max(st[s]["acc"] for s in schemes),
+                poor=max(st[s]["poor"] for s in schemes),
+                gap=min(st[s]["gap"] for s in schemes),
+                rounds=min(st[s]["rounds"] for s in schemes if st[s]["rounds"]),
+                cumtx=min(st[s]["cumtx"] for s in schemes if st[s]["cumtx"]))
 
     def b(txt, is_best):
         return f"\\textbf{{{txt}}}" if is_best else txt
@@ -217,8 +227,9 @@ def _seoul_table():
         " \\textsc{Gap} & \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
     ]
-    for s in SCHEMES[:-1]:
-        lines.append(row(s))
+    for s in schemes:
+        if s != "Proposed":
+            lines.append(row(s))
     lines += ["        \\hline", row("Proposed"), "        \\hline",
               "    \\end{tabular}", "\\end{table}"]
     return "\n".join(lines)

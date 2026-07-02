@@ -25,6 +25,8 @@ VARIANTS = {
 
 def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None):
     cfg = cfg or main_config()
+    cfg.modalities = ["camera", "lidar"]              # match run_real_all
+    cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
     device = device or _device()
     road, mob, gammas = prepare(cfg, device)
     data = _prep_data(cfg, cfg.seed, dataset=dataset)

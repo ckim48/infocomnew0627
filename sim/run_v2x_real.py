@@ -13,6 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .config import Config, SCHEMES
+from .real_fl import REAL_SCHEMES
 from .mobility import RoadNetwork, MobilitySim
 from .hgat import train_hgat, future_contact_scores
 from .algorithm import CachingForwarding
@@ -59,11 +60,11 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     data = _prep_data(cfg, cfg.seed, dataset=dataset)
 
     keys = ["acc", "poor", "tx"]
-    stacks = {s: {m: [] for m in keys} for s in SCHEMES}
+    stacks = {s: {m: [] for m in keys} for s in REAL_SCHEMES}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
-        for scheme in SCHEMES:
+        for scheme in REAL_SCHEMES:
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
@@ -91,7 +92,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 torch.cuda.empty_cache()
 
     results = {}
-    for s in SCHEMES:
+    for s in REAL_SCHEMES:
         results[s] = {}
         for m in keys:
             arr = np.stack(stacks[s][m])
@@ -100,7 +101,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
              **{f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
     _plot(results, cfg)
     print("=== REAL FL on Seoul V2X — final ===")
-    for s in SCHEMES:
+    for s in REAL_SCHEMES:
         print(f"  {disp(s):16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")
     return results
 
@@ -108,7 +109,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
 def _panel(ax, results, key, ylabel):
     K = len(results["Proposed"][key]); x = np.arange(1, K + 1)
     me = max(K // 11, 1)
-    for s in SCHEMES:
+    for s in REAL_SCHEMES:
         ax.plot(x, results[s][key], label=disp(s), markevery=me, markersize=5.5,
                 markerfacecolor="white", markeredgewidth=1.2, **STY[s])
         ax.fill_between(x, results[s][key] - results[s][key + "_std"],

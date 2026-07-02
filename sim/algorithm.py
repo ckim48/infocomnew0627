@@ -57,6 +57,14 @@ class CachingForwarding:
             if len(nbrs) == 0:
                 continue
             held = list(self.cache[i].keys())
+            if fl.get("select") == "mmfedmc":
+                # mmFedMC modality selection: sender shares only its own
+                # top modality ranked by contribution / communication cost
+                own = [(m, r) for (m, r) in held if m == i]
+                if not own:
+                    continue
+                held = [max(own, key=lambda mr:
+                            mfl.strength[mr] / cfg.encoder_size[mr[1]])]
             for (m, r) in held:
                 for j in nbrs:
                     if r not in mfl.avail[j]:
@@ -114,9 +122,24 @@ class CachingForwarding:
         selected = []
         remaining = set(cands)
 
-        # caching-assisted: no marginal-gain ranking; fill by LRU recency
+        # fixed-ranking schemes: no marginal-gain search; fill greedily by a
+        # scheme-specific key under the same contact/reception constraints
+        rank_key = None
         if not fl["demand_aware"]:
-            order = sorted(cands, key=lambda e: -self.lru_clock[e[0]].get((e[2], e[3]), -1))
+            # caching-assisted: LRU recency
+            rank_key = lambda e: self.lru_clock[e[0]].get((e[2], e[3]), -1)
+        elif fl.get("select") == "mmfedmc":
+            # mmFedMC client selection: strongest senders first (low local
+            # loss), contribution normalized by communication cost
+            rank_key = lambda e: (self.mfl.strength[(e[2], e[3])]
+                                  / info[e]["S"]) * info[e]["ptx_real"]
+        elif fl.get("select") == "autofed":
+            # AutoFed heterogeneity-aware selection: prioritize senders with
+            # high local data quality (clean sensors, rich data)
+            rank_key = lambda e: getattr(self.mfl, "Q",
+                                         self.mfl.strength)[(e[2], e[3])]
+        if rank_key is not None:
+            order = sorted(cands, key=rank_key, reverse=True)
             for e in order:
                 i, j, m, r = e
                 d = info[e]
@@ -251,14 +274,32 @@ class CachingForwarding:
             self.lru_clock[i] = {kr: self.lru_clock[i].get(kr, self._clock) for kr in keep}
 
 
-# scheme feature flags (proposed + three baselines, Sec. V-A)
+# scheme feature flags (proposed + three baselines, Sec. V-A, plus two
+# published multimodal-FL benchmarks adapted to the opportunistic V2V setting)
 SCHEME_FLAGS = {
     "Proposed":         dict(use_link=True,  use_dis=False, use_queue=True,
-                             demand_aware=True,  carry=True,  cache_policy="psi"),
+                             demand_aware=True,  carry=True,  cache_policy="psi",
+                             select="greedy"),
     "Caching-assisted": dict(use_link=True,  use_dis=False, use_queue=False,
-                             demand_aware=False, carry=True,  cache_policy="lru"),
+                             demand_aware=False, carry=True,  cache_policy="lru",
+                             select="greedy"),
     "V2V-aware":        dict(use_link=True,  use_dis=False, use_queue=False,
-                             demand_aware=True,  carry=False, cache_policy="own"),
+                             demand_aware=True,  carry=False, cache_policy="own",
+                             select="greedy"),
     "Learning-aware":   dict(use_link=False, use_dis=False, use_queue=False,
-                             demand_aware=True,  carry=False, cache_policy="own"),
+                             demand_aware=True,  carry=False, cache_policy="own",
+                             select="greedy"),
+    # mmFedMC [Yuan & Sun, IEEE ICC'24]: joint modality & client selection --
+    # each sender shares only its top modality encoder ranked by
+    # contribution-per-communication-cost; receivers prefer strong senders.
+    # Server-based in the original, so no store-carry-forward / road-awareness.
+    "mmFedMC":          dict(use_link=True,  use_dis=False, use_queue=False,
+                             demand_aware=True,  carry=False, cache_policy="own",
+                             select="mmfedmc"),
+    # AutoFed [Zheng et al., ACM MobiCom'23]: heterogeneity-aware multimodal
+    # FL for autonomous driving -- aggregation prioritizes high-quality
+    # (data-rich, clean-sensor) clients across ALL available modalities.
+    "AutoFed":          dict(use_link=True,  use_dis=False, use_queue=False,
+                             demand_aware=True,  carry=False, cache_policy="own",
+                             select="autofed"),
 }
