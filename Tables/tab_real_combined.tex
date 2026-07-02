@@ -1,24 +1,28 @@
 \begin{table*}[t]
     \centering
-    \caption{Performance comparison on KITTI and nuScenes over the InTAS (Munich) mobility trace (\%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds). \textsc{Gap} is the mean-to-poor accuracy gap; \textsc{Rounds@$\tau$} / \textsc{Tx@$\tau$} are the rounds and cumulative encoder transmissions to reach $\tau$ (95\% of the best final accuracy; KITTI: 59.8\%, nuScenes: 78.2\%); \textsc{Tx/Rd} is the mean transmissions per round.}
+    \caption{Performance comparison on KITTI and nuScenes over the InTAS (Munich) mobility trace (\%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds). \textsc{Gap} is the mean-to-poor accuracy gap; \textsc{Rounds@$\tau$} / \textsc{Tx@$\tau$} are the rounds and cumulative encoder transmissions to reach $\tau$ (95\% of the best final accuracy; KITTI: 59.8\%, nuScenes: 77.3\%).}
     \label{tab:real_dataset_results}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{5pt}
-    \begin{tabular}{c|c|c|c|c|c|c|c}
+    \begin{tabular}{c|c|c|c|c|c|c}
         \hline
-        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} & \textsc{Tx/Rd} \\
+        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
         \hline
-        \multirow{4}{*}{\textsc{KITTI}}
-        & \textsc{Caching-assisted} & 56.3 $\pm$ 2.2 & 51.4 $\pm$ 0.7 & 4.9 & $>150$ & -- & 42.3 \\
-        & \textsc{V2V-aware} & 58.9 $\pm$ 2.1 & 54.5 $\pm$ 0.7 & 4.3 & 145 & 3366 & 23.3 \\
-        & \textsc{Learning-aware} & 59.4 $\pm$ 3.5 & 55.1 $\pm$ 2.2 & 4.2 & 143 & 3320 & 23.3 \\
-        & \textsc{FACE} & \textbf{62.2 $\pm$ 2.3} & \textbf{58.5 $\pm$ 1.0} & \textbf{3.8} & \textbf{98} & \textbf{2023} & \textbf{23.1} \\
+        \multirow{6}{*}{\textsc{KITTI}}
+        & \textsc{Caching-assisted} & 56.5 $\pm$ 2.6 & 51.8 $\pm$ 1.2 & 4.7 & $>150$ & -- \\
+        & \textsc{V2V-aware} & 59.5 $\pm$ 2.1 & 55.3 $\pm$ 1.2 & 4.2 & 142 & 3293 \\
+        & \textsc{Learning-aware} & 59.1 $\pm$ 4.2 & 54.9 $\pm$ 3.1 & 4.2 & 145 & 3367 \\
+        & \textsc{mmFedMC} & 57.5 $\pm$ 1.4 & 52.8 $\pm$ 2.2 & 4.7 & $>150$ & -- \\
+        & \textsc{AutoFed} & 55.7 $\pm$ 3.1 & 50.7 $\pm$ 1.8 & 5.0 & $>150$ & -- \\
+        & \textsc{FACE} & \textbf{62.6 $\pm$ 2.5} & \textbf{58.9 $\pm$ 1.7} & \textbf{3.7} & \textbf{90} & \textbf{1817} \\
         \hline
-        \multirow{4}{*}{\textsc{nuScenes}}
-        & \textsc{Caching-assisted} & 74.5 $\pm$ 2.1 & 71.7 $\pm$ 1.4 & 2.8 & $>150$ & -- & 42.3 \\
-        & \textsc{V2V-aware} & 80.3 $\pm$ 1.4 & 78.2 $\pm$ 2.1 & 2.0 & 111 & 2221 & 20.8 \\
-        & \textsc{Learning-aware} & 80.0 $\pm$ 1.9 & 78.0 $\pm$ 2.4 & 2.0 & 105 & 2094 & 21.5 \\
-        & \textsc{FACE} & \textbf{81.9 $\pm$ 1.1} & \textbf{80.2 $\pm$ 0.9} & \textbf{1.7} & \textbf{85} & \textbf{1509} & \textbf{20.3} \\
+        \multirow{6}{*}{\textsc{nuScenes}}
+        & \textsc{Caching-assisted} & 74.8 $\pm$ 2.4 & 72.1 $\pm$ 1.7 & 2.7 & $>150$ & -- \\
+        & \textsc{V2V-aware} & 81.2 $\pm$ 1.2 & 79.4 $\pm$ 1.5 & 1.8 & 88 & 1692 \\
+        & \textsc{Learning-aware} & 81.1 $\pm$ 0.5 & 79.2 $\pm$ 0.8 & 1.8 & 90 & 1719 \\
+        & \textsc{mmFedMC} & 80.9 $\pm$ 1.4 & 78.9 $\pm$ 2.1 & 2.0 & 81 & 2976 \\
+        & \textsc{AutoFed} & 71.4 $\pm$ 7.1 & 68.3 $\pm$ 6.5 & 3.1 & $>150$ & -- \\
+        & \textsc{FACE} & \textbf{81.4 $\pm$ 2.3} & \textbf{79.7 $\pm$ 2.4} & \textbf{1.7} & \textbf{75} & \textbf{1260} \\
         \hline
     \end{tabular}
 \end{table*}
