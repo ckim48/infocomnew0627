@@ -114,7 +114,9 @@ class RealMFL:
 
     # ---- real local training (Eq. 1) ----
     def local_train(self):
+        """One round of local SGD; returns the mean local training loss."""
         ce = nn.CrossEntropyLoss()
+        tot, cnt = 0.0, 0
         for i in range(self.N):
             idx = self.local[i]
             if len(idx) == 0:
@@ -127,6 +129,8 @@ class RealMFL:
                 logits = self.head[i](feats)
                 loss = ce(logits, y)
                 self.opt[i].zero_grad(); loss.backward(); self.opt[i].step()
+                tot += float(loss); cnt += 1
+        return tot / max(cnt, 1)
 
     def _set_train(self, i, t):
         self.head[i].train(t)
@@ -135,18 +139,20 @@ class RealMFL:
 
     # ---- real evaluation on the shared clean test/val split ----
     @torch.no_grad()
-    def evaluate(self, which="val"):
+    def evaluate(self, which="val", return_loss=False):
         idx, yv = (self.val if which == "val" else self.test)
         idx_t = torch.tensor(idx, device=self.device)
         y_t = torch.tensor(yv, device=self.device, dtype=torch.long)
         img = self.img_t[idx_t]; lid = self.lid_t[idx_t]
-        accs = np.zeros(self.N)
+        accs = np.zeros(self.N); losses = np.zeros(self.N)
         for i in range(self.N):
             self._set_train(i, False)
             feats = {r: encoder_forward(self.enc[i][r], r, img, lid) for r in self.avail[i]}
-            pred = self.head[i](feats).argmax(1)
-            accs[i] = float((pred == y_t).float().mean())
-        return accs
+            logits = self.head[i](feats)
+            accs[i] = float((logits.argmax(1) == y_t).float().mean())
+            if return_loss:
+                losses[i] = float(nn.functional.cross_entropy(logits, y_t))
+        return (accs, losses) if return_loss else accs
 
     def refresh_strengths(self):
         self.acc = self.evaluate("val")
@@ -252,7 +258,7 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
     road, mob, gammas = prepare(cfg, device)
     data = _prep_data(cfg, cfg.seed, dataset=dataset, min_class_count=min_class_count)
 
-    metric_keys = ["acc", "poor", "tx", "qlen"]
+    metric_keys = ["acc", "poor", "loss", "tloss", "tx", "qlen"]
     stacks = {s: {m: [] for m in metric_keys} for s in SCHEMES}
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
@@ -261,21 +267,25 @@ def run_real_all(cfg=None, seeds=None, device=None, dataset="kitti", min_class_c
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
-            acc_h, poor_h, tx_h, q_h = [], [], [], []
+            acc_h, poor_h, loss_h, tloss_h, tx_h, q_h = [], [], [], [], [], []
             for k in range(mob.Krounds):
                 mob.k = k
-                mfl.local_train()
+                train_loss = mfl.local_train()
                 mfl.refresh_strengths()
                 g = gammas[k] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
                     else np.zeros(mob.N)
                 selected = alg.run_round(k, g)
-                accs = mfl.evaluate("test")
+                accs, losses = mfl.evaluate("test", return_loss=True)
                 acc_h.append(float(accs.mean()))
                 poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
+                loss_h.append(train_loss)
+                tloss_h.append(float(losses.mean()))
                 tx_h.append(len(selected))
                 q_h.append(np.mean(list(alg.Q.values())))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
+            stacks[scheme]["loss"].append(loss_h)
+            stacks[scheme]["tloss"].append(tloss_h)
             stacks[scheme]["tx"].append(tx_h)
             stacks[scheme]["qlen"].append(q_h)
             print(f"  [real seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
@@ -357,7 +367,8 @@ def main():
     cfg.frac_good = 0.15            # scarce strong (data-rich) sources
     cfg.cache_capacity_mb = 30.0
     cfg.contact_time_per_round = 1.8
-    cfg.K = 80                         # run to convergence
+    cfg.K = 150                        # enough rounds to reach convergence
+    cfg.local_epochs = 6              # more local steps/round -> earlier plateau
     # KITTI: 3 classes; nuScenes: drop the very rare Cyclist (<800) -> 2 classes
     run_real_all(cfg, seeds=[2026, 2027, 2028], dataset="kitti", min_class_count=0)
     run_real_all(cfg, seeds=[2026, 2027, 2028], dataset="nuscenes", min_class_count=800)

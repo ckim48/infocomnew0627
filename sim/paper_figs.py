@@ -25,6 +25,8 @@ plt.rcParams.update({
 })
 
 SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
+# Display name in legends (the proposed scheme is FACE).
+DISPLAY = {"Proposed": "FACE"}
 # style matched to the template: Proposed=red solid o, then green--s, blue-.D, black:^
 STY = {
     "Proposed":         dict(color="#e8000b", ls="-",  marker="o"),
@@ -45,7 +47,7 @@ def _plot_panel(ax, res, key, title, xlabel, ylabel, nmark=11, band=False):
     me = max(K // nmark, 1)
     for s in SCHEMES:
         y = res[s][key]
-        ax.plot(x, y, label=s, markevery=me, markersize=5.5,
+        ax.plot(x, y, label=DISPLAY.get(s, s), markevery=me, markersize=5.5,
                 markerfacecolor="white", markeredgewidth=1.2, **STY[s])
         if band and (key + "_std") in res[s]:
             sd = res[s][key + "_std"]
@@ -80,6 +82,28 @@ def main(outdir="Figures"):
         fig.savefig(os.path.join(outdir, f"fig_infocom_accuracy.{ext}"),
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+    # ---- Figure: 2x2 convergence -- test loss (top) and test accuracy
+    # (bottom) on the two real multimodal datasets (columns) ----
+    if "loss" in kitti["Proposed"] and "loss" in nusc["Proposed"]:
+        fig, axes = plt.subplots(2, 2, figsize=(7.2, 6.4))
+        _plot_panel(axes[0, 0], kitti, "loss", "(a) KITTI",
+                    "Global round $k$", "Training loss")
+        _plot_panel(axes[0, 1], nusc, "loss", "(b) nuScenes",
+                    "Global round $k$", "Training loss")
+        _plot_panel(axes[1, 0], kitti, "acc", "(c) KITTI",
+                    "Global round $k$", "Test accuracy")
+        _plot_panel(axes[1, 1], nusc, "acc", "(d) nuScenes",
+                    "Global round $k$", "Test accuracy")
+        _legend(fig, [axes[0, 0]])
+        fig.tight_layout(rect=[0, 0, 1, 0.98], h_pad=3.2)
+        for ext in ("png", "pdf"):
+            fig.savefig(os.path.join(outdir, f"fig_infocom_convergence.{ext}"),
+                        dpi=300, bbox_inches="tight")
+        plt.close(fig)
+    else:
+        print("  [skip] fig_infocom_convergence: no 'loss' in metrics "
+              "(re-run sim.real_fl to record it)")
 
     # ---- Figure 2: poor-data (needy) vehicle accuracy, two datasets ----
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
