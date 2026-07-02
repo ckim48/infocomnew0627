@@ -16,14 +16,28 @@ from .real_fl import RealMFL, _prep_data, _device, main_config
 
 FULL = SCHEME_FLAGS["Proposed"]
 VARIANTS = {
-    "FACE (full)":  FULL,
-    "w/o caching":  {**FULL, "carry": False, "cache_policy": "own"},
-    "w/o demand":   {**FULL, "demand_aware": False, "cache_policy": "lru"},
-    "w/o queue":    {**FULL, "use_queue": False},
+    "FACE (full)":      FULL,
+    "w/o caching":      {**FULL, "carry": False, "cache_policy": "own"},
+    "w/o demand":       {**FULL, "demand_aware": False, "cache_policy": "lru"},
+    "w/o queue":        {**FULL, "use_queue": False},
+    # destination-free mobility prediction disabled: Gamma = 0, so the
+    # psi-cache and forwarding lose the future contact-demand term
+    "w/o prediction":   {**FULL, "no_gamma": True},
 }
 
 
-def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None):
+def _gamma_for(flags, gammas_k, N):
+    if flags.get("no_gamma"):
+        return np.zeros(N)
+    if flags["use_dis"] or flags["cache_policy"] == "psi":
+        return gammas_k
+    return np.zeros(N)
+
+
+def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None,
+        variants=None, merge=False):
+    """variants: subset of VARIANTS names to run (default: all).
+    merge=True appends/overwrites those variants in the existing npz."""
     cfg = cfg or main_config()
     cfg.modalities = ["camera", "lidar"]              # match run_real_all
     cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
@@ -31,11 +45,13 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None):
     road, mob, gammas = prepare(cfg, device)
     data = _prep_data(cfg, cfg.seed, dataset=dataset)
 
+    todo = {n: f for n, f in VARIANTS.items()
+            if variants is None or n in variants}
     metric_keys = ["acc", "poor", "tx"]
-    stacks = {v: {m: [] for m in metric_keys} for v in VARIANTS}
+    stacks = {v: {m: [] for m in metric_keys} for v in todo}
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
-        for name, flags in VARIANTS.items():
+        for name, flags in todo.items():
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, "Proposed", seed=sd)
@@ -46,8 +62,7 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None):
                 mob.k = k
                 mfl.local_train()
                 mfl.refresh_strengths()
-                g = gammas[k] if flags["use_dis"] or flags["cache_policy"] == "psi" \
-                    else np.zeros(mob.N)
+                g = _gamma_for(flags, gammas[k], mob.N)
                 selected = alg.run_round(k, g)
                 accs = mfl.evaluate("test")
                 acc_h.append(float(accs.mean()))
@@ -62,17 +77,19 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None):
                 torch.cuda.empty_cache()
 
     results = {}
-    for v in VARIANTS:
+    for v in todo:
         results[v] = {}
         for m in metric_keys:
             arr = np.stack(stacks[v][m])
             results[v][m] = arr.mean(0)
             results[v][m + "_std"] = arr.std(0)
             results[v][m + "_all"] = arr
-    np.savez(os.path.join(cfg.results_dir, f"metrics_real_ablation_{dataset}.npz"),
-             **{f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
+    path = os.path.join(cfg.results_dir, f"metrics_real_ablation_{dataset}.npz")
+    out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}
+    out.update({f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
+    np.savez(path, **out)
     print(f"=== REAL ablation ({dataset}) final ===")
-    for v in VARIANTS:
+    for v in todo:
         print(f"  {v:14s} acc {results[v]['acc'][-1]:.3f} "
               f"poor {results[v]['poor'][-1]:.3f}")
     return results
@@ -109,8 +126,7 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
                 mob.k = kk
                 mfl.local_train()
                 mfl.refresh_strengths()
-                g = gammas[kk] if flags["use_dis"] or flags["cache_policy"] == "psi" \
-                    else np.zeros(mob.N)
+                g = _gamma_for(flags, gammas[kk], mob.N)
                 selected = alg.run_round(k, g)
                 accs = mfl.evaluate("test")
                 acc_h.append(float(accs.mean()))

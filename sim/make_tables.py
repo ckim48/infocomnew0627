@@ -235,7 +235,8 @@ def _seoul_table():
     return "\n".join(lines)
 
 
-ABL_VARIANTS = ["w/o caching", "w/o demand", "w/o queue", "FACE (full)"]
+ABL_VARIANTS = ["w/o caching", "w/o demand", "w/o queue", "w/o prediction",
+                "FACE (full)"]
 
 
 def _abl_stats(path):
@@ -248,7 +249,7 @@ def _abl_stats(path):
                     acc_sd=res[v]["acc_std"][-TAIL:].mean(),
                     poor=res[v]["poor"][-TAIL:].mean(),
                     poor_sd=res[v]["poor_std"][-TAIL:].mean())
-            for v in ABL_VARIANTS}
+            for v in ABL_VARIANTS if res[v]}
 
 
 def _ablation_table():
@@ -262,9 +263,11 @@ def _ablation_table():
 
     def block(st):
         full = st["FACE (full)"]
-        best = max(st[v]["acc"] for v in ABL_VARIANTS)
+        best = max(st[v]["acc"] for v in st)
 
         def cells(v):
+            if v not in st:
+                return ["--", "--"]
             e = st[v]
             dacc = "--" if v == "FACE (full)" \
                 else f"{100*(e['acc']-full['acc']):+.1f}"
