@@ -457,7 +457,7 @@ def fig_analysis(tag="kitti", label="KITTI"):
     A = np.load(apath)
     M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
-    fig, axg = plt.subplots(2, 2, figsize=(7.2, 6.6))
+    fig, axg = plt.subplots(2, 2, figsize=(6.6, 6.1))
 
     # (a) per-vehicle final accuracy CDF
     ax = axg[0, 0]
@@ -515,11 +515,11 @@ def fig_analysis(tag="kitti", label="KITTI"):
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_box_aspect(1)
-        ax.set_title(f"({'abcd'[i]})", y=-0.30, fontsize=12)
+        ax.set_title(f"({'abcd'[i]})", y=-0.33, fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.035),
+    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.03),
                columnspacing=1.1, handlelength=2.0, fontsize=10)
-    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.6)
+    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.2, w_pad=2.4)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_{tag}.{ext}"),
                     dpi=300, bbox_inches="tight")
