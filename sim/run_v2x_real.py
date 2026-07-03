@@ -38,7 +38,7 @@ def _prepare_v2x(cfg, device):
 
 
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
-        rounds=250):
+        rounds=250, min_class_count=None):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus."""
@@ -57,7 +57,10 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     print(f"      running {total} FL rounds (trace K={mob.Krounds}, "
           f"replayed cyclically)")
     print("[2/3] Loading real KITTI multimodal data ...")
-    data = _prep_data(cfg, cfg.seed, dataset=dataset)
+    if min_class_count is None:                # match the InTAS setup
+        min_class_count = 800 if dataset == "nuscenes" else 0
+    data = _prep_data(cfg, cfg.seed, dataset=dataset,
+                      min_class_count=min_class_count)
 
     keys = ["acc", "poor", "tx"]
     stacks = {s: {m: [] for m in keys} for s in REAL_SCHEMES}

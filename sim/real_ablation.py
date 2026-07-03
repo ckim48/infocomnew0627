@@ -43,7 +43,8 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None,
     cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
     device = device or _device()
     road, mob, gammas = prepare(cfg, device)
-    data = _prep_data(cfg, cfg.seed, dataset=dataset)
+    data = _prep_data(cfg, cfg.seed, dataset=dataset,
+                      min_class_count=800 if dataset == "nuscenes" else 0)
 
     todo = {n: f for n, f in VARIANTS.items()
             if variants is None or n in variants}
@@ -109,7 +110,8 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
     device = device or _device()
     torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
     road, mob, gammas = _prepare_v2x(cfg, device)
-    data = _prep_data(cfg, cfg.seed, dataset=dataset)
+    data = _prep_data(cfg, cfg.seed, dataset=dataset,
+                      min_class_count=800 if dataset == "nuscenes" else 0)
 
     metric_keys = ["acc", "poor", "tx"]
     stacks = {v: {m: [] for m in metric_keys} for v in VARIANTS}
@@ -150,9 +152,10 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
             results[v][m] = arr.mean(0)
             results[v][m + "_std"] = arr.std(0)
             results[v][m + "_all"] = arr
-    np.savez(os.path.join(cfg.results_dir, "metrics_real_ablation_seoul.npz"),
+    np.savez(os.path.join(cfg.results_dir,
+                           f"metrics_real_ablation_seoul_{dataset}.npz"),
              **{f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
-    print("=== REAL ablation (Seoul V2X) final ===")
+    print(f"=== REAL ablation (Seoul V2X, {dataset}) final ===")
     for v in VARIANTS:
         print(f"  {v:14s} acc {results[v]['acc'][-1]:.3f} "
               f"poor {results[v]['poor'][-1]:.3f}")
@@ -162,6 +165,6 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "seoul":
-        run_seoul()
+        run_seoul(dataset=sys.argv[2] if len(sys.argv) > 2 else "kitti")
     else:
         run()
