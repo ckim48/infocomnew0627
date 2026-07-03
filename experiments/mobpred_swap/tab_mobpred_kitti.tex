@@ -1,0 +1,18 @@
+\begin{table}[t]
+    \centering
+    \caption{Impact of the mobility predictor behind the destination-free forwarding potential $\Gamma$ (FACE, real multimodal FL on KITTI over InTAS; \%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds).}
+    \label{tab:mobpred}
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{4.5pt}
+    \begin{tabular}{c|c|c}
+        \hline
+        \textsc{Predictor} & \textsc{Acc} & \textsc{Poor Acc} \\
+        \hline
+        \textsc{Markov} & 62.6 $\pm$ 4.0 & 58.9 $\pm$ 2.9 \\
+        \textsc{Topology} & 63.0 $\pm$ 3.7 & 59.4 $\pm$ 2.7 \\
+        \textsc{w/o prediction} & \textbf{63.2 $\pm$ 3.5} & \textbf{59.6 $\pm$ 2.5} \\
+        \hline
+        \textsc{HGAT (ours)} & 62.7 $\pm$ 3.7 & 59.0 $\pm$ 2.7 \\
+        \hline
+    \end{tabular}
+\end{table}

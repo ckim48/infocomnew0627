@@ -279,7 +279,13 @@ def _ablation_table():
             e = st[v]
             dacc = "--" if v == "FACE (full)" \
                 else f"{100*(e['acc']-full['acc']):+.1f}"
-            return [_fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best), dacc]
+            if e["acc_sd"] > 0:
+                acc_cell = _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best)
+            else:                       # single-seed column: no +- shown
+                acc_cell = f"{100*e['acc']:.1f}"
+                if e["acc"] == best:
+                    acc_cell = f"\\textbf{{{acc_cell}}}"
+            return [acc_cell, dacc]
         return cells
 
     c_in = block(intas)

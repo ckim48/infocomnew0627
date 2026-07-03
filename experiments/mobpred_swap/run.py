@@ -278,5 +278,79 @@ def _table(results, dataset, tail=20):
     print(tex)
 
 
+def main_seoul(seeds=(2026,), rounds=250, dataset="kitti", num_vehicles=180):
+    """Predictor swap over the sparse Seoul-Gangnam V2X trace (cyclic replay),
+    where the future contact-demand term actually matters."""
+    from sim.v2x_trace import build_v2x_trace
+    cfg = Config()
+    cfg.num_vehicles = num_vehicles
+    cfg.modalities = ["camera", "lidar"]
+    cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
+    device = _device()
+    torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
+    trace = build_v2x_trace(cfg)
+    road = RoadNetwork(trace)
+    mob = MobilitySim(cfg, road, trace)
+    cfg.K = mob.Krounds
+    data = _prep_data(cfg, cfg.seed, dataset=dataset)
+
+    gammas = {}
+    for v in VARIANTS:
+        print(f"[gamma] building {v} (Seoul) ...", flush=True)
+        torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
+        gammas[v] = build_gammas(cfg, road, mob, v, device)
+
+    metric_keys = ["acc", "poor", "tx"]
+    stacks = {v: {m: [] for m in metric_keys} for v in VARIANTS}
+    for sd in seeds:
+        avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
+        for v in VARIANTS:
+            torch.manual_seed(sd)          # paired: same init/noise per seed
+            rng = np.random.default_rng(sd)
+            mfl = RealMFL(cfg, rng, avail, data, device=device)
+            alg = CachingForwarding(cfg, mfl, mob, "Proposed", seed=sd)
+            pm = mfl.poor_mask()
+            acc_h, poor_h, tx_h = [], [], []
+            for k in range(rounds):
+                kk = k % mob.Krounds
+                mob.k = kk
+                mfl.local_train()
+                mfl.refresh_strengths()
+                selected = alg.run_round(k, gammas[v][kk])
+                accs = mfl.evaluate("test")
+                acc_h.append(float(accs.mean()))
+                poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
+                tx_h.append(len(selected))
+            for m, h in zip(metric_keys, [acc_h, poor_h, tx_h]):
+                stacks[v][m].append(h)
+            print(f"  [mobpred-seoul seed {sd}] {v:9s} acc {acc_h[-1]:.3f} "
+                  f"poor {poor_h[-1]:.3f}", flush=True)
+            del mfl, alg
+            if device == "cuda":
+                torch.cuda.empty_cache()
+
+    results = {}
+    for v in VARIANTS:
+        results[v] = {}
+        for m in metric_keys:
+            arr = np.stack(stacks[v][m])
+            results[v][m] = arr.mean(0)
+            results[v][m + "_std"] = arr.std(0)
+            results[v][m + "_all"] = arr
+    np.savez(os.path.join(HERE, "metrics_mobpred_seoul.npz"),
+             **{f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
+    _figure(results, "seoul")
+    _table(results, "seoul")
+    print("=== mobility-predictor swap (Seoul) final ===")
+    for v in VARIANTS:
+        print(f"  {v:9s} acc {results[v]['acc'][-1]:.3f} "
+              f"poor {results[v]['poor'][-1]:.3f}")
+    return results
+
+
 if __name__ == "__main__":
-    main()
+    import sys as _sys
+    if len(_sys.argv) > 1 and _sys.argv[1] == "seoul":
+        main_seoul()
+    else:
+        main()
