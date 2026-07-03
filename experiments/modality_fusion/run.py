@@ -62,9 +62,29 @@ def _load(dataset):
     return data, y, perm[n_test:], perm[:n_test], len(classes)
 
 
-def _train_eval(data, y, tr, te, ncls, mods, seed, device):
+def _corrupt(t, mods, seed, device):
+    """Degraded sensing, matching the FL system model's poor vehicles:
+    noisy low-light camera, 60%-sparsified LiDAR. Radar (if present) is kept
+    -- robustness to visual degradation is its complementary value."""
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    out = {}
+    for m in mods:
+        x = t[m].clone()
+        if m == "camera":
+            x = x + 0.25 * torch.randn(x.shape, generator=g).to(device)
+            x = torch.clamp(x * 0.6, 0, 1)
+        elif m == "lidar":
+            mask = (torch.rand(x.shape[:-1] + (1,), generator=g) < 0.6)
+            x = x * mask.to(device).float()
+        out[m] = x
+    return out
+
+
+def _train_eval(data, y, tr, te, ncls, mods, seed, device, degraded=True):
     torch.manual_seed(seed)
     t = {m: torch.tensor(data[m], device=device) for m in mods}
+    if degraded:
+        t = _corrupt(t, mods, seed, device)
     yt = torch.tensor(y, device=device, dtype=torch.long)
     enc = {m: make_encoder(m).to(device) for m in mods}
     import sim.multimodal_model as MM
@@ -142,7 +162,7 @@ def _figure(results, plans):
         ax.set_xticks(range(len(keys)))
         ax.set_xticklabels([LBL.get(k, k) for k in keys], rotation=18,
                            ha="right", fontsize=9)
-        ax.set_ylabel("Test accuracy")
+        ax.set_ylabel("Test accuracy (degraded sensing)")
         ax.set_ylim(min(mu) - 0.08, max(mu) + 0.06)
         ax.grid(True, axis="y", ls="--", lw=0.6, alpha=0.5)
         ax.set_title(f"({'ab'[list(plans).index(ds)]}) "
