@@ -121,7 +121,9 @@ def tab_ablation(tail=20):
             reached = a >= tau
             rounds = int(np.argmax(reached)) + 1 if reached.any() else None
             st[v] = dict(acc=a[-tail:].mean(),
+                         acc_sd=d[v + "__acc_std"][-tail:].mean(),
                          poor=d[v + "__poor"][-tail:].mean(),
+                         poor_sd=d[v + "__poor_std"][-tail:].mean(),
                          rounds=rounds,
                          cumtx=int(d[v + "__tx"][:rounds].sum()) if rounds else None,
                          totaltx=int(d[v + "__tx"].sum()))
@@ -136,10 +138,15 @@ def tab_ablation(tail=20):
             e = st[v]
             dacc = "--" if v == "FACE (full)" \
                 else f"{100*(e['acc']-full['acc']):+.1f}"
+            multi = e["acc_sd"] > 0
+            acc_txt = (f"{100*e['acc']:.1f} $\\pm$ {100*e['acc_sd']:.1f}"
+                       if multi else f"{100*e['acc']:.1f}")
+            poor_txt = (f"{100*e['poor']:.1f} $\\pm$ {100*e['poor_sd']:.1f}"
+                        if multi else f"{100*e['poor']:.1f}")
             cells = [
-                _b(f"{100*e['acc']:.1f}", e["acc"] == best_acc),
+                _b(acc_txt, e["acc"] == best_acc),
                 dacc,
-                _b(f"{100*e['poor']:.1f}", e["poor"] == best_poor),
+                _b(poor_txt, e["poor"] == best_poor),
                 f"{e['rounds']}" if e["rounds"] else NR,
                 f"{e['cumtx']}" if e["cumtx"] else f"$>{e['totaltx']}$",
             ]
