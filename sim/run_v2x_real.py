@@ -29,7 +29,7 @@ def _prepare_v2x(cfg, device):
     mob = MobilitySim(cfg, road, trace)
     cfg.K = mob.Krounds
     print(f"      Seoul V2X: |V|={road.V}, N={mob.N}, K={mob.Krounds}")
-    model, road_ei = train_hgat(cfg, road, mob, device=device, warmup_rounds=30)
+    model, road_ei = train_hgat(cfg, road, mob, device=device, warmup_rounds=40)
     gammas = []
     for k in range(mob.Krounds):
         mob.k = k
@@ -38,7 +38,7 @@ def _prepare_v2x(cfg, device):
 
 
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
-        rounds=250, min_class_count=None):
+        rounds=250, min_class_count=None, schemes=None, merge=False):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus."""
@@ -62,12 +62,13 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     data = _prep_data(cfg, cfg.seed, dataset=dataset,
                       min_class_count=min_class_count)
 
+    todo = schemes or REAL_SCHEMES
     keys = ["acc", "poor", "tx"]
-    stacks = {s: {m: [] for m in keys} for s in REAL_SCHEMES}
+    stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
-        for scheme in REAL_SCHEMES:
+        for scheme in todo:
             torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
@@ -96,14 +97,17 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 torch.cuda.empty_cache()
 
     results = {}
-    for s in REAL_SCHEMES:
+    for s in todo:
         results[s] = {}
         for m in keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
-    np.savez(os.path.join(cfg.results_dir, f"metrics_v2x_real_{dataset}.npz"),
-             **{f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
-    _plot(results, cfg, dataset)
+    path = os.path.join(cfg.results_dir, f"metrics_v2x_real_{dataset}.npz")
+    out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}
+    out.update({f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
+    np.savez(path, **out)
+    if not merge:
+        _plot(results, cfg, dataset)
     print("=== REAL FL on Seoul V2X — final ===")
     for s in REAL_SCHEMES:
         print(f"  {disp(s):16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")

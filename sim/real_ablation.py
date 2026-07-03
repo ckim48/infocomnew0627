@@ -98,7 +98,7 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None,
 
 
 def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
-              num_vehicles=180, merge=False):
+              num_vehicles=180, merge=False, variants=None):
     """Same component ablation over the real Seoul-Gangnam V2X trace,
     mirroring run_v2x_real.run's setup. merge=True combines with per-seed
     curves already stored in the npz ('<metric>_all'), so extra seeds extend
@@ -114,11 +114,13 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
     data = _prep_data(cfg, cfg.seed, dataset=dataset,
                       min_class_count=800 if dataset == "nuscenes" else 0)
 
+    todo = {n: f for n, f in VARIANTS.items()
+            if variants is None or n in variants}
     metric_keys = ["acc", "poor", "tx"]
-    stacks = {v: {m: [] for m in metric_keys} for v in VARIANTS}
+    stacks = {v: {m: [] for m in metric_keys} for v in todo}
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
-        for name, flags in VARIANTS.items():
+        for name, flags in todo.items():
             torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
@@ -149,18 +151,19 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
                         f"metrics_real_ablation_seoul_{dataset}.npz")
     prev = np.load(path) if (merge and os.path.exists(path)) else None
     results = {}
-    for v in VARIANTS:
+    for v in todo:
         results[v] = {}
         for m in metric_keys:
             arr = np.stack(stacks[v][m])
-            if prev is not None and f"{v}__{m}_all" in prev.files:
+            if (prev is not None and f"{v}__{m}_all" in prev.files
+                    and not os.environ.get("ABL_REPLACE")):
                 arr = np.concatenate([prev[f"{v}__{m}_all"], arr], axis=0)
             results[v][m] = arr.mean(0)
             results[v][m + "_std"] = arr.std(0)
             results[v][m + "_all"] = arr
-    np.savez(os.path.join(cfg.results_dir,
-                           f"metrics_real_ablation_seoul_{dataset}.npz"),
-             **{f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
+    out = dict(prev) if prev is not None else {}
+    out.update({f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
+    np.savez(path, **out)
     print(f"=== REAL ablation (Seoul V2X, {dataset}) final ===")
     for v in VARIANTS:
         print(f"  {v:14s} acc {results[v]['acc'][-1]:.3f} "
