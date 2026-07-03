@@ -98,10 +98,11 @@ def run(cfg=None, seeds=(2026, 2027, 2028), dataset="kitti", device=None,
 
 
 def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
-              num_vehicles=180):
-    """Same component ablation over the real Seoul-Gangnam V2X trace (sparse
-    contacts), mirroring run_v2x_real.run's setup. Single seed by default:
-    the point is the w/o-caching drop under sparse mobility, not tight CIs."""
+              num_vehicles=180, merge=False):
+    """Same component ablation over the real Seoul-Gangnam V2X trace,
+    mirroring run_v2x_real.run's setup. merge=True combines with per-seed
+    curves already stored in the npz ('<metric>_all'), so extra seeds extend
+    an existing run."""
     from .run_v2x_real import _prepare_v2x
     cfg = Config()
     cfg.num_vehicles = num_vehicles
@@ -144,11 +145,16 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
             if device == "cuda":
                 torch.cuda.empty_cache()
 
+    path = os.path.join(cfg.results_dir,
+                        f"metrics_real_ablation_seoul_{dataset}.npz")
+    prev = np.load(path) if (merge and os.path.exists(path)) else None
     results = {}
     for v in VARIANTS:
         results[v] = {}
         for m in metric_keys:
             arr = np.stack(stacks[v][m])
+            if prev is not None and f"{v}__{m}_all" in prev.files:
+                arr = np.concatenate([prev[f"{v}__{m}_all"], arr], axis=0)
             results[v][m] = arr.mean(0)
             results[v][m + "_std"] = arr.std(0)
             results[v][m + "_all"] = arr
