@@ -7,23 +7,23 @@
     \resizebox{\columnwidth}{!}{%
     \begin{tabular}{c|c|c|c|c}
         \hline
-        \textsc{Dataset} & \textsc{Variant} & \textsc{Acc} & $\Delta$\textsc{Acc} & \textsc{Tx@$\tau$} \\
+        \textsc{Dataset} & \textsc{Variant} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Tx@$\tau$} \\
         \hline
         \multirow{5}{*}{\textsc{KITTI}}
-        & \textsc{w/o caching} & 55.3 $\pm$ 1.5 & -1.9 & 11590 \\
-        & \textsc{w/o demand} & 51.6 $\pm$ 2.0 & -5.6 & $>21149$ \\
-        & \textsc{w/o queue} & 55.0 $\pm$ 1.5 & -2.2 & 14949 \\
-        & \textsc{w/o prediction} & \textbf{57.2 $\pm$ 1.7} & +0.1 & 11649 \\
+        & \textsc{w/o caching} & 55.3 $\pm$ 1.5 & 50.3 $\pm$ 1.0 & 11590 \\
+        & \textsc{w/o demand} & 51.6 $\pm$ 2.0 & 46.0 $\pm$ 1.7 & $>21149$ \\
+        & \textsc{w/o queue} & 55.0 $\pm$ 1.5 & 50.0 $\pm$ 1.0 & 14949 \\
+        & \textsc{w/o prediction} & \textbf{57.2 $\pm$ 1.7} & 52.7 $\pm$ 1.1 & 11649 \\
         \cline{2-5}
-        & \textsc{FACE (full)} & 57.2 $\pm$ 1.1 & -- & 11388 \\
+        & \textsc{FACE (full)} & 57.2 $\pm$ 1.1 & \textbf{52.8 $\pm$ 0.9} & 11388 \\
         \hline
         \multirow{5}{*}{\textsc{nuScenes}}
-        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & -2.0 & 8990 \\
-        & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & -6.5 & $>21149$ \\
-        & \textsc{w/o queue} & 73.6 $\pm$ 0.6 & -1.7 & 10787 \\
-        & \textsc{w/o prediction} & 74.2 $\pm$ 1.0 & -1.1 & 9609 \\
+        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & 69.8 $\pm$ 1.5 & 8990 \\
+        & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & 64.5 $\pm$ 2.3 & $>21149$ \\
+        & \textsc{w/o queue} & 73.6 $\pm$ 0.6 & 70.2 $\pm$ 0.5 & 10787 \\
+        & \textsc{w/o prediction} & 74.2 $\pm$ 1.0 & 71.0 $\pm$ 1.2 & 9609 \\
         \cline{2-5}
-        & \textsc{FACE (full)} & \textbf{75.3 $\pm$ 1.0} & -- & 9564 \\
+        & \textsc{FACE (full)} & \textbf{75.3 $\pm$ 1.0} & \textbf{72.3 $\pm$ 0.6} & 9564 \\
         \hline
     \end{tabular}}
 \end{table}

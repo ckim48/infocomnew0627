@@ -144,9 +144,11 @@ def tab_ablation(tail=20):
             multi = e["acc_sd"] > 0
             acc_txt = (f"{100*e['acc']:.1f} $\\pm$ {100*e['acc_sd']:.1f}"
                        if multi else f"{100*e['acc']:.1f}")
+            poor_txt = (f"{100*e['poor']:.1f} $\\pm$ {100*e['poor_sd']:.1f}"
+                        if multi else f"{100*e['poor']:.1f}")
             cells = [
                 _b(acc_txt, e["acc"] == best_acc),
-                dacc,
+                _b(poor_txt, e["poor"] == best_poor),
                 (f"{e['cumtx']}" if e["cumtx"]
                  else f"$>{e['totaltx']}$"),
             ]
@@ -181,7 +183,7 @@ def tab_ablation(tail=20):
         "    \\begin{tabular}{c|c|c|c|c}",
         "        \\hline",
         "        \\textsc{Dataset} & \\textsc{Variant} & \\textsc{Acc} &"
-        " $\\Delta$\\textsc{Acc} & \\textsc{Tx@$\\tau$} \\\\",
+        " \\textsc{Poor Acc} & \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
         *body,
         "        \\hline",
