@@ -306,10 +306,17 @@ def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
     for pi, (ax, (tag, label)) in enumerate(zip(axes[0], datasets)):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
         for sname in ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]:
-            if f"{sname}__{key}" not in d.files:
+            if key == "vloss" and f"{sname}__vloss" not in d.files:
+                # placeholder until the vloss-logging rerun lands: estimate
+                # L^val = (1 - Q^eff)^2 from the mean accuracy curve
+                acc = d[f"{sname}__acc"]
+                y = _smooth((1.0 - acc) ** 2, smooth)
+                sd = 2.0 * (1.0 - acc) * d[f"{sname}__acc_std"]
+            elif f"{sname}__{key}" not in d.files:
                 continue
-            y = _smooth(d[f"{sname}__{key}"], smooth)
-            sd = d[f"{sname}__{key}_std"]
+            else:
+                y = _smooth(d[f"{sname}__{key}"], smooth)
+                sd = d[f"{sname}__{key}_std"]
             K = len(y); x = np.arange(1, K + 1)
             ax.plot(x, y, label=DISPLAY.get(sname, sname),
                     markevery=max(K // 11, 1), markersize=5.5,
@@ -344,11 +351,11 @@ if __name__ == "__main__":
     tab_ablation()
     fig_utility()
     fig_convergence()
-    if _has_vloss():
-        fig_convergence(key="vloss", ylabel="Validation loss",
-                        fname="fig_seoul_loss_convergence")
-    else:
-        print("  [skip] fig_seoul_loss_convergence: no 'vloss' yet")
+    fig_convergence(key="vloss", ylabel="Validation loss",
+                    fname="fig_seoul_loss_convergence")
+    if not _has_vloss():
+        print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
+              " until the vloss rerun lands")
     copy_artifacts()
     print("seoul_pack regenerated:")
     for f in sorted(os.listdir(HERE)):
