@@ -1,32 +1,32 @@
 \begin{table*}[t]
     \centering
-    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 53.9\%, nuScenes: 71.3\%); \textsc{Loss} = final validation loss $(1-Q^{\mathrm{eff}})^2$; \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
+    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 53.9\%, nuScenes: 71.6\%); \textsc{Loss} = final validation loss $(1-Q^{\mathrm{eff}})^2$; \textsc{Utility} = mean achieved per-round utility $R(\mathbf{a}(k))$, scored with the true $\Gamma$ for all schemes; \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
     \label{tab:seoul_results}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{5pt}
-    \begin{tabular}{c|c|c|c|c|c|c|c}
+    \begin{tabular}{c|c|c|c|c|c|c|c|c}
         \hline
-        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Loss} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
+        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Loss} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} & \textsc{Utility} \\
         \hline
         \multirow{6}{*}{\textsc{KITTI}}
-        & \textsc{Caching} & 51.6 $\pm$ 2.0 & 46.0 $\pm$ 1.7 & 0.275 & 5.6 & \textsc{n/r} & $>21149$ \\
-        & \textsc{V2V} & 52.2 $\pm$ 2.0 & 46.7 $\pm$ 1.5 & 0.267 & 5.5 & \textsc{n/r} & $>12709$ \\
-        & \textsc{Learning} & 53.9 $\pm$ 1.4 & 48.6 $\pm$ 0.9 & 0.253 & 5.3 & 236 & 11957 \\
-        \cline{2-8}
-        & \textsc{mmFedMC} & 47.6 $\pm$ 1.0 & 41.1 $\pm$ 0.8 & 0.306 & 6.5 & \textsc{n/r} & $>19374$ \\
-        & \textsc{AutoFed} & 52.3 $\pm$ 1.1 & 46.8 $\pm$ 1.5 & 0.271 & 5.5 & \textsc{n/r} & $>23854$ \\
-        \cline{2-8}
-        & \textsc{FACE} & \textbf{56.3 $\pm$ 0.6} & \textbf{51.6 $\pm$ 0.5} & \textbf{0.236} & \textbf{4.7} & \textbf{182} & \textbf{11088} \\
+        & \textsc{Caching} & 51.6 $\pm$ 2.0 & 46.0 $\pm$ 1.7 & 0.275 & 5.6 & \textsc{n/r} & $>21149$ & 32.24 \\
+        & \textsc{V2V} & 52.2 $\pm$ 2.0 & 46.7 $\pm$ 1.5 & 0.267 & 5.5 & \textsc{n/r} & $>12709$ & 25.15 \\
+        & \textsc{Learning} & 53.9 $\pm$ 1.4 & 48.6 $\pm$ 0.9 & 0.253 & 5.3 & 236 & 11957 & 25.31 \\
+        \cline{2-9}
+        & \textsc{mmFedMC} & 47.6 $\pm$ 1.0 & 41.1 $\pm$ 0.8 & 0.306 & 6.5 & \textsc{n/r} & $>19374$ & 29.95 \\
+        & \textsc{AutoFed} & 52.3 $\pm$ 1.1 & 46.8 $\pm$ 1.5 & 0.271 & 5.5 & \textsc{n/r} & $>23854$ & 35.71 \\
+        \cline{2-9}
+        & \textsc{FACE} & \textbf{56.3 $\pm$ 0.6} & \textbf{51.6 $\pm$ 0.5} & \textbf{0.236} & \textbf{4.7} & \textbf{182} & \textbf{11088} & \textbf{44.78} \\
         \hline
         \multirow{6}{*}{\textsc{nuScenes}}
-        & \textsc{Caching} & 68.8 $\pm$ 2.6 & 64.6 $\pm$ 2.3 & 0.097 & 4.3 & \textsc{n/r} & $>21149$ \\
-        & \textsc{V2V} & 69.3 $\pm$ 1.8 & 65.0 $\pm$ 2.8 & 0.094 & 4.4 & \textsc{n/r} & $>11284$ \\
-        & \textsc{Learning} & 69.2 $\pm$ 1.2 & 64.8 $\pm$ 1.6 & 0.095 & 4.4 & \textsc{n/r} & $>11342$ \\
-        \cline{2-8}
-        & \textsc{mmFedMC} & 63.7 $\pm$ 0.3 & 58.3 $\pm$ 0.8 & 0.132 & 5.4 & \textsc{n/r} & $>19374$ \\
-        & \textsc{AutoFed} & 71.6 $\pm$ 2.1 & 67.7 $\pm$ 2.2 & 0.081 & 3.9 & 233 & 22126 \\
-        \cline{2-8}
-        & \textsc{FACE} & \textbf{74.6 $\pm$ 0.8} & \textbf{71.4 $\pm$ 1.0} & \textbf{0.064} & \textbf{3.2} & \textbf{160} & \textbf{8926} \\
+        & \textsc{Caching} & 68.8 $\pm$ 2.6 & 64.5 $\pm$ 2.4 & 0.139 & 4.3 & \textsc{n/r} & $>21149$ & 34.91 \\
+        & \textsc{V2V} & 68.8 $\pm$ 1.6 & 64.3 $\pm$ 2.3 & 0.142 & 4.5 & \textsc{n/r} & $>11296$ & 24.30 \\
+        & \textsc{Learning} & 70.1 $\pm$ 1.1 & 65.9 $\pm$ 1.7 & 0.134 & 4.1 & \textsc{n/r} & $>11350$ & 24.24 \\
+        \cline{2-9}
+        & \textsc{mmFedMC} & 64.0 $\pm$ 0.3 & 58.6 $\pm$ 1.1 & 0.157 & 5.4 & \textsc{n/r} & $>19374$ & 33.02 \\
+        & \textsc{AutoFed} & 71.6 $\pm$ 2.1 & 67.7 $\pm$ 2.2 & 0.128 & 3.9 & 238 & 22619 & 37.94 \\
+        \cline{2-9}
+        & \textsc{FACE} & \textbf{74.7 $\pm$ 1.1} & \textbf{71.6 $\pm$ 0.9} & \textbf{0.112} & \textbf{3.2} & \textbf{166} & \textbf{9240} & \textbf{39.51} \\
         \hline
     \end{tabular}
 \end{table*}
