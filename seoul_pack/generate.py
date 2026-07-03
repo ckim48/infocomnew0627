@@ -301,7 +301,7 @@ def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
     })
     from sim.paper_figs import STY, _smooth
     datasets = _avail("results/metrics_v2x_real_{}.npz")
-    fig, axes = plt.subplots(1, len(datasets), figsize=(3.7 * len(datasets), 3.1),
+    fig, axes = plt.subplots(1, len(datasets), figsize=(3.4 * len(datasets), 3.6),
                              squeeze=False)
     for pi, (ax, (tag, label)) in enumerate(zip(axes[0], datasets)):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -326,10 +326,13 @@ def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
         ax.set_xlabel("Global round $k$")
         ax.set_ylabel(ylabel)
         ax.set_xlim(0, K)
-        # tight auto range: scheme separation stays visible (the ~0.03-0.07
-        # loss gaps vanish against a 0-anchored 0-0.5 axis)
+        if key == "vloss":
+            # identical y ticks on both panels; range covers both datasets
+            ax.set_ylim(0.05, 0.46)
+            ax.set_yticks(np.arange(0.1, 0.41, 0.1))
+        ax.set_box_aspect(1)                     # square panels
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-        ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.44, fontsize=12)
+        ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.34, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.17),
                columnspacing=1.6, handlelength=2.4, fontsize=10)
