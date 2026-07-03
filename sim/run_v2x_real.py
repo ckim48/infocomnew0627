@@ -38,7 +38,8 @@ def _prepare_v2x(cfg, device):
 
 
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
-        rounds=250, min_class_count=None, schemes=None, merge=False):
+        rounds=250, min_class_count=None, schemes=None, merge=False,
+        out_name=None):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus."""
@@ -63,7 +64,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                       min_class_count=min_class_count)
 
     todo = schemes or REAL_SCHEMES
-    keys = ["acc", "poor", "tx", "util", "vloss"]
+    keys = ["acc", "poor", "tx", "util", "vloss", "sat", "txmb"]
     stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
@@ -75,6 +76,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
+            sat_h, mb_h = [], []
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -91,11 +93,17 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
                 tx_h.append(len(selected))
                 u_h.append(alg.last_utility)
+                sat_h.append(getattr(alg, "last_satisfaction", 0.0))
+                mb_h.append(sum(cfg.encoder_size[e[3]] for e in selected))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
             stacks[scheme]["util"].append(u_h)
             stacks[scheme]["vloss"].append(vl_h)
+            stacks[scheme]["sat"].append(sat_h)
+            stacks[scheme]["txmb"].append(mb_h)
+            stacks[scheme].setdefault("accveh", []).append(
+                mfl.evaluate("test"))          # per-vehicle final accuracies
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
@@ -108,7 +116,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         for m in keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
-    path = os.path.join(cfg.results_dir, f"metrics_v2x_real_{dataset}.npz")
+        results[s]["accveh_all"] = np.stack(stacks[s]["accveh"])  # seeds x N
+    path = os.path.join(cfg.results_dir,
+                        out_name or f"metrics_v2x_real_{dataset}.npz")
     out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}
     out.update({f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
     np.savez(path, **out)

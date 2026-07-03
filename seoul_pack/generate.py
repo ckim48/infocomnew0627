@@ -407,6 +407,92 @@ def fig_efficiency():
     print("  saved fig_seoul_efficiency")
 
 
+def fig_analysis(tag="kitti", label="KITTI"):
+    """2x2 mechanism/fairness panel:
+    (a) per-vehicle final-accuracy CDF   (b) accuracy vs cumulative traffic
+    (c) poor-vehicle accuracy vs round   (d) demand-satisfaction vs round.
+    (a),(b),(d) come from the instrumented analysis run; (c) from the 3-seed
+    mains."""
+    apath = os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz")
+    if not os.path.exists(apath):
+        print(f"  [skip] fig_seoul_analysis_{tag}: analysis run not done yet")
+        return
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.7,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY, _smooth
+    A = np.load(apath)
+    M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+    fig, axg = plt.subplots(2, 2, figsize=(7.2, 6.6))
+
+    # (a) per-vehicle final accuracy CDF
+    ax = axg[0, 0]
+    for sname in order:
+        v = np.sort(A[f"{sname}__accveh_all"].ravel())
+        cdf = np.arange(1, len(v) + 1) / len(v)
+        st = {k: val for k, val in STY[sname].items() if k != "marker"}
+        ax.plot(v, cdf, label=DISPLAY.get(sname, sname), **st)
+    ax.set_xlabel("Per-vehicle final accuracy"); ax.set_ylabel("CDF")
+    ax.set_ylim(0, 1)
+
+    # (b) accuracy vs cumulative traffic (GB)
+    ax = axg[0, 1]
+    for sname in order:
+        x = np.cumsum(A[f"{sname}__txmb"]) / 1024.0
+        y = A[f"{sname}__acc"]
+        K = len(y)
+        ax.plot(x, y, label=DISPLAY.get(sname, sname),
+                markevery=max(K // 9, 1), markersize=5,
+                markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
+    ax.set_xlabel("Cumulative traffic (GB)"); ax.set_ylabel("Test accuracy")
+
+    # (c) poor-vehicle accuracy vs round (3-seed mains)
+    ax = axg[1, 0]
+    for sname in order:
+        y = M[f"{sname}__poor"]; sd = M[f"{sname}__poor_std"]
+        K = len(y); x = np.arange(1, K + 1)
+        ax.plot(x, y, label=DISPLAY.get(sname, sname),
+                markevery=max(K // 9, 1), markersize=5,
+                markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
+        ax.fill_between(x, y - sd, y + sd, color=STY[sname]["color"],
+                        alpha=0.10, lw=0)
+    ax.set_xlabel("Global round $k$"); ax.set_ylabel("Poor-data accuracy")
+    ax.set_xlim(0, K)
+
+    # (d) demand-satisfaction vs round
+    ax = axg[1, 1]
+    for sname in order:
+        y = _smooth(A[f"{sname}__sat"], 15)
+        K = len(y); x = np.arange(1, K + 1)
+        ax.plot(x, y, label=DISPLAY.get(sname, sname),
+                markevery=max(K // 9, 1), markersize=5,
+                markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
+    ax.set_xlabel("Global round $k$")
+    ax.set_ylabel("Demand-satisfaction ratio")
+    ax.set_xlim(0, K)
+
+    for i, ax in enumerate(axg.ravel()):
+        ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_box_aspect(1)
+        ax.set_title(f"({'abcd'[i]})", y=-0.30, fontsize=12)
+    h, l = axg[0, 0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.035),
+               columnspacing=1.1, handlelength=2.0, fontsize=10)
+    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.6)
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_{tag}.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved fig_seoul_analysis_{tag}")
+
+
 if __name__ == "__main__":
     tab_main()
     tab_ablation()

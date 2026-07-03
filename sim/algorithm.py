@@ -233,6 +233,11 @@ class CachingForwarding:
                 self.cache[j][(m, r)] = s_m
                 self.lru_clock[j][(m, r)] = self._clock
 
+        # demand-weighted satisfaction: fraction of total modality need that
+        # received at least one encoder this round (mechanism metric)
+        tot_need = sum(need.values()) + 1e-9
+        self.last_satisfaction = sum(need.get(jr, 0.0) for jr in recv) / tot_need
+
         # aggregation (Eq. 2) and commit new local encoders
         for (j, r), lst in recv.items():
             mfl.commit(j, r, lst)
