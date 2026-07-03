@@ -165,7 +165,7 @@ def run_seoul(seeds=(2026,), rounds=250, dataset="kitti", device=None,
     out.update({f"{v}__{k}": val for v, d in results.items() for k, val in d.items()})
     np.savez(path, **out)
     print(f"=== REAL ablation (Seoul V2X, {dataset}) final ===")
-    for v in VARIANTS:
+    for v in todo:
         print(f"  {v:14s} acc {results[v]['acc'][-1]:.3f} "
               f"poor {results[v]['poor'][-1]:.3f}")
     return results
