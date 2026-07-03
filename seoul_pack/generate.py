@@ -29,16 +29,25 @@ def _avail(path_fmt):
 
 
 def tab_main():
-    """Seoul main comparison; Dataset x Method rows when nuScenes exists."""
+    """Seoul main comparison (full-width table*): Dataset x Method rows,
+    original column set plus achieved Utility when recorded."""
     datasets = _avail("results/metrics_v2x_real_{}.npz")
+    have_util = all(
+        f"Proposed__util" in np.load(os.path.join(
+            ROOT, f"results/metrics_v2x_real_{tag}.npz")).files
+        for tag, _ in datasets)
     rows, taus = [], {}
     for tag, label in datasets:
-        res = _load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+        path = os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz")
+        res = _load(path)
+        raw = np.load(path)
         schemes = [x for x in SCHEMES if x in res]
         st, tau, K = _stats(res)
         taus[label] = tau
         for s in schemes:
             st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
+            if have_util:
+                st[s]["util"] = float(raw[f"{s}__util"].mean())
         best_acc = max(st[s]["acc"] for s in schemes)
         best_poor = max(st[s]["poor"] for s in schemes)
         best_gap = min(st[s]["gap"] for s in schemes)
@@ -46,28 +55,31 @@ def tab_main():
                           default=None)
         best_tx = min((st[s]["cumtx"] for s in schemes if st[s]["cumtx"]),
                       default=None)
+        best_util = max(st[s]["util"] for s in schemes) if have_util else None
 
         def _row(s):
             e = st[s]
-            if e["cumtx"]:
-                txcell = f"{e['cumtx']}\\,({e['rounds']})"
-                if e["cumtx"] == best_tx:
-                    txcell = f"\\textbf{{{txcell}}}"
-            else:
-                txcell = f"$>{e['totaltx']}$"
             cells = [
                 _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
                 _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
-                txcell,
+                (f"\\textbf{{{100*e['gap']:.1f}}}" if e["gap"] == best_gap
+                 else f"{100*e['gap']:.1f}"),
+                _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
+                (_fmt_int(e["cumtx"], e["cumtx"] == best_tx)
+                 if e["cumtx"] else f"$>{e['totaltx']}$"),
             ]
+            if have_util:
+                u = f"{e['util']:.2f}"
+                cells.append(f"\\textbf{{{u}}}" if e["util"] == best_util else u)
             return ("        & \\textsc{" + DISPLAY.get(s, s) + "} & "
                     + " & ".join(cells) + " \\\\")
 
+        ncol = 8 if have_util else 7
         block = [_row(s) for s in FRAMEWORK if s in schemes]
         pub = [_row(s) for s in PUBLISHED if s in schemes]
         if pub:
-            block += ["        \\cline{2-5}"] + pub
-        block += ["        \\cline{2-5}", _row("Proposed")]
+            block += [f"        \\cline{{2-{ncol}}}"] + pub
+        block += [f"        \\cline{{2-{ncol}}}", _row("Proposed")]
         block[0] = block[0].replace(
             "        &",
             f"        \\multirow{{{len(schemes)}}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
@@ -79,29 +91,34 @@ def tab_main():
         if i:
             body.append("        \\hline")
         body.append(r)
+    util_hdr = " & \\textsc{Utility}" if have_util else ""
+    util_cap = (" \\textsc{Utility} = mean achieved per-round utility"
+                " $R(\\mathbf{a}(k))$, scored with the true $\\Gamma$ for"
+                " all schemes;" if have_util else "")
+    colspec = "c|c|c|c|c|c|c" + ("|c" if have_util else "")
     lines = [
-        "\\begin{table}[t]",
+        "\\begin{table*}[t]",
         "    \\centering",
         "    \\caption{Performance on the real Seoul-Gangnam V2X trace"
         " (real multimodal FL, $N{=}180$, 250 rounds; mean $\\pm$ std over"
         f" 3 seeds; \\%, averaged over the final {TAIL} rounds;"
         f" $\\tau$ = 95\\% of the best final accuracy ({tau_txt});"
-        " \\textsc{Tx@$\\tau$ (Rd)} = transmissions (rounds) to reach"
-        " $\\tau$; $>$ marks schemes that never reach $\\tau$, showing"
-        " total transmissions spent).}",
+        f"{util_cap}"
+        " \\textsc{n/r} = did not reach $\\tau$, with total transmissions"
+        " spent as a lower bound).}",
         "    \\label{tab:seoul_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
-        "    \\setlength{\\tabcolsep}{3pt}",
-        "    \\resizebox{\\columnwidth}{!}{%",
-        "    \\begin{tabular}{c|c|c|c|c}",
+        "    \\setlength{\\tabcolsep}{5pt}",
+        f"    \\begin{{tabular}}{{{colspec}}}",
         "        \\hline",
         "        \\textsc{Dataset} & \\textsc{Method} & \\textsc{Acc} &"
-        " \\textsc{Poor Acc} & \\textsc{Tx@$\\tau$ (Rd)} \\\\",
+        " \\textsc{Poor Acc} & \\textsc{Gap} & \\textsc{Rounds@$\\tau$} &"
+        f" \\textsc{{Tx@$\\tau$}}{util_hdr} \\\\",
         "        \\hline",
         *body,
         "        \\hline",
-        "    \\end{tabular}}",
-        "\\end{table}",
+        "    \\end{tabular}",
+        "\\end{table*}",
     ]
     with open(os.path.join(HERE, "tab_seoul_main.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -219,9 +236,58 @@ def copy_artifacts():
         shutil.copy(os.path.join(ROOT, src), os.path.join(HERE, dst))
 
 
+def fig_utility(smooth=9):
+    """Mean achieved per-round utility R(a(k)) curves (true-Gamma scoring)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.7,
+        "xtick.direction": "in", "ytick.direction": "in",
+        "legend.frameon": False,
+    })
+    from sim.paper_figs import STY, _smooth
+    datasets = _avail("results/metrics_v2x_real_{}.npz")
+    datasets = [(t, l) for t, l in datasets
+                if "Proposed__util" in np.load(os.path.join(
+                    ROOT, f"results/metrics_v2x_real_{t}.npz")).files]
+    if not datasets:
+        print("  [skip] fig_seoul_utility: no 'util' recorded yet")
+        return
+    fig, axes = plt.subplots(1, len(datasets), figsize=(3.7 * len(datasets), 3.1),
+                             squeeze=False)
+    for ax, (tag, label) in zip(axes[0], datasets):
+        d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+        for sname in SCHEMES:
+            if f"{sname}__util" not in d.files:
+                continue
+            u = _smooth(d[f"{sname}__util"], smooth)
+            K = len(u); x = np.arange(1, K + 1)
+            ax.plot(x, u, label=DISPLAY.get(sname, sname),
+                    markevery=max(K // 11, 1), markersize=5.5,
+                    markerfacecolor="white", markeredgewidth=1.2, **STY[sname])
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("Achieved utility $R(\\mathbf{a}(k))$")
+        ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_title(f"({chr(97 + list(datasets).index((tag, label)))}) {label}",
+                     y=-0.34, fontsize=12)
+    h, l = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.08),
+               columnspacing=1.2, handlelength=2.2, fontsize=10)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(HERE, f"fig_seoul_utility.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print("  saved fig_seoul_utility")
+
+
 if __name__ == "__main__":
     tab_main()
     tab_ablation()
+    fig_utility()
     copy_artifacts()
     print("seoul_pack regenerated:")
     for f in sorted(os.listdir(HERE)):

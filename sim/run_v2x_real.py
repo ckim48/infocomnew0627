@@ -63,7 +63,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                       min_class_count=min_class_count)
 
     todo = schemes or REAL_SCHEMES
-    keys = ["acc", "poor", "tx"]
+    keys = ["acc", "poor", "tx", "util"]
     stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
@@ -74,7 +74,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
-            acc_h, poor_h, tx_h = [], [], []
+            acc_h, poor_h, tx_h, u_h = [], [], [], []
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -82,14 +82,16 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 mfl.refresh_strengths()
                 g = gammas[kk] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
                     else np.zeros(mob.N)
-                selected = alg.run_round(k, g)
+                selected = alg.run_round(k, g, gamma_eval=gammas[kk])
                 accs = mfl.evaluate("test")
                 acc_h.append(float(accs.mean()))
                 poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
                 tx_h.append(len(selected))
+                u_h.append(alg.last_utility)
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
+            stacks[scheme]["util"].append(u_h)
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg

@@ -38,7 +38,10 @@ class CachingForwarding:
         self._clock = 0
 
     # ---------- per-round entry point ----------
-    def run_round(self, k, gamma):
+    def run_round(self, k, gamma, gamma_eval=None):
+        """gamma drives the scheme's own decisions; gamma_eval (true Gamma)
+        is used only to score the achieved utility uniformly across schemes
+        (stored in self.last_utility)."""
         cfg, mfl, mob, fl = self.cfg, self.mfl, self.mob, self.flags
         self._clock = k
         A = mob.v2v_graph()
@@ -100,6 +103,29 @@ class CachingForwarding:
 
         # ----- greedy marginal-gain selection (Eq. 24-27) -----
         selected = self._greedy(cands, info, need)
+
+        # ----- achieved utility R(a(k)) (Eq. total_reward), evaluated with
+        # scheme-independent quantities (real link quality, true Gamma) so all
+        # schemes are scored against the same objective -----
+        ge = gamma if gamma_eval is None else gamma_eval
+        learn_prod = {}
+        for e in selected:
+            i, j, m, r = e
+            s_m = self.cache[i][(m, r)]
+            g, _, _ = mfl.gain_single(j, r, m, s_m)
+            be = info[e]["ptx_real"] * (mfl.Dmr(m, r) / (Dr[r] + cfg.eps0)) * g
+            be = float(np.clip(be, 0.0, 0.999))
+            learn_prod[(j, r)] = learn_prod.get((j, r), 1.0) * (1.0 - be)
+        u_learn = sum(need.get(jr, 0.0) * (1.0 - p)
+                      for jr, p in learn_prod.items())
+        fwd_prod = {}
+        for e in selected:
+            i, j, m, r = e
+            chi = float(mfl.strength.get((m, r), 0.5))
+            bf = info[e]["ptx_real"] * (1.0 - np.exp(-float(ge[j]) * chi))
+            fwd_prod[(i, m, r)] = fwd_prod.get((i, m, r), 1.0) * (1.0 - bf)
+        u_fwd = sum(1.0 - p for p in fwd_prod.values())
+        self.last_utility = float(u_learn + cfg.nu * u_fwd)
 
         # ----- apply forwarding: receivers aggregate (Eq. 2), update cache & queue -----
         self._apply(selected, info, need)
