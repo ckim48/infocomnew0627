@@ -1,32 +1,32 @@
 \begin{table*}[t]
     \centering
-    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 53.9\%, nuScenes: 71.3\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
+    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 53.9\%, nuScenes: 71.3\%); \textsc{Loss} = final validation loss $(1-Q^{\mathrm{eff}})^2$; \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
     \label{tab:seoul_results}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{5pt}
-    \begin{tabular}{c|c|c|c|c|c|c}
+    \begin{tabular}{c|c|c|c|c|c|c|c}
         \hline
-        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
+        \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Loss} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
         \hline
         \multirow{6}{*}{\textsc{KITTI}}
-        & \textsc{Caching} & 51.6 $\pm$ 2.0 & 46.0 $\pm$ 1.7 & 5.6 & \textsc{n/r} & $>21149$ \\
-        & \textsc{V2V} & 52.2 $\pm$ 2.0 & 46.7 $\pm$ 1.5 & 5.5 & \textsc{n/r} & $>12709$ \\
-        & \textsc{Learning} & 53.9 $\pm$ 1.4 & 48.6 $\pm$ 0.9 & 5.3 & 236 & 11957 \\
-        \cline{2-7}
-        & \textsc{mmFedMC} & 47.6 $\pm$ 1.0 & 41.1 $\pm$ 0.8 & 6.5 & \textsc{n/r} & $>19374$ \\
-        & \textsc{AutoFed} & 52.3 $\pm$ 1.1 & 46.8 $\pm$ 1.5 & 5.5 & \textsc{n/r} & $>23854$ \\
-        \cline{2-7}
-        & \textsc{FACE} & \textbf{56.3 $\pm$ 0.6} & \textbf{51.6 $\pm$ 0.5} & \textbf{4.7} & \textbf{182} & \textbf{11088} \\
+        & \textsc{Caching} & 51.6 $\pm$ 2.0 & 46.0 $\pm$ 1.7 & 0.275 & 5.6 & \textsc{n/r} & $>21149$ \\
+        & \textsc{V2V} & 52.2 $\pm$ 2.0 & 46.7 $\pm$ 1.5 & 0.267 & 5.5 & \textsc{n/r} & $>12709$ \\
+        & \textsc{Learning} & 53.9 $\pm$ 1.4 & 48.6 $\pm$ 0.9 & 0.253 & 5.3 & 236 & 11957 \\
+        \cline{2-8}
+        & \textsc{mmFedMC} & 47.6 $\pm$ 1.0 & 41.1 $\pm$ 0.8 & 0.306 & 6.5 & \textsc{n/r} & $>19374$ \\
+        & \textsc{AutoFed} & 52.3 $\pm$ 1.1 & 46.8 $\pm$ 1.5 & 0.271 & 5.5 & \textsc{n/r} & $>23854$ \\
+        \cline{2-8}
+        & \textsc{FACE} & \textbf{56.3 $\pm$ 0.6} & \textbf{51.6 $\pm$ 0.5} & \textbf{0.236} & \textbf{4.7} & \textbf{182} & \textbf{11088} \\
         \hline
         \multirow{6}{*}{\textsc{nuScenes}}
-        & \textsc{Caching} & 68.8 $\pm$ 2.6 & 64.6 $\pm$ 2.3 & 4.3 & \textsc{n/r} & $>21149$ \\
-        & \textsc{V2V} & 69.3 $\pm$ 1.8 & 65.0 $\pm$ 2.8 & 4.4 & \textsc{n/r} & $>11284$ \\
-        & \textsc{Learning} & 69.2 $\pm$ 1.2 & 64.8 $\pm$ 1.6 & 4.4 & \textsc{n/r} & $>11342$ \\
-        \cline{2-7}
-        & \textsc{mmFedMC} & 63.7 $\pm$ 0.3 & 58.3 $\pm$ 0.8 & 5.4 & \textsc{n/r} & $>19374$ \\
-        & \textsc{AutoFed} & 71.6 $\pm$ 2.1 & 67.7 $\pm$ 2.2 & 3.9 & 233 & 22126 \\
-        \cline{2-7}
-        & \textsc{FACE} & \textbf{74.6 $\pm$ 0.8} & \textbf{71.4 $\pm$ 1.0} & \textbf{3.2} & \textbf{160} & \textbf{8926} \\
+        & \textsc{Caching} & 68.8 $\pm$ 2.6 & 64.6 $\pm$ 2.3 & 0.097 & 4.3 & \textsc{n/r} & $>21149$ \\
+        & \textsc{V2V} & 69.3 $\pm$ 1.8 & 65.0 $\pm$ 2.8 & 0.094 & 4.4 & \textsc{n/r} & $>11284$ \\
+        & \textsc{Learning} & 69.2 $\pm$ 1.2 & 64.8 $\pm$ 1.6 & 0.095 & 4.4 & \textsc{n/r} & $>11342$ \\
+        \cline{2-8}
+        & \textsc{mmFedMC} & 63.7 $\pm$ 0.3 & 58.3 $\pm$ 0.8 & 0.132 & 5.4 & \textsc{n/r} & $>19374$ \\
+        & \textsc{AutoFed} & 71.6 $\pm$ 2.1 & 67.7 $\pm$ 2.2 & 0.081 & 3.9 & 233 & 22126 \\
+        \cline{2-8}
+        & \textsc{FACE} & \textbf{74.6 $\pm$ 0.8} & \textbf{71.4 $\pm$ 1.0} & \textbf{0.064} & \textbf{3.2} & \textbf{160} & \textbf{8926} \\
         \hline
     \end{tabular}
 \end{table*}

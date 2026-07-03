@@ -48,6 +48,11 @@ def tab_main():
             st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
             if have_util:
                 st[s]["util"] = float(raw[f"{s}__util"].mean())
+            if f"{s}__vloss" in raw.files:
+                st[s]["loss"] = float(raw[f"{s}__vloss"][-TAIL:].mean())
+            else:                      # estimate until the vloss rerun lands
+                st[s]["loss"] = float(
+                    ((1.0 - raw[f"{s}__acc"][-TAIL:]) ** 2).mean())
         best_acc = max(st[s]["acc"] for s in schemes)
         best_poor = max(st[s]["poor"] for s in schemes)
         best_gap = min(st[s]["gap"] for s in schemes)
@@ -56,12 +61,17 @@ def tab_main():
         best_tx = min((st[s]["cumtx"] for s in schemes if st[s]["cumtx"]),
                       default=None)
         best_util = max(st[s]["util"] for s in schemes) if have_util else None
+        best_loss = min(st[s]["loss"] for s in schemes)
 
         def _row(s):
             e = st[s]
+            loss_cell = f"{e['loss']:.3f}"
+            if e["loss"] == best_loss:
+                loss_cell = f"\\textbf{{{loss_cell}}}"
             cells = [
                 _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
                 _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
+                loss_cell,
                 (f"\\textbf{{{100*e['gap']:.1f}}}" if e["gap"] == best_gap
                  else f"{100*e['gap']:.1f}"),
                 _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
@@ -74,7 +84,7 @@ def tab_main():
             return ("        & \\textsc{" + DISPLAY.get(s, s) + "} & "
                     + " & ".join(cells) + " \\\\")
 
-        ncol = 8 if have_util else 7
+        ncol = 9 if have_util else 8
         block = [_row(s) for s in FRAMEWORK if s in schemes]
         pub = [_row(s) for s in PUBLISHED if s in schemes]
         if pub:
@@ -95,7 +105,7 @@ def tab_main():
     util_cap = (" \\textsc{Utility} = mean achieved per-round utility"
                 " $R(\\mathbf{a}(k))$, scored with the true $\\Gamma$ for"
                 " all schemes;" if have_util else "")
-    colspec = "c|c|c|c|c|c|c" + ("|c" if have_util else "")
+    colspec = "c|c|c|c|c|c|c|c" + ("|c" if have_util else "")
     lines = [
         "\\begin{table*}[t]",
         "    \\centering",
@@ -103,6 +113,7 @@ def tab_main():
         " (real multimodal FL, $N{=}180$, 250 rounds; mean $\\pm$ std over"
         f" 3 seeds; \\%, averaged over the final {TAIL} rounds;"
         f" $\\tau$ = 95\\% of the best final accuracy ({tau_txt});"
+        " \\textsc{Loss} = final validation loss $(1-Q^{\\mathrm{eff}})^2$;"
         f"{util_cap}"
         " \\textsc{n/r} = did not reach $\\tau$, with total transmissions"
         " spent as a lower bound).}",
@@ -112,7 +123,8 @@ def tab_main():
         f"    \\begin{{tabular}}{{{colspec}}}",
         "        \\hline",
         "        \\textsc{Dataset} & \\textsc{Method} & \\textsc{Acc} &"
-        " \\textsc{Poor Acc} & \\textsc{Gap} & \\textsc{Rounds@$\\tau$} &"
+        " \\textsc{Poor Acc} & \\textsc{Loss} & \\textsc{Gap} &"
+        " \\textsc{Rounds@$\\tau$} &"
         f" \\textsc{{Tx@$\\tau$}}{util_hdr} \\\\",
         "        \\hline",
         *body,
@@ -352,6 +364,49 @@ def _has_vloss():
     return True
 
 
+def fig_efficiency():
+    """Accuracy vs cumulative encoder transmissions: FACE reaches any target
+    accuracy with the least communication."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.7,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY
+    datasets = _avail("results/metrics_v2x_real_{}.npz")
+    fig, axes = plt.subplots(1, len(datasets), figsize=(3.4 * len(datasets), 3.6),
+                             squeeze=False)
+    for pi, (ax, (tag, label)) in enumerate(zip(axes[0], datasets)):
+        d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+        for sname in ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]:
+            if f"{sname}__acc" not in d.files:
+                continue
+            x = np.cumsum(d[f"{sname}__tx"]) / 1000.0
+            y = d[f"{sname}__acc"]
+            K = len(y)
+            ax.plot(x, y, label=DISPLAY.get(sname, sname),
+                    markevery=max(K // 11, 1), markersize=5.5,
+                    markerfacecolor="white", markeredgewidth=1.2, **STY[sname])
+        ax.set_xlabel("Cumulative encoder Tx ($\\times 10^3$)")
+        ax.set_ylabel("Test accuracy")
+        ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_box_aspect(1)
+        ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.34, fontsize=12)
+    h, l = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.17),
+               columnspacing=1.6, handlelength=2.4, fontsize=10)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(HERE, f"fig_seoul_efficiency.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print("  saved fig_seoul_efficiency")
+
+
 if __name__ == "__main__":
     tab_main()
     tab_ablation()
@@ -359,6 +414,9 @@ if __name__ == "__main__":
     fig_convergence()
     fig_convergence(key="vloss", ylabel="Validation loss",
                     fname="fig_seoul_loss_convergence")
+    fig_convergence(key="poor", ylabel="Poor-data accuracy",
+                    fname="fig_seoul_poor_convergence")
+    fig_efficiency()
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")
