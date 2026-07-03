@@ -49,14 +49,16 @@ def tab_main():
 
         def _row(s):
             e = st[s]
+            if e["cumtx"]:
+                txcell = f"{e['cumtx']}\\,({e['rounds']})"
+                if e["cumtx"] == best_tx:
+                    txcell = f"\\textbf{{{txcell}}}"
+            else:
+                txcell = f"$>{e['totaltx']}$"
             cells = [
                 _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
                 _fmt_pm(e["poor"], e["poor_sd"], e["poor"] == best_poor),
-                (f"\\textbf{{{100*e['gap']:.1f}}}" if e["gap"] == best_gap
-                 else f"{100*e['gap']:.1f}"),
-                _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
-                (_fmt_int(e["cumtx"], e["cumtx"] == best_tx)
-                 if e["cumtx"] else f"$>{e['totaltx']}$"),
+                txcell,
             ]
             return ("        & \\textsc{" + DISPLAY.get(s, s) + "} & "
                     + " & ".join(cells) + " \\\\")
@@ -64,8 +66,8 @@ def tab_main():
         block = [_row(s) for s in FRAMEWORK if s in schemes]
         pub = [_row(s) for s in PUBLISHED if s in schemes]
         if pub:
-            block += ["        \\cline{2-7}"] + pub
-        block += ["        \\cline{2-7}", _row("Proposed")]
+            block += ["        \\cline{2-5}"] + pub
+        block += ["        \\cline{2-5}", _row("Proposed")]
         block[0] = block[0].replace(
             "        &",
             f"        \\multirow{{{len(schemes)}}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
@@ -78,27 +80,28 @@ def tab_main():
             body.append("        \\hline")
         body.append(r)
     lines = [
-        "\\begin{table*}[t]" if len(rows) > 1 else "\\begin{table}[t]",
+        "\\begin{table}[t]",
         "    \\centering",
         "    \\caption{Performance on the real Seoul-Gangnam V2X trace"
         " (real multimodal FL, $N{=}180$, 250 rounds; mean $\\pm$ std over"
         f" 3 seeds; \\%, averaged over the final {TAIL} rounds;"
         f" $\\tau$ = 95\\% of the best final accuracy ({tau_txt});"
-        " \\textsc{n/r} = did not reach $\\tau$, with total transmissions"
-        " spent as a lower bound).}",
+        " \\textsc{Tx@$\\tau$ (Rd)} = transmissions (rounds) to reach"
+        " $\\tau$; $>$ marks schemes that never reach $\\tau$, showing"
+        " total transmissions spent).}",
         "    \\label{tab:seoul_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
-        "    \\setlength{\\tabcolsep}{5pt}",
-        "    \\begin{tabular}{c|c|c|c|c|c|c}",
+        "    \\setlength{\\tabcolsep}{3pt}",
+        "    \\resizebox{\\columnwidth}{!}{%",
+        "    \\begin{tabular}{c|c|c|c|c}",
         "        \\hline",
         "        \\textsc{Dataset} & \\textsc{Method} & \\textsc{Acc} &"
-        " \\textsc{Poor Acc} & \\textsc{Gap} & \\textsc{Rounds@$\\tau$} &"
-        " \\textsc{Tx@$\\tau$} \\\\",
+        " \\textsc{Poor Acc} & \\textsc{Tx@$\\tau$ (Rd)} \\\\",
         "        \\hline",
         *body,
         "        \\hline",
-        "    \\end{tabular}",
-        "\\end{table*}" if len(rows) > 1 else "\\end{table}",
+        "    \\end{tabular}}",
+        "\\end{table}",
     ]
     with open(os.path.join(HERE, "tab_seoul_main.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -141,19 +144,16 @@ def tab_ablation(tail=20):
             multi = e["acc_sd"] > 0
             acc_txt = (f"{100*e['acc']:.1f} $\\pm$ {100*e['acc_sd']:.1f}"
                        if multi else f"{100*e['acc']:.1f}")
-            poor_txt = (f"{100*e['poor']:.1f} $\\pm$ {100*e['poor_sd']:.1f}"
-                        if multi else f"{100*e['poor']:.1f}")
             cells = [
                 _b(acc_txt, e["acc"] == best_acc),
                 dacc,
-                _b(poor_txt, e["poor"] == best_poor),
-                f"{e['rounds']}" if e["rounds"] else NR,
-                f"{e['cumtx']}" if e["cumtx"] else f"$>{e['totaltx']}$",
+                (f"{e['cumtx']}" if e["cumtx"]
+                 else f"$>{e['totaltx']}$"),
             ]
             return "        & \\textsc{" + v + "} & " + " & ".join(cells) + " \\\\"
 
         block = [row(v) for v in V[:-1]]
-        block += ["        \\cline{2-7}", row("FACE (full)")]
+        block += ["        \\cline{2-5}", row("FACE (full)")]
         block[0] = block[0].replace(
             "        &",
             f"        \\multirow{{{len(V)}}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
@@ -166,26 +166,27 @@ def tab_ablation(tail=20):
             body.append("        \\hline")
         body.append(r)
     lines = [
-        "\\begin{table*}[t]" if len(rows) > 1 else "\\begin{table}[t]",
+        "\\begin{table}[t]",
         "    \\centering",
         "    \\caption{Component ablation of FACE on the real Seoul-Gangnam"
         " V2X trace ($N{=}180$, 250 rounds; \\%, averaged over the final"
         f" {tail} rounds; $\\tau$ = 95\\% of the best final accuracy"
         f" ({tau_txt}); \\textsc{{n/r}} = did not reach $\\tau$, with total"
-        " transmissions spent as a lower bound).}",
+        " transmissions spent as a lower bound; \\textsc{n/r} entries in"
+        " \\textsc{Tx@$\\tau$} mean the target was not reached).}",
         "    \\label{tab:seoul_ablation}",
         "    \\renewcommand{\\arraystretch}{1.15}",
-        "    \\setlength{\\tabcolsep}{4.5pt}",
-        "    \\begin{tabular}{c|c|c|c|c|c|c}",
+        "    \\setlength{\\tabcolsep}{3pt}",
+        "    \\resizebox{\\columnwidth}{!}{%",
+        "    \\begin{tabular}{c|c|c|c|c}",
         "        \\hline",
         "        \\textsc{Dataset} & \\textsc{Variant} & \\textsc{Acc} &"
-        " $\\Delta$\\textsc{Acc} & \\textsc{Poor Acc} &"
-        " \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} \\\\",
+        " $\\Delta$\\textsc{Acc} & \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
         *body,
         "        \\hline",
-        "    \\end{tabular}",
-        "\\end{table*}" if len(rows) > 1 else "\\end{table}",
+        "    \\end{tabular}}",
+        "\\end{table}",
     ]
     with open(os.path.join(HERE, "tab_seoul_ablation.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")

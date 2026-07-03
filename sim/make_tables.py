@@ -19,7 +19,8 @@ SCHEMES = ["Caching-assisted", "V2V-aware", "Learning-aware",
 # row groups: framework-variant baselines | published benchmarks | proposed
 FRAMEWORK = ["Caching-assisted", "V2V-aware", "Learning-aware"]
 PUBLISHED = ["mmFedMC", "AutoFed"]
-DISPLAY = {"Proposed": "FACE"}
+DISPLAY = {"Proposed": "FACE", "Caching-assisted": "Caching",
+           "V2V-aware": "V2V", "Learning-aware": "Learning"}
 TAIL = 20  # rounds averaged for the accuracy cells
 
 

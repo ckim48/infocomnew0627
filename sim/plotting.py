@@ -20,7 +20,8 @@ STYLE = {
 }
 
 # Display name for each scheme in legends/labels (the proposed scheme is FACE).
-DISPLAY = {"Proposed": "FACE"}
+DISPLAY = {"Proposed": "FACE", "Caching-assisted": "Caching",
+           "V2V-aware": "V2V", "Learning-aware": "Learning"}
 
 
 def disp(scheme):

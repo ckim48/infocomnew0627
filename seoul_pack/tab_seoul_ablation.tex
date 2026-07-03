@@ -1,28 +1,29 @@
-\begin{table*}[t]
+\begin{table}[t]
     \centering
-    \caption{Component ablation of FACE on the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 54.9\%, nuScenes: 71.8\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
+    \caption{Component ablation of FACE on the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 54.9\%, nuScenes: 71.8\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound; \textsc{n/r} entries in \textsc{Tx@$\tau$} mean the target was not reached).}
     \label{tab:seoul_ablation}
     \renewcommand{\arraystretch}{1.15}
-    \setlength{\tabcolsep}{4.5pt}
-    \begin{tabular}{c|c|c|c|c|c|c}
+    \setlength{\tabcolsep}{3pt}
+    \resizebox{\columnwidth}{!}{%
+    \begin{tabular}{c|c|c|c|c}
         \hline
-        \textsc{Dataset} & \textsc{Variant} & \textsc{Acc} & $\Delta$\textsc{Acc} & \textsc{Poor Acc} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
+        \textsc{Dataset} & \textsc{Variant} & \textsc{Acc} & $\Delta$\textsc{Acc} & \textsc{Tx@$\tau$} \\
         \hline
         \multirow{5}{*}{\textsc{KITTI}}
-        & \textsc{w/o caching} & 55.3 $\pm$ 1.5 & -1.9 & 50.3 $\pm$ 1.0 & 227 & 11590 \\
-        & \textsc{w/o demand} & 51.6 $\pm$ 2.0 & -5.6 & 46.0 $\pm$ 1.7 & \textsc{n/r} & $>21149$ \\
-        & \textsc{w/o queue} & 55.0 $\pm$ 1.5 & -2.2 & 50.0 $\pm$ 1.0 & 235 & 14949 \\
-        & \textsc{w/o prediction} & \textbf{57.2 $\pm$ 1.7} & +0.1 & 52.7 $\pm$ 1.1 & 188 & 11649 \\
-        \cline{2-7}
-        & \textsc{FACE (full)} & 57.2 $\pm$ 1.1 & -- & \textbf{52.8 $\pm$ 0.9} & 184 & 11388 \\
+        & \textsc{w/o caching} & 55.3 $\pm$ 1.5 & -1.9 & 11590 \\
+        & \textsc{w/o demand} & 51.6 $\pm$ 2.0 & -5.6 & $>21149$ \\
+        & \textsc{w/o queue} & 55.0 $\pm$ 1.5 & -2.2 & 14949 \\
+        & \textsc{w/o prediction} & \textbf{57.2 $\pm$ 1.7} & +0.1 & 11649 \\
+        \cline{2-5}
+        & \textsc{FACE (full)} & 57.2 $\pm$ 1.1 & -- & 11388 \\
         \hline
         \multirow{5}{*}{\textsc{nuScenes}}
-        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & -2.0 & 69.8 $\pm$ 1.5 & 202 & 8990 \\
-        & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & -6.5 & 64.5 $\pm$ 2.3 & \textsc{n/r} & $>21149$ \\
-        & \textsc{w/o queue} & 73.6 $\pm$ 0.6 & -1.7 & 70.2 $\pm$ 0.5 & 189 & 10787 \\
-        & \textsc{w/o prediction} & 74.2 $\pm$ 1.0 & -1.1 & 71.0 $\pm$ 1.2 & 170 & 9609 \\
-        \cline{2-7}
-        & \textsc{FACE (full)} & \textbf{75.3 $\pm$ 1.0} & -- & \textbf{72.3 $\pm$ 0.6} & 170 & 9564 \\
+        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & -2.0 & 8990 \\
+        & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & -6.5 & $>21149$ \\
+        & \textsc{w/o queue} & 73.6 $\pm$ 0.6 & -1.7 & 10787 \\
+        & \textsc{w/o prediction} & 74.2 $\pm$ 1.0 & -1.1 & 9609 \\
+        \cline{2-5}
+        & \textsc{FACE (full)} & \textbf{75.3 $\pm$ 1.0} & -- & 9564 \\
         \hline
-    \end{tabular}
-\end{table*}
+    \end{tabular}}
+\end{table}

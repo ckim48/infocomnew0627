@@ -27,7 +27,8 @@ plt.rcParams.update({
 SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware",
            "mmFedMC", "AutoFed"]
 # Display name in legends (the proposed scheme is FACE).
-DISPLAY = {"Proposed": "FACE"}
+DISPLAY = {"Proposed": "FACE", "Caching-assisted": "Caching",
+           "V2V-aware": "V2V", "Learning-aware": "Learning"}
 # style matched to the template: Proposed=red solid o, then green--s, blue-.D, black:^
 STY = {
     "Proposed":         dict(color="#e8000b", ls="-",  marker="o"),
