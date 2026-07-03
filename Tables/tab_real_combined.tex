@@ -1,6 +1,6 @@
 \begin{table*}[t]
     \centering
-    \caption{Performance comparison on KITTI and nuScenes over the InTAS (Munich) mobility trace (\%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds). \textsc{Gap} is the mean-to-poor accuracy gap; \textsc{Rounds@$\tau$} / \textsc{Tx@$\tau$} are the rounds and cumulative encoder transmissions to reach $\tau$ (95\% of the best final accuracy; KITTI: 59.8\%, nuScenes: 77.3\%).}
+    \caption{Performance comparison on KITTI and nuScenes over the InTAS (Munich) mobility trace (\%, mean $\pm$ std over 3 seeds, averaged over the final 20 rounds). \textsc{Gap} is the mean-to-poor accuracy gap; \textsc{Rounds@$\tau$} / \textsc{Tx@$\tau$} are the rounds and cumulative encoder transmissions to reach $\tau$ (95\% of the best final accuracy; KITTI: 59.8\%, nuScenes: 77.3\%); \textsc{n/r} = did not reach $\tau$, with the total transmissions spent shown as a lower bound.}
     \label{tab:real_dataset_results}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{5pt}
@@ -9,22 +9,22 @@
         \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
         \hline
         \multirow{6}{*}{\textsc{KITTI}}
-        & \textsc{Caching-assisted} & 56.5 $\pm$ 2.6 & 51.8 $\pm$ 1.2 & 4.7 & $>150$ & $>6352$ \\
+        & \textsc{Caching-assisted} & 56.5 $\pm$ 2.6 & 51.8 $\pm$ 1.2 & 4.7 & \textsc{n/r} & $>6352$ \\
         & \textsc{V2V-aware} & 59.5 $\pm$ 2.1 & 55.3 $\pm$ 1.2 & 4.2 & 142 & 3293 \\
         & \textsc{Learning-aware} & 59.1 $\pm$ 4.2 & 54.9 $\pm$ 3.1 & 4.2 & 145 & 3367 \\
         \cline{2-7}
-        & \textsc{mmFedMC} & 57.5 $\pm$ 1.4 & 52.8 $\pm$ 2.2 & 4.7 & $>150$ & $>5682$ \\
-        & \textsc{AutoFed} & 55.7 $\pm$ 3.1 & 50.7 $\pm$ 1.8 & 5.0 & $>150$ & $>6812$ \\
+        & \textsc{mmFedMC} & 57.5 $\pm$ 1.4 & 52.8 $\pm$ 2.2 & 4.7 & \textsc{n/r} & $>5682$ \\
+        & \textsc{AutoFed} & 55.7 $\pm$ 3.1 & 50.7 $\pm$ 1.8 & 5.0 & \textsc{n/r} & $>6812$ \\
         \cline{2-7}
         & \textsc{FACE} & \textbf{62.6 $\pm$ 2.5} & \textbf{58.9 $\pm$ 1.7} & \textbf{3.7} & \textbf{90} & \textbf{1817} \\
         \hline
         \multirow{6}{*}{\textsc{nuScenes}}
-        & \textsc{Caching-assisted} & 74.8 $\pm$ 2.4 & 72.1 $\pm$ 1.7 & 2.7 & $>150$ & $>6352$ \\
+        & \textsc{Caching-assisted} & 74.8 $\pm$ 2.4 & 72.1 $\pm$ 1.7 & 2.7 & \textsc{n/r} & $>6352$ \\
         & \textsc{V2V-aware} & 81.2 $\pm$ 1.2 & 79.4 $\pm$ 1.5 & 1.8 & 88 & 1692 \\
         & \textsc{Learning-aware} & 81.1 $\pm$ 0.5 & 79.2 $\pm$ 0.8 & 1.8 & 90 & 1719 \\
         \cline{2-7}
         & \textsc{mmFedMC} & 80.9 $\pm$ 1.4 & 78.9 $\pm$ 2.1 & 2.0 & 81 & 2976 \\
-        & \textsc{AutoFed} & 71.4 $\pm$ 7.1 & 68.3 $\pm$ 6.5 & 3.1 & $>150$ & $>6859$ \\
+        & \textsc{AutoFed} & 71.4 $\pm$ 7.1 & 68.3 $\pm$ 6.5 & 3.1 & \textsc{n/r} & $>6859$ \\
         \cline{2-7}
         & \textsc{FACE} & \textbf{81.4 $\pm$ 2.3} & \textbf{79.7 $\pm$ 2.4} & \textbf{1.7} & \textbf{75} & \textbf{1260} \\
         \hline

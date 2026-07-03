@@ -57,9 +57,12 @@ def _fmt_pm(v, sd, bold):
     return f"\\textbf{{{cell}}}" if bold else cell
 
 
+NR = "\\textsc{n/r}"      # target accuracy not reached within the run
+
+
 def _fmt_int(v, bold, K=None):
     if v is None:
-        return f"$>{K}$" if K else "--"
+        return NR
     return f"\\textbf{{{v}}}" if bold else f"{v}"
 
 
@@ -114,7 +117,9 @@ def _combined_table(datasets):
         " rounds). \\textsc{Gap} is the mean-to-poor accuracy gap;"
         " \\textsc{Rounds@$\\tau$} / \\textsc{Tx@$\\tau$} are the rounds and"
         " cumulative encoder transmissions to reach $\\tau$ (95\\% of the best"
-        f" final accuracy; {tau_txt}).}}",
+        f" final accuracy; {tau_txt});"
+        " \\textsc{n/r} = did not reach $\\tau$, with the total"
+        " transmissions spent shown as a lower bound.}",
         "    \\label{tab:real_dataset_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{5pt}",
@@ -240,7 +245,8 @@ def _seoul_table():
         " (real multimodal FL on KITTI, $N{=}180$, 250 rounds;"
         + (" mean $\\pm$ std over 3 seeds;" if multi else " single run;")
         + f" \\%, averaged over the final {TAIL} rounds;"
-        f" $\\tau={100*tau:.1f}\\%$).}}",
+        f" $\\tau={100*tau:.1f}\\%$;"
+        " \\textsc{n/r} = did not reach $\\tau$).}",
         "    \\label{tab:seoul_results}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",

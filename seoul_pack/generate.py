@@ -53,7 +53,7 @@ def tab_ablation(tail=20):
             _b(f"{100*e['acc']:.1f}", e["acc"] == best_acc),
             dacc,
             _b(f"{100*e['poor']:.1f}", e["poor"] == best_poor),
-            f"{e['rounds']}" if e["rounds"] else f"$>{K}$",
+            f"{e['rounds']}" if e["rounds"] else "\\textsc{n/r}",
             f"{e['cumtx']}" if e["cumtx"] else f"$>{e['totaltx']}$",
         ]
         return f"        \\textsc{{{v}}} & " + " & ".join(cells) + " \\\\"
@@ -64,7 +64,8 @@ def tab_ablation(tail=20):
         "    \\caption{Component ablation of FACE on the real Seoul-Gangnam"
         " V2X trace (real multimodal FL on KITTI, $N{=}180$, 250 rounds;"
         f" \\%, averaged over the final {tail} rounds;"
-        f" $\\tau={100*tau:.1f}\\%$).}}",
+        f" $\\tau={100*tau:.1f}\\%$; \\textsc{{n/r}} = did not reach"
+        " $\\tau$, Tx then shows total transmissions spent).}",
         "    \\label{tab:seoul_ablation}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",
