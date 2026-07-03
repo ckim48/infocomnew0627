@@ -138,7 +138,7 @@ def _mobility_table():
     the InTAS (Munich) mobility versus the real Seoul-Gangnam V2X trace.
     InTAS cells: mean +- std over 3 seeds; Seoul: single 250-round run."""
     intas = _load("results/metrics_real_kitti.npz")
-    seoul = _load("results/metrics_v2x_real.npz")
+    seoul = _load("results/metrics_v2x_real_kitti.npz")
 
     def cells(res, s, with_sd):
         acc = res[s]["acc"][-TAIL:].mean(); poor = res[s]["poor"][-TAIL:].mean()
@@ -194,7 +194,7 @@ def _mobility_table():
 def _seoul_table():
     """Same metric columns as the combined table, for the real Seoul-Gangnam
     V2X trace run (KITTI, N=180, single 250-round run -> no seed std)."""
-    res = _load("results/metrics_v2x_real.npz")
+    res = _load("results/metrics_v2x_real_kitti.npz")
     schemes = [x for x in SCHEMES if x in res]
     tau = 0.95 * max(res[s]["acc"][-1] for s in schemes)
     K = len(res["Proposed"]["acc"])

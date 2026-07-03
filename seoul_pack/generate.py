@@ -27,36 +27,50 @@ def tab_ablation(tail=20):
     d = np.load(os.path.join(ROOT, "results/metrics_real_ablation_seoul.npz"))
     V = ["w/o caching", "w/o demand", "w/o queue", "w/o prediction",
          "FACE (full)"]
-    st = {v: dict(acc=d[v + "__acc"][-tail:].mean(),
-                  poor=d[v + "__poor"][-tail:].mean()) for v in V}
+    tau = 0.95 * max(d[v + "__acc"][-1] for v in V)
+    K = len(d["FACE (full)__acc"])
+    st = {}
+    for v in V:
+        a = d[v + "__acc"]
+        reached = a >= tau
+        rounds = int(np.argmax(reached)) + 1 if reached.any() else None
+        st[v] = dict(acc=a[-tail:].mean(),
+                     poor=d[v + "__poor"][-tail:].mean(),
+                     rounds=rounds,
+                     cumtx=int(d[v + "__tx"][:rounds].sum()) if rounds else None)
     full = st["FACE (full)"]
     best_acc = max(st[v]["acc"] for v in V)
     best_poor = max(st[v]["poor"] for v in V)
 
+    def _b(txt, bold):
+        return f"\\textbf{{{txt}}}" if bold else txt
+
     def row(v):
         e = st[v]
         dacc = "--" if v == "FACE (full)" else f"{100*(e['acc']-full['acc']):+.1f}"
-        a = f"{100*e['acc']:.1f}"
-        p = f"{100*e['poor']:.1f}"
-        if e["acc"] == best_acc:
-            a = f"\\textbf{{{a}}}"
-        if e["poor"] == best_poor:
-            p = f"\\textbf{{{p}}}"
-        return f"        \\textsc{{{v}}} & {a} & {dacc} & {p} \\\\"
+        cells = [
+            _b(f"{100*e['acc']:.1f}", e["acc"] == best_acc),
+            dacc,
+            _b(f"{100*e['poor']:.1f}", e["poor"] == best_poor),
+            f"{e['rounds']}" if e["rounds"] else f"$>{K}$",
+            f"{e['cumtx']}" if e["cumtx"] else "--",
+        ]
+        return f"        \\textsc{{{v}}} & " + " & ".join(cells) + " \\\\"
 
     lines = [
         "\\begin{table}[t]",
         "    \\centering",
         "    \\caption{Component ablation of FACE on the real Seoul-Gangnam"
         " V2X trace (real multimodal FL on KITTI, $N{=}180$, 250 rounds;"
-        f" \\%, averaged over the final {tail} rounds).}}",
+        f" \\%, averaged over the final {tail} rounds;"
+        f" $\\tau={100*tau:.1f}\\%$).}}",
         "    \\label{tab:seoul_ablation}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",
-        "    \\begin{tabular}{c|c|c|c}",
+        "    \\begin{tabular}{c|c|c|c|c|c}",
         "        \\hline",
         "        \\textsc{Variant} & \\textsc{Acc} & $\\Delta$\\textsc{Acc}"
-        " & \\textsc{Poor Acc} \\\\",
+        " & \\textsc{Poor Acc} & \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
         *[row(v) for v in V[:-1]],
         "        \\hline",

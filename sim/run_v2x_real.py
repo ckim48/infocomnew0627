@@ -98,9 +98,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         for m in keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
-    np.savez(os.path.join(cfg.results_dir, "metrics_v2x_real.npz"),
+    np.savez(os.path.join(cfg.results_dir, f"metrics_v2x_real_{dataset}.npz"),
              **{f"{s}__{k}": v for s, d in results.items() for k, v in d.items()})
-    _plot(results, cfg)
+    _plot(results, cfg, dataset)
     print("=== REAL FL on Seoul V2X — final ===")
     for s in REAL_SCHEMES:
         print(f"  {disp(s):16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")
@@ -120,7 +120,7 @@ def _panel(ax, results, key, ylabel):
     ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
 
 
-def _plot(results, cfg):
+def _plot(results, cfg, dataset="kitti"):
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
     _panel(axes[0], results, "acc", "Test accuracy")
     _panel(axes[1], results, "poor", "Poor-data accuracy")
@@ -129,7 +129,7 @@ def _plot(results, cfg):
                columnspacing=1.4, handlelength=2.6, fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.98])
     for ext in ("png", "pdf"):
-        fig.savefig(os.path.join(cfg.figures_dir, f"fig_infocom_v2x_real.{ext}"),
+        fig.savefig(os.path.join(cfg.figures_dir, f"fig_infocom_v2x_real_{dataset}.{ext}"),
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
     print("  saved fig_infocom_v2x_real")
