@@ -274,8 +274,8 @@ def fig_utility(smooth=9):
         ax.set_title(f"({chr(97 + list(datasets).index((tag, label)))}) {label}",
                      y=-0.44, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.08),
-               columnspacing=1.2, handlelength=2.2, fontsize=10)
+    fig.legend(h, l, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.17),
+               columnspacing=1.6, handlelength=2.4, fontsize=10)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_utility.{ext}"),
@@ -328,8 +328,8 @@ def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
         ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.44, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.08),
-               columnspacing=1.2, handlelength=2.2, fontsize=10)
+    fig.legend(h, l, loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.17),
+               columnspacing=1.6, handlelength=2.4, fontsize=10)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"{fname}.{ext}"),
