@@ -109,7 +109,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     if not merge:
         _plot(results, cfg, dataset)
     print("=== REAL FL on Seoul V2X — final ===")
-    for s in REAL_SCHEMES:
+    for s in todo:
         print(f"  {disp(s):16s} acc {results[s]['acc'][-1]:.3f}  poor {results[s]['poor'][-1]:.3f}")
     return results
 
