@@ -294,7 +294,7 @@ def fig_utility(smooth=9):
     if not datasets:
         print("  [skip] fig_seoul_utility: no 'util' recorded yet")
         return
-    fig, axes = plt.subplots(1, len(datasets), figsize=(3.7 * len(datasets), 3.1),
+    fig, axes = plt.subplots(1, len(datasets), figsize=(3.4 * len(datasets), 3.6),
                              squeeze=False)
     for ax, (tag, label) in zip(axes[0], datasets):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -309,6 +309,7 @@ def fig_utility(smooth=9):
         ax.set_xlabel("Global round $k$")
         ax.set_ylabel("Achieved utility $R(\\mathbf{a}(k))$")
         ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_box_aspect(1)
         ax.set_title(f"({chr(97 + list(datasets).index((tag, label)))}) {label}",
                      y=-0.44, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()

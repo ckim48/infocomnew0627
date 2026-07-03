@@ -211,7 +211,7 @@ def _figure(results, dataset):
         "Topology": dict(color="#1f9e3d", ls="-.", marker="D"),
         "NoPred":   dict(color="#000000", ls=":",  marker="^"),
     }
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
+    fig, axes = plt.subplots(1, 2, figsize=(6.8, 3.6))
     for ax, key, ylab in [(axes[0], "acc", "Test accuracy"),
                           (axes[1], "poor", "Poor-data accuracy")]:
         K = len(results["HGAT"][key]); x = np.arange(1, K + 1)
@@ -224,6 +224,7 @@ def _figure(results, dataset):
                             color=STY[v]["color"], alpha=0.10, lw=0)
         ax.set_xlabel("Global round $k$"); ax.set_ylabel(ylab)
         ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_box_aspect(1)
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.07),
                columnspacing=1.4, handlelength=2.6, fontsize=11)
