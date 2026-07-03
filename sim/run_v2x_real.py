@@ -64,7 +64,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                       min_class_count=min_class_count)
 
     todo = schemes or REAL_SCHEMES
-    keys = ["acc", "poor", "tx", "util", "vloss", "sat", "usat", "txmb"]
+    keys = ["acc", "poor", "tx", "util", "utl", "utf", "vloss", "sat", "usat", "txmb"]
     stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
@@ -77,6 +77,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
             sat_h, usat_h, mb_h = [], [], []
+            utl_h, utf_h = [], []
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -93,6 +94,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 poor_h.append(float(accs[pm].mean()) if pm.any() else 0.0)
                 tx_h.append(len(selected))
                 u_h.append(alg.last_utility)
+                utl_h.append(alg.last_utility_learn)
+                utf_h.append(alg.last_utility_fwd)
                 sat_h.append(getattr(alg, "last_satisfaction", 0.0))
                 usat_h.append(getattr(alg, "last_useful_sat", 0.0))
                 mb_h.append(sum(cfg.encoder_size[e[3]] for e in selected))
@@ -100,6 +103,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
             stacks[scheme]["util"].append(u_h)
+            stacks[scheme]["utl"].append(utl_h)
+            stacks[scheme]["utf"].append(utf_h)
             stacks[scheme]["vloss"].append(vl_h)
             stacks[scheme]["sat"].append(sat_h)
             stacks[scheme]["usat"].append(usat_h)
@@ -118,6 +123,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         for m in keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
+            if m in ("util", "utl", "utf"):
+                results[s][m + "_all"] = arr        # per-seed (for +- of means)
         results[s]["accveh_all"] = np.stack(stacks[s]["accveh"])  # seeds x N
     path = os.path.join(cfg.results_dir,
                         out_name or f"metrics_v2x_real_{dataset}.npz")

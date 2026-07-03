@@ -152,7 +152,9 @@ class CachingForwarding:
             bf = info[e]["ptx_real"] * (1.0 - np.exp(-float(ge[j]) * chi))
             fwd_prod[(i, m, r)] = fwd_prod.get((i, m, r), 1.0) * (1.0 - bf)
         u_fwd = sum(1.0 - p for p in fwd_prod.values())
-        self.last_utility = float(u_learn + cfg.nu * u_fwd)
+        self.last_utility_learn = float(u_learn)
+        self.last_utility_fwd = float(cfg.nu * u_fwd)
+        self.last_utility = self.last_utility_learn + self.last_utility_fwd
 
         # ----- apply forwarding: receivers aggregate (Eq. 2), update cache & queue -----
         self._apply(selected, info, need)

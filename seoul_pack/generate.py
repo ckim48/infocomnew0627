@@ -36,6 +36,10 @@ def tab_main():
         f"Proposed__util" in np.load(os.path.join(
             ROOT, f"results/metrics_v2x_real_{tag}.npz")).files
         for tag, _ in datasets)
+    have_parts = all(
+        f"Proposed__utl_all" in np.load(os.path.join(
+            ROOT, f"results/metrics_v2x_real_{tag}.npz")).files
+        for tag, _ in datasets)
     rows, taus = [], {}
     for tag, label in datasets:
         path = os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz")
@@ -46,7 +50,12 @@ def tab_main():
         taus[label] = tau
         for s in schemes:
             st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
-            if have_util:
+            if have_parts:
+                for key in ("utl", "utf", "util"):
+                    per_seed = raw[f"{s}__{key}_all"].mean(axis=1)
+                    st[s][key] = float(per_seed.mean())
+                    st[s][key + "_sd"] = float(per_seed.std())
+            elif have_util:
                 st[s]["util"] = float(raw[f"{s}__util"].mean())
             if f"{s}__vloss" in raw.files:
                 st[s]["loss"] = float(raw[f"{s}__vloss"][-TAIL:].mean())
@@ -61,6 +70,8 @@ def tab_main():
         best_tx = min((st[s]["cumtx"] for s in schemes if st[s]["cumtx"]),
                       default=None)
         best_util = max(st[s]["util"] for s in schemes) if have_util else None
+        best_parts = ({k: max(st[s][k] for s in schemes)
+                       for k in ("utl", "utf", "util")} if have_parts else None)
         best_loss = min(st[s]["loss"] for s in schemes)
 
         def _row(s):
@@ -78,13 +89,19 @@ def tab_main():
                 (_fmt_int(e["cumtx"], e["cumtx"] == best_tx)
                  if e["cumtx"] else f"$>{e['totaltx']}$"),
             ]
-            if have_util:
+            if have_parts:
+                for key in ("utl", "utf", "util"):
+                    u = f"{e[key]:.1f} $\\pm$ {e[key + '_sd']:.1f}"
+                    if e[key] == best_parts[key]:
+                        u = f"\\textbf{{{u}}}"
+                    cells.append(u)
+            elif have_util:
                 u = f"{e['util']:.2f}"
                 cells.append(f"\\textbf{{{u}}}" if e["util"] == best_util else u)
             return ("        & \\textsc{" + DISPLAY.get(s, s) + "} & "
                     + " & ".join(cells) + " \\\\")
 
-        ncol = 9 if have_util else 8
+        ncol = 11 if have_parts else (9 if have_util else 8)
         block = [_row(s) for s in FRAMEWORK if s in schemes]
         pub = [_row(s) for s in PUBLISHED if s in schemes]
         if pub:
@@ -101,11 +118,20 @@ def tab_main():
         if i:
             body.append("        \\hline")
         body.append(r)
-    util_hdr = " & \\textsc{Utility}" if have_util else ""
-    util_cap = (" \\textsc{Utility} = mean achieved per-round utility"
-                " $R(\\mathbf{a}(k))$, scored with the true $\\Gamma$ for"
-                " all schemes;" if have_util else "")
-    colspec = "c|c|c|c|c|c|c|c" + ("|c" if have_util else "")
+    if have_parts:
+        util_hdr = (" & \\textsc{U$^{\\mathrm{learn}}$}"
+                    " & \\textsc{U$^{\\mathrm{fwd}}$} & \\textsc{U (total)}")
+    else:
+        util_hdr = " & \\textsc{Utility}" if have_util else ""
+    util_cap = ((" \\textsc{U} = mean achieved per-round utility"
+                 " (learning term, $\\nu$-weighted forwarding term, and"
+                 " total $R(\\mathbf{a}(k))$), scored with the true"
+                 " $\\Gamma$ for all schemes;") if have_parts else
+                (" \\textsc{Utility} = mean achieved per-round utility"
+                 " $R(\\mathbf{a}(k))$, scored with the true $\\Gamma$ for"
+                 " all schemes;" if have_util else ""))
+    colspec = ("c|c|c|c|c|c|c|c" +
+               ("|c|c|c" if have_parts else ("|c" if have_util else "")))
     lines = [
         "\\begin{table*}[t]",
         "    \\centering",
@@ -442,15 +468,19 @@ def fig_analysis(tag="kitti", label="KITTI"):
     ax.set_xlabel("Per-vehicle final accuracy"); ax.set_ylabel("CDF")
     ax.set_ylim(0, 1)
 
-    # (b) accuracy vs cumulative traffic (GB)
+    # (b) accuracy vs cumulative traffic (GB), cropped at the smallest total
+    # so every scheme spans the full axis (equal-budget comparison)
     ax = axg[0, 1]
+    budget = min(np.cumsum(A[f"{sn}__txmb"])[-1] for sn in order) / 1024.0
     for sname in order:
         x = np.cumsum(A[f"{sname}__txmb"]) / 1024.0
         y = A[f"{sname}__acc"]
-        K = len(y)
-        ax.plot(x, y, label=DISPLAY.get(sname, sname),
+        m = x <= budget
+        K = int(m.sum())
+        ax.plot(x[m], y[m], label=DISPLAY.get(sname, sname),
                 markevery=max(K // 9, 1), markersize=5,
                 markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
+    ax.set_xlim(0, budget)
     ax.set_xlabel("Cumulative traffic (GB)"); ax.set_ylabel("Test accuracy")
 
     # (c) poor-vehicle accuracy vs round (3-seed mains)
