@@ -1,6 +1,6 @@
 \begin{table}[t]
     \centering
-    \caption{Component ablation of FACE on the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 54.9\%, nuScenes: 71.3\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound; \textsc{n/r} entries in \textsc{Tx@$\tau$} mean the target was not reached).}
+    \caption{Component ablation of FACE on the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 55.6\%, nuScenes: 72.2\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound; \textsc{n/r} entries in \textsc{Tx@$\tau$} mean the target was not reached).}
     \label{tab:seoul_ablation}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{3pt}
@@ -10,20 +10,20 @@
         \textsc{Dataset} & \textsc{Variant} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Tx@$\tau$} \\
         \hline
         \multirow{5}{*}{\textsc{KITTI}}
-        & \textsc{w/o caching} & 55.3 $\pm$ 1.5 & 50.3 $\pm$ 1.0 & 11590 \\
+        & \textsc{w/o caching} & 55.3 $\pm$ 1.5 & 50.3 $\pm$ 1.0 & 12444 \\
         & \textsc{w/o demand} & 51.6 $\pm$ 2.0 & 46.0 $\pm$ 1.7 & $>21149$ \\
-        & \textsc{w/o queue} & 57.0 $\pm$ 0.7 & 52.3 $\pm$ 0.7 & 11935 \\
-        & \textsc{w/o prediction} & \textbf{57.2 $\pm$ 1.7} & \textbf{52.7 $\pm$ 1.1} & 11649 \\
+        & \textsc{w/o queue} & 57.0 $\pm$ 0.7 & 52.3 $\pm$ 0.7 & 13117 \\
+        & \textsc{w/o prediction} & \textbf{58.1 $\pm$ 1.9} & \textbf{53.7 $\pm$ 1.7} & 11662 \\
         \cline{2-5}
-        & \textsc{FACE (full)} & 56.5 $\pm$ 1.0 & 51.9 $\pm$ 0.9 & 11738 \\
+        & \textsc{FACE (full)} & 57.4 $\pm$ 1.6 & 53.0 $\pm$ 1.6 & 11923 \\
         \hline
         \multirow{5}{*}{\textsc{nuScenes}}
-        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & 69.8 $\pm$ 1.5 & 8891 \\
+        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & 69.8 $\pm$ 1.5 & 9480 \\
         & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & 64.5 $\pm$ 2.3 & $>21149$ \\
-        & \textsc{w/o queue} & 73.8 $\pm$ 0.8 & 70.5 $\pm$ 0.4 & 10292 \\
-        & \textsc{w/o prediction} & 74.2 $\pm$ 1.0 & 71.0 $\pm$ 1.2 & 9292 \\
+        & \textsc{w/o queue} & 73.8 $\pm$ 0.8 & 70.5 $\pm$ 0.4 & 11145 \\
+        & \textsc{w/o prediction} & 75.6 $\pm$ 2.2 & \textbf{72.6 $\pm$ 2.4} & 9389 \\
         \cline{2-5}
-        & \textsc{FACE (full)} & \textbf{74.9 $\pm$ 0.9} & \textbf{71.8 $\pm$ 1.0} & 8966 \\
+        & \textsc{FACE (full)} & \textbf{75.6 $\pm$ 1.5} & 72.6 $\pm$ 1.6 & 9522 \\
         \hline
     \end{tabular}}
 \end{table}
