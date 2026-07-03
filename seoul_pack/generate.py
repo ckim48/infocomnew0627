@@ -272,7 +272,7 @@ def fig_utility(smooth=9):
         ax.set_ylabel("Achieved utility $R(\\mathbf{a}(k))$")
         ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_title(f"({chr(97 + list(datasets).index((tag, label)))}) {label}",
-                     y=-0.34, fontsize=12)
+                     y=-0.44, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.08),
                columnspacing=1.2, handlelength=2.2, fontsize=10)
@@ -326,7 +326,7 @@ def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
         ax.set_xlabel("Global round $k$")
         ax.set_ylabel(ylabel)
         ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-        ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.34, fontsize=12)
+        ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.44, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.08),
                columnspacing=1.2, handlelength=2.2, fontsize=10)
