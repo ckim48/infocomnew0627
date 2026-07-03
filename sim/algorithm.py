@@ -42,6 +42,7 @@ class CachingForwarding:
         self.gain_est = "oracle"
         self.gstat = {}                # (m,r) -> (n, mean realized gain)
         self._last_deliv = []          # (receiver j, r, owner m, prev strength)
+        self._evermet = set()          # vehicle pairs that were ever neighbors
 
     # ---------- per-round entry point ----------
     def run_round(self, k, gamma, gamma_eval=None):
@@ -51,6 +52,13 @@ class CachingForwarding:
         cfg, mfl, mob, fl = self.cfg, self.mfl, self.mob, self.flags
         self._clock = k
         A = mob.v2v_graph()
+        # contact history (for the beyond-direct-encounter delivery metric):
+        # note BEFORE this round's deliveries, so a first-contact direct
+        # exchange does not count as "beyond"
+        for i in range(mfl.N):
+            for j in mob.neighbors(A, i):
+                self._evermet.add((i, int(j)))
+                self._evermet.add((int(j), i))
         need = modality_needs(cfg, mfl)
         Dr = mean_modality_data(mfl)
 
@@ -245,6 +253,8 @@ class CachingForwarding:
     # ---------- apply forwarding ----------
     def _apply(self, selected, info, need):
         cfg, mfl, fl = self.cfg, self.mfl, self.flags
+        self._n_relay = self._n_relay_u = 0
+        self._n_beyond = self._n_beyond_u = 0
         # group received encoders per receiver-modality; track achieved coverage
         recv = {}            # (j,r) -> list of (owner m, theta)
         learn_prod = {}      # (j,r) -> running prod (1-beta_learn)
@@ -255,6 +265,15 @@ class CachingForwarding:
                 continue                              # transmission failed: nothing delivered
             s_m = self.cache[i][(m, r)]
             recv.setdefault((j, r), []).append((m, s_m))
+            useful_d = float(s_m) > float(mfl.strength.get((j, r), 0.0)) + 0.02
+            if m != i:                                  # store-carry-forward relay
+                self._n_relay += 1
+                if useful_d:
+                    self._n_relay_u += 1
+            if (j, m) not in self._evermet and m != j:  # owner never met receiver
+                self._n_beyond += 1
+                if useful_d:
+                    self._n_beyond_u += 1
             if self.gain_est != "oracle":
                 self._last_deliv.append(
                     (j, r, m, float(mfl.strength.get((j, r), 0.0))))
