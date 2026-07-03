@@ -36,6 +36,12 @@ class CachingForwarding:
         self.cache = {i: {} for i in range(mfl.N)}
         self.lru_clock = {i: {} for i in range(mfl.N)}   # (m,r) -> last-use round
         self._clock = 0
+        # learning-gain estimator: 'oracle' (true current strengths, default) |
+        # 'mean' (empirical average of realized gains) | 'ucb' (mean + bonus,
+        # Eq. ucb_index). Feedback = receiver's realized strength improvement.
+        self.gain_est = "oracle"
+        self.gstat = {}                # (m,r) -> (n, mean realized gain)
+        self._last_deliv = []          # (receiver j, r, owner m, prev strength)
 
     # ---------- per-round entry point ----------
     def run_round(self, k, gamma, gamma_eval=None):
@@ -47,6 +53,16 @@ class CachingForwarding:
         A = mob.v2v_graph()
         need = modality_needs(cfg, mfl)
         Dr = mean_modality_data(mfl)
+
+        # bandit feedback from last round's deliveries (strengths were just
+        # refreshed by the runner): realized receiver improvement
+        if self.gain_est != "oracle" and self._last_deliv:
+            for (j, r, m, s_prev) in self._last_deliv:
+                y = float(np.clip(mfl.strength.get((j, r), s_prev) - s_prev,
+                                  0.0, 1.0))
+                n, mu = self.gstat.get((m, r), (0, 0.0))
+                self.gstat[(m, r)] = (n + 1, mu + (y - mu) / (n + 1))
+            self._last_deliv = []
 
         # refresh own encoders in cache (always available to forward)
         for (i, r) in mfl.pairs:
@@ -90,8 +106,11 @@ class CachingForwarding:
             t_tx = S / (cfg.tx_rate_mbps * max(ptx_real, 0.05))
             # learning contribution beta^learn (Eq. 12-13)
             if fl["demand_aware"]:
-                s_m = self.cache[i][(m, r)]
-                g, _, _ = mfl.gain_single(j, r, m, s_m)
+                if self.gain_est == "oracle":
+                    s_m = self.cache[i][(m, r)]
+                    g, _, _ = mfl.gain_single(j, r, m, s_m)
+                else:
+                    g = self._g_est(m, r, k)
                 beta_learn = ptx_dec * (mfl.Dmr(m, r) / (Dr[r] + cfg.eps0)) * g
             else:
                 beta_learn = ptx_dec * 0.05         # demand-agnostic placeholder weight
@@ -133,6 +152,15 @@ class CachingForwarding:
         # ----- cache update for next round (Eq. 28-30) -----
         self._update_caches(gamma, need, Dr)
         return selected
+
+    def _g_est(self, m, r, k):
+        """Estimated learning gain of encoder (m, r) under 'mean' / 'ucb'."""
+        n, mu = self.gstat.get((m, r), (0, 0.0))
+        if n == 0:
+            return 1.0                          # optimistic init (explore)
+        if self.gain_est == "ucb":
+            return min(1.0, mu + np.sqrt(3.0 * np.log(max(k, 2)) / (2.0 * n)))
+        return mu
 
     # ---------- greedy submodular selection ----------
     def _greedy(self, cands, info, need):
@@ -227,6 +255,9 @@ class CachingForwarding:
                 continue                              # transmission failed: nothing delivered
             s_m = self.cache[i][(m, r)]
             recv.setdefault((j, r), []).append((m, s_m))
+            if self.gain_est != "oracle":
+                self._last_deliv.append(
+                    (j, r, m, float(mfl.strength.get((j, r), 0.0))))
             learn_prod[(j, r)] = learn_prod.get((j, r), 1.0) * (1.0 - info[e]["beta_learn"])
             # store-carry-forward: receiver caches the encoder for future rounds
             if fl["carry"]:
