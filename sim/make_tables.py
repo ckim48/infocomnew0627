@@ -16,6 +16,9 @@ import numpy as np
 
 SCHEMES = ["Caching-assisted", "V2V-aware", "Learning-aware",
            "mmFedMC", "AutoFed", "Proposed"]
+# row groups: framework-variant baselines | published benchmarks | proposed
+FRAMEWORK = ["Caching-assisted", "V2V-aware", "Learning-aware"]
+PUBLISHED = ["mmFedMC", "AutoFed"]
 DISPLAY = {"Proposed": "FACE"}
 TAIL = 20  # rounds averaged for the accuracy cells
 
@@ -76,8 +79,7 @@ def _combined_table(datasets):
         best_gap = min(st[s]["gap"] for s in schemes)
         best_rounds = min(st[s]["rounds"] for s in schemes if st[s]["rounds"])
         best_tx = min(st[s]["cumtx"] for s in schemes if st[s]["cumtx"])
-        block = []
-        for s in schemes:
+        def _row(s):
             e = st[s]
             cells = [
                 _fmt_pm(e["acc"], e["acc_sd"], e["acc"] == best_acc),
@@ -87,8 +89,15 @@ def _combined_table(datasets):
                 _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
                 _fmt_int(e["cumtx"], e["cumtx"] == best_tx),
             ]
-            block.append(f"        & \\textsc{{{DISPLAY.get(s, s)}}} & "
-                         + " & ".join(cells) + " \\\\")
+            return (f"        & \\textsc{{{DISPLAY.get(s, s)}}} & "
+                    + " & ".join(cells) + " \\\\")
+
+        ncol = 7
+        block = [_row(s) for s in FRAMEWORK if s in schemes]
+        pub = [_row(s) for s in PUBLISHED if s in schemes]
+        if pub:
+            block += [f"        \\cline{{2-{ncol}}}"] + pub
+        block += [f"        \\cline{{2-{ncol}}}", _row("Proposed")]
         block[0] = block[0].replace(
             "        &",
             f"        \\multirow{{{len(schemes)}}}{{*}}{{\\textsc{{{label}}}}}\n        &", 1)
@@ -171,9 +180,12 @@ def _mobility_table():
         " & \\textsc{Acc} & \\textsc{Poor Acc} \\\\",
         "        \\hline",
     ]
-    for s in schemes:
-        if s != "Proposed":
+    for s in FRAMEWORK:
+        if s in schemes:
             lines.append(row(s))
+    pub = [row(s) for s in PUBLISHED if s in schemes]
+    if pub:
+        lines += ["        \\hline"] + pub
     lines += ["        \\hline", row("Proposed"), "        \\hline",
               "    \\end{tabular}", "\\end{table}"]
     return "\n".join(lines)
@@ -235,9 +247,12 @@ def _seoul_table():
         " \\textsc{Gap} & \\textsc{Rounds@$\\tau$} & \\textsc{Tx@$\\tau$} \\\\",
         "        \\hline",
     ]
-    for s in schemes:
-        if s != "Proposed":
+    for s in FRAMEWORK:
+        if s in schemes:
             lines.append(row(s))
+    pub = [row(s) for s in PUBLISHED if s in schemes]
+    if pub:
+        lines += ["        \\hline"] + pub
     lines += ["        \\hline", row("Proposed"), "        \\hline",
               "    \\end{tabular}", "\\end{table}"]
     return "\n".join(lines)
