@@ -92,8 +92,9 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     }
     src = providers.get(basemap, providers["voyager"])
 
-    fig, axes = plt.subplots(1, len(MAP_SCHEMES), figsize=(18, 4.9),
-                             sharex=True, sharey=True)
+    fig, axgrid = plt.subplots(2, 2, figsize=(9.6, 9.2),
+                               sharex=True, sharey=True)
+    axes = axgrid.ravel()
     pad = 400
     xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
     ylim = (vm[:, 1].min() - pad, vm[:, 1].max() + pad)
@@ -110,8 +111,8 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         # method label BELOW the panel (xlabel), so it never overlaps the dots
         ax.set_xlabel(f"{disp(s)}\nmean acc = {acc.mean():.3f}", fontsize=12)
 
-    fig.subplots_adjust(wspace=0.04)
-    cbar = fig.colorbar(sc, ax=axes, fraction=0.018, pad=0.015)
+    fig.subplots_adjust(wspace=0.04, hspace=0.16)
+    cbar = fig.colorbar(sc, ax=axes.tolist(), fraction=0.03, pad=0.02)
     cbar.set_label("Vehicle model accuracy")
 
     out = os.path.join(fig_dir, "fig_infocom_v2x_map.png")
