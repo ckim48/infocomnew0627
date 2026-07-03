@@ -383,6 +383,95 @@ def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
     print(f"  saved {fname}")
 
 
+def fig_analysis_combined():
+    """2x4 combined analysis: rows = datasets (KITTI / nuScenes), columns =
+    per-vehicle CDF | accuracy-vs-traffic | poor-vehicle curve |
+    useful-delivery ratio. Full-width (figure*) companion of fig_analysis."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY, _smooth
+    datasets = [(t, l) for t, l in DATASETS if os.path.exists(
+        os.path.join(ROOT, f"results/metrics_v2x_analysis_{t}.npz"))]
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_analysis_2x4: need both analysis runs")
+        return
+    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+    fig, axg = plt.subplots(2, 4, figsize=(12.6, 6.4))
+    for row, (tag, label) in enumerate(datasets):
+        A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
+        M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+
+        ax = axg[row, 0]                                  # CDF
+        for sn in order:
+            v = np.sort(A[f"{sn}__accveh_all"].ravel())
+            cdf = np.arange(1, len(v) + 1) / len(v)
+            st = {k: val for k, val in STY[sn].items() if k != "marker"}
+            ax.plot(v, cdf, label=DISPLAY.get(sn, sn), **st)
+        ax.set_xlabel("Per-vehicle final accuracy")
+        ax.set_ylabel(f"{label}\nCDF")
+        ax.set_ylim(0, 1)
+
+        ax = axg[row, 1]                                  # traffic Pareto
+        budget = min(np.cumsum(A[f"{sn}__txmb"])[-1] for sn in order) / 1024.0
+        for sn in order:
+            x = np.cumsum(A[f"{sn}__txmb"]) / 1024.0
+            y = A[f"{sn}__acc"]
+            m = x <= budget
+            K = int(m.sum())
+            ax.plot(x[m], y[m], label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, budget)
+        ax.set_xlabel("Cumulative traffic (GB)")
+        ax.set_ylabel("Test accuracy")
+
+        ax = axg[row, 2]                                  # poor curve
+        for sn in order:
+            y = M[f"{sn}__poor"]; sd = M[f"{sn}__poor_std"]
+            K = len(y); x = np.arange(1, K + 1)
+            ax.plot(x, y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+            ax.fill_between(x, y - sd, y + sd, color=STY[sn]["color"],
+                            alpha=0.10, lw=0)
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("Poor-data accuracy")
+
+        ax = axg[row, 3]                                  # useful-delivery
+        dkey = "usat" if f"Proposed__usat" in A.files else "sat"
+        for sn in order:
+            y = _smooth(A[f"{sn}__{dkey}"], 15)
+            K = len(y); x = np.arange(1, K + 1)
+            ax.plot(x, y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("Useful-delivery ratio")
+
+    for i, ax in enumerate(axg.ravel()):
+        ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_box_aspect(1)
+        ax.set_title(f"({'abcdefgh'[i]})", y=-0.36, fontsize=12)
+    h, l = axg[0, 0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.02),
+               columnspacing=1.3, handlelength=2.2, fontsize=11)
+    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.4, w_pad=1.6)
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_2x4.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print("  saved fig_seoul_analysis_2x4")
+
+
 def _has_vloss():
     for tag, _ in _avail("results/metrics_v2x_real_{}.npz"):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -539,6 +628,7 @@ if __name__ == "__main__":
     fig_efficiency()
     fig_analysis("kitti", "KITTI")
     fig_analysis("nuscenes", "nuScenes")
+    fig_analysis_combined()
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")
