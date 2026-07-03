@@ -284,9 +284,11 @@ def fig_utility(smooth=9):
     print("  saved fig_seoul_utility")
 
 
-def fig_convergence(smooth=1):
-    """1x2 test-accuracy convergence on the Seoul trace: (a) KITTI,
-    (b) nuScenes -- FACE reaches high accuracy fastest on both."""
+def fig_convergence(smooth=1, key="acc", ylabel="Test accuracy",
+                    fname="fig_seoul_acc_convergence"):
+    """1x2 convergence on the Seoul trace: (a) KITTI, (b) nuScenes --
+    FACE converges fastest on both. key='vloss' plots the paper-defined
+    validation loss instead of accuracy."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -304,10 +306,10 @@ def fig_convergence(smooth=1):
     for pi, (ax, (tag, label)) in enumerate(zip(axes[0], datasets)):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
         for sname in ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]:
-            if f"{sname}__acc" not in d.files:
+            if f"{sname}__{key}" not in d.files:
                 continue
-            y = _smooth(d[f"{sname}__acc"], smooth)
-            sd = d[f"{sname}__acc_std"]
+            y = _smooth(d[f"{sname}__{key}"], smooth)
+            sd = d[f"{sname}__{key}_std"]
             K = len(y); x = np.arange(1, K + 1)
             ax.plot(x, y, label=DISPLAY.get(sname, sname),
                     markevery=max(K // 11, 1), markersize=5.5,
@@ -315,7 +317,7 @@ def fig_convergence(smooth=1):
             ax.fill_between(x, y - sd, y + sd, color=STY[sname]["color"],
                             alpha=0.10, lw=0)
         ax.set_xlabel("Global round $k$")
-        ax.set_ylabel("Test accuracy")
+        ax.set_ylabel(ylabel)
         ax.set_xlim(0, K); ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_title(f"({chr(97 + pi)}) {label}", y=-0.34, fontsize=12)
     h, l = axes[0][0].get_legend_handles_labels()
@@ -323,10 +325,18 @@ def fig_convergence(smooth=1):
                columnspacing=1.2, handlelength=2.2, fontsize=10)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     for ext in ("png", "pdf"):
-        fig.savefig(os.path.join(HERE, f"fig_seoul_acc_convergence.{ext}"),
+        fig.savefig(os.path.join(HERE, f"{fname}.{ext}"),
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print("  saved fig_seoul_acc_convergence")
+    print(f"  saved {fname}")
+
+
+def _has_vloss():
+    for tag, _ in _avail("results/metrics_v2x_real_{}.npz"):
+        d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+        if "Proposed__vloss" not in d.files:
+            return False
+    return True
 
 
 if __name__ == "__main__":
@@ -334,6 +344,11 @@ if __name__ == "__main__":
     tab_ablation()
     fig_utility()
     fig_convergence()
+    if _has_vloss():
+        fig_convergence(key="vloss", ylabel="Validation loss",
+                        fname="fig_seoul_loss_convergence")
+    else:
+        print("  [skip] fig_seoul_loss_convergence: no 'vloss' yet")
     copy_artifacts()
     print("seoul_pack regenerated:")
     for f in sorted(os.listdir(HERE)):

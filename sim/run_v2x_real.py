@@ -63,7 +63,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                       min_class_count=min_class_count)
 
     todo = schemes or REAL_SCHEMES
-    keys = ["acc", "poor", "tx", "util"]
+    keys = ["acc", "poor", "tx", "util", "vloss"]
     stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
@@ -74,12 +74,15 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             mfl = RealMFL(cfg, rng, avail, data, device=device)
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
-            acc_h, poor_h, tx_h, u_h = [], [], [], []
+            acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
                 mfl.local_train()
                 mfl.refresh_strengths()
+                # paper-defined validation loss L^val = (1 - Q^eff)^2, with
+                # Q^eff the real per-vehicle validation accuracy
+                vl_h.append(float(np.mean((1.0 - mfl.acc) ** 2)))
                 g = gammas[kk] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
                     else np.zeros(mob.N)
                 selected = alg.run_round(k, g, gamma_eval=gammas[kk])
@@ -92,6 +95,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
             stacks[scheme]["util"].append(u_h)
+            stacks[scheme]["vloss"].append(vl_h)
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
