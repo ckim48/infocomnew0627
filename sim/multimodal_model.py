@@ -59,9 +59,35 @@ class FusionHead(nn.Module):
         return self.head(z)
 
 
+class RadarEncoder(nn.Module):
+    """PointNet-style encoder for sparse box radar returns
+    (P x [x, y, vx, vy, rcs] -> FEAT). Radar returns per object are few
+    (often 0-5), so the encoder is deliberately small."""
+    def __init__(self, feat=FEAT):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(5, 32), nn.ReLU(),
+            nn.Linear(32, 64), nn.ReLU(),
+        )
+        self.fc = nn.Linear(64, feat)
+
+    def forward(self, x):                       # x: [B, P, 5]
+        h = self.mlp(x)
+        h = h.max(dim=1)[0]                      # symmetric pooling
+        return self.fc(h)
+
+
+_ENCODERS = {"camera": ImageEncoder, "lidar": LidarEncoder,
+             "radar": RadarEncoder}
+
+
 def make_encoder(modality, feat=FEAT):
-    return ImageEncoder(feat) if modality == "camera" else LidarEncoder(feat)
+    return _ENCODERS[modality](feat)
 
 
-def encoder_forward(enc, modality, img, lid):
-    return enc(img) if modality == "camera" else enc(lid)
+def encoder_forward(enc, modality, img, lid, rad=None):
+    if modality == "camera":
+        return enc(img)
+    if modality == "radar":
+        return enc(rad)
+    return enc(lid)
