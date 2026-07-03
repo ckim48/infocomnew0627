@@ -466,16 +466,19 @@ def fig_analysis(tag="kitti", label="KITTI"):
     ax.set_xlabel("Global round $k$"); ax.set_ylabel("Poor-data accuracy")
     ax.set_xlim(0, K)
 
-    # (d) demand-satisfaction vs round
+    # (d) useful-delivery ratio vs round (deliveries that actually improve
+    # the receiver; raw coverage would reward indiscriminate spraying)
     ax = axg[1, 1]
+    dkey = "usat" if f"Proposed__usat" in A.files else "sat"
     for sname in order:
-        y = _smooth(A[f"{sname}__sat"], 15)
+        y = _smooth(A[f"{sname}__{dkey}"], 15)
         K = len(y); x = np.arange(1, K + 1)
         ax.plot(x, y, label=DISPLAY.get(sname, sname),
                 markevery=max(K // 9, 1), markersize=5,
                 markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
     ax.set_xlabel("Global round $k$")
-    ax.set_ylabel("Demand-satisfaction ratio")
+    ax.set_ylabel("Useful-delivery ratio" if dkey == "usat"
+                  else "Demand-satisfaction ratio")
     ax.set_xlim(0, K)
 
     for i, ax in enumerate(axg.ravel()):
@@ -503,6 +506,8 @@ if __name__ == "__main__":
     fig_convergence(key="poor", ylabel="Poor-data accuracy",
                     fname="fig_seoul_poor_convergence")
     fig_efficiency()
+    fig_analysis("kitti", "KITTI")
+    fig_analysis("nuscenes", "nuScenes")
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")

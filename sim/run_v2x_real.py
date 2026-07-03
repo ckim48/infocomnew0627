@@ -64,7 +64,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                       min_class_count=min_class_count)
 
     todo = schemes or REAL_SCHEMES
-    keys = ["acc", "poor", "tx", "util", "vloss", "sat", "txmb"]
+    keys = ["acc", "poor", "tx", "util", "vloss", "sat", "usat", "txmb"]
     stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
@@ -76,7 +76,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
-            sat_h, mb_h = [], []
+            sat_h, usat_h, mb_h = [], [], []
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -94,6 +94,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 tx_h.append(len(selected))
                 u_h.append(alg.last_utility)
                 sat_h.append(getattr(alg, "last_satisfaction", 0.0))
+                usat_h.append(getattr(alg, "last_useful_sat", 0.0))
                 mb_h.append(sum(cfg.encoder_size[e[3]] for e in selected))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
@@ -101,6 +102,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme]["util"].append(u_h)
             stacks[scheme]["vloss"].append(vl_h)
             stacks[scheme]["sat"].append(sat_h)
+            stacks[scheme]["usat"].append(usat_h)
             stacks[scheme]["txmb"].append(mb_h)
             stacks[scheme].setdefault("accveh", []).append(
                 mfl.evaluate("test"))          # per-vehicle final accuracies

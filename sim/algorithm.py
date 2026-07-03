@@ -265,9 +265,17 @@ class CachingForwarding:
                 self.lru_clock[j][(m, r)] = self._clock
 
         # demand-weighted satisfaction: fraction of total modality need that
-        # received at least one encoder this round (mechanism metric)
+        # received at least one encoder this round (mechanism metric), and the
+        # USEFUL variant counting only deliveries stronger than what the
+        # receiver already has (raw coverage rewards indiscriminate spraying)
         tot_need = sum(need.values()) + 1e-9
         self.last_satisfaction = sum(need.get(jr, 0.0) for jr in recv) / tot_need
+        useful = set()
+        for (j, r), lst in recv.items():
+            own = float(mfl.strength.get((j, r), 0.0))
+            if any(float(s_m) > own + 0.02 for (_m, s_m) in lst):
+                useful.add((j, r))
+        self.last_useful_sat = sum(need.get(jr, 0.0) for jr in useful) / tot_need
 
         # aggregation (Eq. 2) and commit new local encoders
         for (j, r), lst in recv.items():
