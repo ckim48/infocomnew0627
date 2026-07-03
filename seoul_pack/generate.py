@@ -37,7 +37,8 @@ def tab_ablation(tail=20):
         st[v] = dict(acc=a[-tail:].mean(),
                      poor=d[v + "__poor"][-tail:].mean(),
                      rounds=rounds,
-                     cumtx=int(d[v + "__tx"][:rounds].sum()) if rounds else None)
+                     cumtx=int(d[v + "__tx"][:rounds].sum()) if rounds else None,
+                     totaltx=int(d[v + "__tx"].sum()))
     full = st["FACE (full)"]
     best_acc = max(st[v]["acc"] for v in V)
     best_poor = max(st[v]["poor"] for v in V)
@@ -53,7 +54,7 @@ def tab_ablation(tail=20):
             dacc,
             _b(f"{100*e['poor']:.1f}", e["poor"] == best_poor),
             f"{e['rounds']}" if e["rounds"] else f"$>{K}$",
-            f"{e['cumtx']}" if e["cumtx"] else "--",
+            f"{e['cumtx']}" if e["cumtx"] else f"$>{e['totaltx']}$",
         ]
         return f"        \\textsc{{{v}}} & " + " & ".join(cells) + " \\\\"
 

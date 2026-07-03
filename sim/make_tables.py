@@ -48,7 +48,7 @@ def _stats(res):
         tx = res[s]["tx"]
         cumtx = int(tx[:rounds].sum()) if rounds else None
         out[s] = dict(acc=acc, acc_sd=acc_sd, poor=poor, poor_sd=poor_sd,
-                      rounds=rounds, cumtx=cumtx)
+                      rounds=rounds, cumtx=cumtx, totaltx=int(tx.sum()))
     return out, tau, K
 
 
@@ -87,7 +87,8 @@ def _combined_table(datasets):
                 (f"\\textbf{{{100*e['gap']:.1f}}}" if e["gap"] == best_gap
                  else f"{100*e['gap']:.1f}"),
                 _fmt_int(e["rounds"], e["rounds"] == best_rounds, K),
-                _fmt_int(e["cumtx"], e["cumtx"] == best_tx),
+                (_fmt_int(e["cumtx"], e["cumtx"] == best_tx)
+                 if e["cumtx"] else f"$>{e['totaltx']}$"),
             ]
             return (f"        & \\textsc{{{DISPLAY.get(s, s)}}} & "
                     + " & ".join(cells) + " \\\\")
@@ -207,7 +208,8 @@ def _seoul_table():
         st[s] = dict(acc=acc, poor=poor, gap=acc - poor, rounds=rounds,
                      acc_sd=res[s]["acc_std"][-TAIL:].mean(),
                      poor_sd=res[s]["poor_std"][-TAIL:].mean(),
-                     cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None)
+                     cumtx=int(res[s]["tx"][:rounds].sum()) if rounds else None,
+                     totaltx=int(res[s]["tx"].sum()))
     best = dict(acc=max(st[s]["acc"] for s in schemes),
                 poor=max(st[s]["poor"] for s in schemes),
                 gap=min(st[s]["gap"] for s in schemes),
@@ -226,7 +228,8 @@ def _seoul_table():
             else b(f"{100*e['poor']:.1f}", e["poor"] == best["poor"]),
             b(f"{100*e['gap']:.1f}", e["gap"] == best["gap"]),
             _fmt_int(e["rounds"], e["rounds"] == best["rounds"], K),
-            _fmt_int(e["cumtx"], e["cumtx"] == best["cumtx"]),
+            (_fmt_int(e["cumtx"], e["cumtx"] == best["cumtx"])
+             if e["cumtx"] else f"$>{e['totaltx']}$"),
         ]
         return f"        \\textsc{{{DISPLAY.get(s, s)}}} & " + " & ".join(cells) + " \\\\"
 
