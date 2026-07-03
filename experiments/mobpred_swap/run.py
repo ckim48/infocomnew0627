@@ -243,9 +243,11 @@ def _table(results, dataset, tail=20):
                      poor_sd=results[v]["poor_std"][-tail:].mean())
     best_acc = max(st[v]["acc"] for v in VARIANTS)
     best_poor = max(st[v]["poor"] for v in VARIANTS)
+    multi = st["HGAT"]["acc_sd"] > 0
 
     def pm(v, k, best):
-        cell = f"{100*st[v][k]:.1f} $\\pm$ {100*st[v][k + '_sd']:.1f}"
+        cell = (f"{100*st[v][k]:.1f} $\\pm$ {100*st[v][k + '_sd']:.1f}"
+                if multi else f"{100*st[v][k]:.1f}")
         return f"\\textbf{{{cell}}}" if st[v][k] == best else cell
 
     disp = {"HGAT": "HGAT (ours)", "Markov": "Markov", "Topology": "Topology",
@@ -255,8 +257,12 @@ def _table(results, dataset, tail=20):
         "    \\centering",
         "    \\caption{Impact of the mobility predictor behind the"
         " destination-free forwarding potential $\\Gamma$ (FACE, real"
-        " multimodal FL on KITTI over InTAS; \\%, mean $\\pm$ std over 3"
-        f" seeds, averaged over the final {tail} rounds).}}",
+        " multimodal FL on KITTI over "
+        + ("the sparse Seoul-Gangnam V2X trace" if dataset == "seoul"
+           else "InTAS")
+        + ("; single 250-round run" if not multi
+           else "; mean $\\pm$ std over 3 seeds")
+        + f", \\%, averaged over the final {tail} rounds).}}",
         "    \\label{tab:mobpred}",
         "    \\renewcommand{\\arraystretch}{1.15}",
         "    \\setlength{\\tabcolsep}{4.5pt}",

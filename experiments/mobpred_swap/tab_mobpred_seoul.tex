@@ -1,0 +1,18 @@
+\begin{table}[t]
+    \centering
+    \caption{Impact of the mobility predictor behind the destination-free forwarding potential $\Gamma$ (FACE, real multimodal FL on KITTI over the sparse Seoul-Gangnam V2X trace; single 250-round run, \%, averaged over the final 20 rounds).}
+    \label{tab:mobpred}
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{4.5pt}
+    \begin{tabular}{c|c|c}
+        \hline
+        \textsc{Predictor} & \textsc{Acc} & \textsc{Poor Acc} \\
+        \hline
+        \textsc{Markov} & 56.2 & 52.8 \\
+        \textsc{Topology} & 57.4 & 54.0 \\
+        \textsc{w/o prediction} & 57.0 & 53.7 \\
+        \hline
+        \textsc{HGAT (ours)} & \textbf{57.4} & \textbf{54.3} \\
+        \hline
+    \end{tabular}
+\end{table}
