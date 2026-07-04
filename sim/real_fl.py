@@ -235,9 +235,10 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
     train/val/test."""
     if dataset == "deepsense":
         return _prep_deepsense(seed, min_class_count or 250)
+    rad = None
     if dataset == "nuscenes":
         from .nuscenes_dataset import build as _bld
-        img, lid, y, frame, boxh = _bld(cache="results/nuscenes_mm.npz")
+        img, lid, rad, y, frame, boxh = _bld(with_radar=True)
     else:
         img, lid, y, frame, boxh = build_kitti(cache="results/kitti_mm_all.npz")
     rng = np.random.default_rng(seed)
@@ -250,13 +251,16 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
         keep.append(rng.choice(ci, min(cap, len(ci)), replace=False))
     keep = rng.permutation(np.concatenate(keep))
     img, lid, y = img[keep], lid[keep], y[keep]
+    mods = {"camera": img, "lidar": lid}
+    if rad is not None:
+        mods["radar"] = rad[keep]
     n = len(y); perm = rng.permutation(n)
     n_test = int(0.20 * n); n_val = int(0.12 * n)
     test_idx = perm[:n_test]; val_idx = perm[n_test:n_test + n_val]
     train_idx = perm[n_test + n_val:]
     print(f"  [data] balanced classes {np.bincount(y)}  "
           f"train {len(train_idx)} val {len(val_idx)} test {len(test_idx)}")
-    return dict(img=img, lid=lid, y=y,
+    return dict(mods=mods, y=y,
                 val=(val_idx, y[val_idx]), test=(test_idx, y[test_idx]),
                 train_idx=train_idx)
 

@@ -52,7 +52,10 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         cfg.modalities = ["camera", "lidar", "radar", "gps"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85,
                              "radar": 0.75, "gps": 0.95}
-    else:
+    elif dataset == "nuscenes":       # camera + LiDAR + sparse radar returns
+        cfg.modalities = ["camera", "lidar", "radar"]
+        cfg.modality_prob = {"camera": 1.0, "lidar": 0.85, "radar": 0.7}
+    else:                             # KITTI: camera + LiDAR
         cfg.modalities = ["camera", "lidar"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
     device = device or _device()
