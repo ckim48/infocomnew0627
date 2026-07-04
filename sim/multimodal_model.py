@@ -77,12 +77,46 @@ class RadarEncoder(nn.Module):
         return self.fc(h)
 
 
+class RadarMapEncoder(nn.Module):
+    """Small 2D CNN for FMCW range-Doppler maps (1 x 32 x 32 -> FEAT),
+    e.g. DeepSense 6G radar cubes after FFT processing."""
+    def __init__(self, feat=FEAT):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(1, 16, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
+            nn.Conv2d(16, 32, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, 3, padding=1), nn.ReLU(), nn.AdaptiveAvgPool2d(1),
+        )
+        self.fc = nn.Linear(64, feat)
+
+    def forward(self, x):
+        return self.fc(self.net(x).flatten(1))
+
+
+class GPSEncoder(nn.Module):
+    """Tiny MLP for position features (D -> FEAT)."""
+    def __init__(self, feat=FEAT, din=3):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(din, 32), nn.ReLU(),
+                                 nn.Linear(32, feat))
+
+    def forward(self, x):
+        return self.net(x)
+
+
 _ENCODERS = {"camera": ImageEncoder, "lidar": LidarEncoder,
              "radar": RadarEncoder}
+# per-run overrides, e.g. DeepSense uses a range-Doppler map radar encoder
+# and a GPS encoder: ENCODER_OVERRIDES.update({"radar": RadarMapEncoder,
+# "gps": GPSEncoder})
+ENCODER_OVERRIDES = {}
 
 
 def make_encoder(modality, feat=FEAT):
-    return _ENCODERS[modality](feat)
+    cls = ENCODER_OVERRIDES.get(modality, _ENCODERS.get(modality))
+    if cls is None:
+        raise KeyError(f"no encoder registered for modality '{modality}'")
+    return cls(feat)
 
 
 def encoder_forward(enc, modality, img, lid, rad=None):

@@ -42,7 +42,16 @@ def _balanced(y, rng, min_count=0):
 def _load(dataset):
     """Return dict modality->array plus labels, class-balanced."""
     rng = np.random.default_rng(2026)
-    if dataset == "kitti":
+    if dataset == "deepsense":
+        from sim.deepsense_dataset import build
+        import sim.multimodal_model as MM
+        MM.ENCODER_OVERRIDES.update({"radar": MM.RadarMapEncoder,
+                                     "gps": MM.GPSEncoder})
+        mods, y, _ = build()
+        data = {"camera": mods["img"], "lidar": mods["lid"],
+                "radar": mods["rad"], "gps": mods["gps"]}
+        keep = _balanced(y, rng, min_count=120)
+    elif dataset == "kitti":
         from sim.kitti_dataset import build
         img, lid, y, _, _ = build(cache="results/kitti_mm_all.npz")
         data = {"camera": img, "lidar": lid}
@@ -108,26 +117,38 @@ def _train_eval(data, y, tr, te, ncls, mods, seed, device, degraded=True):
     return acc
 
 
-def main():
+PLANS = {
+    "kitti": [("camera",), ("lidar",), ("camera", "lidar")],
+    "nuscenes": [("camera",), ("lidar",), ("radar",),
+                 ("camera", "lidar"), ("camera", "lidar", "radar")],
+    "deepsense": [("camera",), ("lidar",), ("radar",), ("gps",),
+                  ("camera", "lidar"),
+                  ("camera", "lidar", "radar", "gps")],
+}
+# degraded sensing matches the FL poor-vehicle model for the driving datasets;
+# DeepSense beam prediction is evaluated clean (the task is hard as-is)
+DEGRADED = {"kitti": True, "nuscenes": True, "deepsense": False}
+
+
+def main(only=None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    plans = {
-        "kitti": [("camera",), ("lidar",), ("camera", "lidar")],
-        "nuscenes": [("camera",), ("lidar",), ("radar",),
-                     ("camera", "lidar"), ("camera", "lidar", "radar")],
-    }
-    results = {}
+    plans = {k: v for k, v in PLANS.items() if only is None or k in only}
+    path = os.path.join(HERE, "metrics_modality_fusion.npz")
+    results = {k: tuple(v) for k, v in np.load(path).items()} \
+        if os.path.exists(path) else {}
     for ds, subsets in plans.items():
         data, y, tr, te, ncls = _load(ds)
         for mods in subsets:
-            accs = [_train_eval(data, y, tr, te, ncls, list(mods), sd, device)
+            accs = [_train_eval(data, y, tr, te, ncls, list(mods), sd, device,
+                                degraded=DEGRADED[ds])
                     for sd in SEEDS]
             key = "+".join(m[:3] for m in mods)
             results[f"{ds}|{key}"] = (float(np.mean(accs)), float(np.std(accs)))
             print(f"  [{ds}] {'+'.join(mods):24s} "
                   f"acc {np.mean(accs):.3f} ± {np.std(accs):.3f}", flush=True)
-    np.savez(os.path.join(HERE, "metrics_modality_fusion.npz"),
-             **{k: np.array(v) for k, v in results.items()})
-    _figure(results, plans)
+    np.savez(path, **{k: np.array(v) for k, v in results.items()})
+    _figure(results, {k: v for k, v in PLANS.items()
+                      if f"{k}|{'+'.join(m[:3] for m in v[0])}" in results})
     return results
 
 
@@ -141,11 +162,13 @@ def _figure(results, plans):
         "axes.linewidth": 0.9, "xtick.direction": "in", "ytick.direction": "in",
         "legend.frameon": False,
     })
-    LBL = {"cam": "Camera", "lid": "LiDAR", "rad": "Radar",
-           "cam+lid": "Cam+LiD", "cam+lid+rad": "All (fusion)"}
-    COL = {1: "#9db8d9", 2: "#4f7ab8", 3: "#e8000b"}
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.0),
-                             gridspec_kw={"width_ratios": [3, 5]})
+    LBL = {"cam": "Camera", "lid": "LiDAR", "rad": "Radar", "gps": "GPS",
+           "cam+lid": "Cam+LiD", "cam+lid+rad": "All (fusion)",
+           "cam+lid+rad+gps": "All (fusion)"}
+    fig, axes = plt.subplots(1, len(plans), figsize=(2.1 + 1.35 * sum(
+        len(v) for v in plans.values()), 3.0),
+        gridspec_kw={"width_ratios": [len(v) for v in plans.values()]})
+    axes = np.atleast_1d(axes)
     for ax, (ds, subsets) in zip(axes, plans.items()):
         keys = ["+".join(m[:3] for m in mods) for mods in subsets]
         mu = [results[f"{ds}|{k}"][0] for k in keys]
@@ -162,11 +185,13 @@ def _figure(results, plans):
         ax.set_xticks(range(len(keys)))
         ax.set_xticklabels([LBL.get(k, k) for k in keys], rotation=18,
                            ha="right", fontsize=9)
-        ax.set_ylabel("Test accuracy (degraded sensing)")
+        ax.set_ylabel("Test accuracy (degraded sensing)"
+                      if DEGRADED.get(ds, True) else "Test accuracy")
         ax.set_ylim(min(mu) - 0.08, max(mu) + 0.06)
         ax.grid(True, axis="y", ls="--", lw=0.6, alpha=0.5)
-        ax.set_title(f"({'ab'[list(plans).index(ds)]}) "
-                     f"{'KITTI' if ds == 'kitti' else 'nuScenes'}",
+        name = {"kitti": "KITTI", "nuscenes": "nuScenes",
+                "deepsense": "DeepSense 6G"}[ds]
+        ax.set_title(f"({'abc'[list(plans).index(ds)]}) {name}",
                      y=-0.42, fontsize=12)
     fig.tight_layout()
     for ext in ("png", "pdf"):
