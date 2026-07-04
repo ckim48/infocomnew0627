@@ -174,7 +174,6 @@ def _figure(results, plans):
         mu = [results[f"{ds}|{k}"][0] for k in keys]
         sd = [results[f"{ds}|{k}"][1] for k in keys]
         nm = [len(k.split("+")) for k in keys]
-        cols = [COL[min(n, 3)] if n > 1 else COL[1] for n in nm]
         cols = ["#e8000b" if n == max(nm) else ("#4f7ab8" if n > 1 else "#9db8d9")
                 for n in nm]
         bars = ax.bar(range(len(keys)), mu, yerr=sd, capsize=3, width=0.62,
