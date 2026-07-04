@@ -52,6 +52,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         cfg.modalities = ["camera", "lidar", "radar", "gps"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85,
                              "radar": 0.75, "gps": 0.95}
+        cfg.per_modality_strength = True   # chi per encoder (LOO val contrib)
     elif dataset == "nuscenes":       # camera + LiDAR + sparse radar returns
         cfg.modalities = ["camera", "lidar", "radar"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85, "radar": 0.7}

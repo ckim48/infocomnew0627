@@ -175,10 +175,44 @@ class RealMFL:
         return (accs, losses) if return_loss else accs
 
     def refresh_strengths(self):
+        if getattr(self.cfg, "per_modality_strength", False):
+            self._refresh_permod()
+            return
         self.acc = self.evaluate("val")
         for (i, r) in self.pairs:
             self.strength[(i, r)] = float(self.acc[i])
             self.theta[(i, r)] = float(self.acc[i])
+
+    @torch.no_grad()
+    def _refresh_permod(self):
+        """Per-modality encoder quality chi_{i,r} via leave-one-out validation
+        contribution: strength of (i, r) = vehicle val accuracy weighted by
+        modality r's share of it. Matches the paper's per-encoder chi, and
+        stops schemes from valuing e.g. a chance-level camera encoder just
+        because its owner is accurate overall (via another modality)."""
+        idx, yv = self.val
+        idx_t = torch.tensor(idx, device=self.device)
+        y_t = torch.tensor(yv, device=self.device, dtype=torch.long)
+        x = {m: t[idx_t] for m, t in self.t.items()}
+        self.acc = np.zeros(self.N)
+        for i in range(self.N):
+            self._set_train(i, False)
+            feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
+            base = float((self.head[i](feats).argmax(1) == y_t).float().mean())
+            self.acc[i] = base
+            contrib = {}
+            for r in self.avail[i]:
+                fz = dict(feats)
+                fz[r] = torch.zeros_like(feats[r])
+                a = float((self.head[i](fz).argmax(1) == y_t).float().mean())
+                contrib[r] = max(base - a, 0.0)
+            tot = sum(contrib.values())
+            for r in self.avail[i]:
+                w = contrib[r] / tot if tot > 1e-9 else 1.0 / len(self.avail[i])
+                v = base * w * len(self.avail[i])       # keep scale ~ base
+                v = float(np.clip(v, 0.0, 1.0))
+                self.strength[(i, r)] = v
+                self.theta[(i, r)] = v
 
     # ---- decision proxies used by CachingForwarding ----
     def q_eff(self, i, r, extra=None):
