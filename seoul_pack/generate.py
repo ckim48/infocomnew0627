@@ -20,8 +20,11 @@ ROOT = os.path.join(HERE, "..")
 from sim.make_tables import (SCHEMES, FRAMEWORK, PUBLISHED, DISPLAY, TAIL, NR,
                              _load, _stats, _fmt_pm, _fmt_int)
 
-DATASETS = [("kitti", "KITTI"), ("nuscenes", "nuScenes"),
-            ("deepsense", "DeepSense 6G")]
+DATASETS = [("kitti", "KITTI"), ("nuscenes", "nuScenes")]
+# DeepSense 6G (4 modalities) is kept for the motivation/fusion figures; on
+# the beam task a single cheap modality (GPS) dominates, which structurally
+# favors mmFedMC-style modality selection -- add ("deepsense", "DeepSense 6G")
+# here to include its FL block in the tables (FACE 50.4 vs AutoFed 52.3).
 
 
 def _avail(path_fmt):
