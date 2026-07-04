@@ -433,18 +433,16 @@ def fig_analysis_combined():
         ax.set_xlabel("Cumulative traffic (GB)")
         ax.set_ylabel("Test accuracy")
 
-        ax = axg[row, 2]                                  # poor curve
+        ax = axg[row, 2]                                  # multi-hop ratio
         for sn in order:
-            y = M[f"{sn}__poor"]; sd = M[f"{sn}__poor_std"]
+            y = _smooth(A[f"{sn}__mhop"], 15)
             K = len(y); x = np.arange(1, K + 1)
             ax.plot(x, y, label=DISPLAY.get(sn, sn),
                     markevery=max(K // 8, 1), markersize=4.5,
                     markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
-            ax.fill_between(x, y - sd, y + sd, color=STY[sn]["color"],
-                            alpha=0.10, lw=0)
         ax.set_xlim(0, K)
         ax.set_xlabel("Global round $k$")
-        ax.set_ylabel("Poor-data accuracy")
+        ax.set_ylabel("Multi-hop delivery ratio")
 
         ax = axg[row, 3]                                  # useful-delivery
         dkey = "usat" if f"Proposed__usat" in A.files else "sat"
@@ -574,17 +572,18 @@ def fig_analysis(tag="kitti", label="KITTI"):
     ax.set_xlim(0, budget)
     ax.set_xlabel("Cumulative traffic (GB)"); ax.set_ylabel("Test accuracy")
 
-    # (c) poor-vehicle accuracy vs round (3-seed mains)
+    # (c) multi-hop delivery ratio: fraction of received encoders whose
+    # owner the receiver NEVER directly encountered -- the beyond-direct-
+    # encounter mechanism (structurally zero without store-carry-forward)
     ax = axg[1, 0]
     for sname in order:
-        y = M[f"{sname}__poor"]; sd = M[f"{sname}__poor_std"]
+        y = _smooth(A[f"{sname}__mhop"], 15)
         K = len(y); x = np.arange(1, K + 1)
         ax.plot(x, y, label=DISPLAY.get(sname, sname),
                 markevery=max(K // 9, 1), markersize=5,
                 markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
-        ax.fill_between(x, y - sd, y + sd, color=STY[sname]["color"],
-                        alpha=0.10, lw=0)
-    ax.set_xlabel("Global round $k$"); ax.set_ylabel("Poor-data accuracy")
+    ax.set_xlabel("Global round $k$")
+    ax.set_ylabel("Multi-hop delivery ratio")
     ax.set_xlim(0, K)
 
     # (d) useful-delivery ratio vs round (deliveries that actually improve
