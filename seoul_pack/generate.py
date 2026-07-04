@@ -20,7 +20,8 @@ ROOT = os.path.join(HERE, "..")
 from sim.make_tables import (SCHEMES, FRAMEWORK, PUBLISHED, DISPLAY, TAIL, NR,
                              _load, _stats, _fmt_pm, _fmt_int)
 
-DATASETS = [("kitti", "KITTI"), ("nuscenes", "nuScenes")]
+DATASETS = [("kitti", "KITTI"), ("nuscenes", "nuScenes"),
+            ("deepsense", "DeepSense 6G")]
 
 
 def _avail(path_fmt):

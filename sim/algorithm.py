@@ -257,6 +257,7 @@ class CachingForwarding:
         cfg, mfl, fl = self.cfg, self.mfl, self.flags
         self._n_relay = self._n_relay_u = 0
         self._n_beyond = self._n_beyond_u = 0
+        self._n_deliv = 0
         # group received encoders per receiver-modality; track achieved coverage
         recv = {}            # (j,r) -> list of (owner m, theta)
         learn_prod = {}      # (j,r) -> running prod (1-beta_learn)
@@ -267,6 +268,7 @@ class CachingForwarding:
                 continue                              # transmission failed: nothing delivered
             s_m = self.cache[i][(m, r)]
             recv.setdefault((j, r), []).append((m, s_m))
+            self._n_deliv += 1
             useful_d = float(s_m) > float(mfl.strength.get((j, r), 0.0)) + 0.02
             if m != i:                                  # store-carry-forward relay
                 self._n_relay += 1
@@ -284,6 +286,30 @@ class CachingForwarding:
             if fl["carry"]:
                 self.cache[j][(m, r)] = s_m
                 self.lru_clock[j][(m, r)] = self._clock
+
+        # high-demand region availability: among the top-quartile regional
+        # demands Lambda_{e,r}, the fraction of (road segment, modality)
+        # pairs where some vehicle on the segment holds a strong r-encoder
+        seg_need, seg_have = {}, {}
+        segs = self.mob.seg
+        for i in range(mfl.N):
+            e = int(segs[i])
+            for r in mfl.avail[i]:
+                a = need.get((i, r), 0.0)
+                seg_need[(e, r)] = 1.0 - (1.0 - seg_need.get((e, r), 0.0)) * (1.0 - a)
+                if not seg_have.get((e, r), False):
+                    for (m, rr) in self.cache[i]:
+                        if rr == r and float(mfl.strength.get((m, rr), 0.0)) >= 0.6:
+                            seg_have[(e, r)] = True
+                            break
+        if seg_need:
+            lam = np.array(list(seg_need.values()))
+            thr = np.quantile(lam, 0.75)
+            top = [k for k, v in seg_need.items() if v >= thr]
+            self.last_avail = (sum(seg_have.get(k, False) for k in top)
+                               / max(len(top), 1))
+        else:
+            self.last_avail = 0.0
 
         # demand-weighted satisfaction: fraction of total modality need that
         # received at least one encoder this round (mechanism metric), and the

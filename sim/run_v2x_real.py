@@ -45,8 +45,16 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     while FL keeps training/propagating so the accuracy curve plateaus."""
     cfg = cfg or Config()
     cfg.num_vehicles = num_vehicles
-    cfg.modalities = ["camera", "lidar"]
-    cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
+    if dataset == "deepsense":
+        import sim.multimodal_model as _MM
+        _MM.ENCODER_OVERRIDES.update({"radar": _MM.RadarMapEncoder,
+                                      "gps": _MM.GPSEncoder})
+        cfg.modalities = ["camera", "lidar", "radar", "gps"]
+        cfg.modality_prob = {"camera": 1.0, "lidar": 0.85,
+                             "radar": 0.75, "gps": 0.95}
+    else:
+        cfg.modalities = ["camera", "lidar"]
+        cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
     device = device or _device()
     seeds = seeds or [cfg.seed]
     os.makedirs(cfg.results_dir, exist_ok=True)
@@ -64,7 +72,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                       min_class_count=min_class_count)
 
     todo = schemes or REAL_SCHEMES
-    keys = ["acc", "poor", "tx", "util", "utl", "utf", "vloss", "sat", "usat", "txmb"]
+    keys = ["acc", "poor", "tx", "util", "utl", "utf", "vloss", "sat", "usat", "txmb", "mhop", "avail"]
     stacks = {s: {m: [] for m in keys} for s in todo}
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
@@ -77,7 +85,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
             sat_h, usat_h, mb_h = [], [], []
-            utl_h, utf_h = [], []
+            utl_h, utf_h, mh_h, av_h = [], [], [], []
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -98,6 +106,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 utf_h.append(alg.last_utility_fwd)
                 sat_h.append(getattr(alg, "last_satisfaction", 0.0))
                 usat_h.append(getattr(alg, "last_useful_sat", 0.0))
+                mh_h.append(alg._n_beyond / max(alg._n_deliv, 1))
+                av_h.append(getattr(alg, "last_avail", 0.0))
                 mb_h.append(sum(cfg.encoder_size[e[3]] for e in selected))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
@@ -108,6 +118,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme]["vloss"].append(vl_h)
             stacks[scheme]["sat"].append(sat_h)
             stacks[scheme]["usat"].append(usat_h)
+            stacks[scheme]["mhop"].append(mh_h)
+            stacks[scheme]["avail"].append(av_h)
             stacks[scheme]["txmb"].append(mb_h)
             stacks[scheme].setdefault("accveh", []).append(
                 mfl.evaluate("test"))          # per-vehicle final accuracies

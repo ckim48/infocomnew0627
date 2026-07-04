@@ -50,7 +50,11 @@ class RealMFL:
         self.N = cfg.num_vehicles
         self.avail = [sorted(a) for a in modality_avail]   # deterministic ordered lists
         self.device = device or _device()
-        img, lid, y = data["img"], data["lid"], data["y"]
+        y = data["y"]
+        # modality arrays: either an explicit dict (data["mods"]) or the
+        # legacy img/lid pair
+        mods = data.get("mods") or {"camera": data["img"], "lidar": data["lid"]}
+        self.ncls = int(data.get("ncls", NCLS))
         self.val = data["val"]; self.test = data["test"]
 
         # Data-volume heterogeneity. A minority of "rich" vehicles hold large
@@ -66,14 +70,22 @@ class RealMFL:
         n_rich = max(sum(riches), 1)
         pool = rng.permutation(data["train_idx"])
         poor_sizes = {i: int(rng.integers(4, 12)) for i in range(self.N) if not riches[i]}
-        rich_budget = len(pool) - sum(poor_sizes.values())
-        rich_each = max(rich_budget // n_rich, 30)
+        overlap = bool(data.get("overlap", False))
+        if overlap:
+            # small dataset: vehicles draw (possibly overlapping) local sets --
+            # nearby vehicles observing the same scene is realistic anyway
+            rich_each = max(min(len(pool) // 2, 60), 30)
+        else:
+            rich_budget = len(pool) - sum(poor_sizes.values())
+            rich_each = max(rich_budget // n_rich, 30)
         cur = 0
         for i in range(self.N):
-            if riches[i]:
-                e = min(cur + rich_each, len(pool)); self.local[i] = pool[cur:e]; cur = e
+            size = rich_each if riches[i] else poor_sizes[i]
+            if overlap:
+                self.local[i] = rng.choice(pool, min(size, len(pool)),
+                                           replace=False)
             else:
-                e = min(cur + poor_sizes[i], len(pool)); self.local[i] = pool[cur:e]; cur = e
+                e = min(cur + size, len(pool)); self.local[i] = pool[cur:e]; cur = e
             if len(self.local[i]) == 0:
                 self.local[i] = pool[:5]
             self.rich[i] = riches[i]
@@ -85,7 +97,7 @@ class RealMFL:
                 self.pairs.append((i, r))
             # encoders: trainable for rich vehicles, frozen for poor vehicles
             self.enc[i] = {r: make_encoder(r).to(self.device) for r in self.avail[i]}
-            self.head[i] = FusionHead(self.avail[i]).to(self.device)
+            self.head[i] = FusionHead(self.avail[i], ncls=self.ncls).to(self.device)
             params = list(self.head[i].parameters())
             if riches[i]:
                 for r in self.avail[i]:
@@ -96,22 +108,26 @@ class RealMFL:
                         p.requires_grad_(False)
             self.opt[i] = torch.optim.Adam(params, lr=1e-3)
         # registry of current encoder weights (for forwarding/aggregation)
-        self.img_t = torch.tensor(img, device=self.device)
-        self.lid_t = torch.tensor(lid, device=self.device)
+        self.t = {m: torch.tensor(a, device=self.device) for m, a in mods.items()}
         self.y_t = torch.tensor(y, device=self.device, dtype=torch.long)
         self.acc = np.zeros(self.N)
         self._corrupt = {i: (self.Q[(i, self.avail[i][0])] < 0.5) for i in range(self.N)}
 
     # ---- data access with per-vehicle quality corruption ----
     def _batch(self, idx, vehicle):
-        img = self.img_t[idx].clone()
-        lid = self.lid_t[idx].clone()
-        if self._corrupt.get(vehicle, False):
-            img = img + 0.25 * torch.randn_like(img)           # noisy/low-quality camera
-            img = torch.clamp(img * 0.6, 0, 1)                 # low light
-            mask = (torch.rand_like(lid[..., :1]) < 0.6).float()
-            lid = lid * mask                                   # sparse LiDAR
-        return img, lid, self.y_t[idx]
+        x = {m: t[idx].clone() for m, t in self.t.items()}
+        if self._corrupt.get(vehicle, False):        # degraded sensing
+            if "camera" in x:
+                img = x["camera"] + 0.25 * torch.randn_like(x["camera"])
+                x["camera"] = torch.clamp(img * 0.6, 0, 1)     # noise + low light
+            if "lidar" in x:
+                mask = (torch.rand_like(x["lidar"][..., :1]) < 0.6).float()
+                x["lidar"] = x["lidar"] * mask                 # sparse LiDAR
+            if "radar" in x:
+                x["radar"] = x["radar"] + 0.25 * torch.randn_like(x["radar"])
+            if "gps" in x:
+                x["gps"] = x["gps"] + 0.1 * torch.randn_like(x["gps"])
+        return x, self.y_t[idx]
 
     def Dmr(self, m, r):
         return self.D.get((m, r), 1)
@@ -128,8 +144,8 @@ class RealMFL:
             self._set_train(i, True)
             for _ in range(self.cfg.local_epochs):
                 b = idx[self.rng.choice(len(idx), min(64, len(idx)), replace=False)]
-                img, lid, y = self._batch(b, i)
-                feats = {r: encoder_forward(self.enc[i][r], r, img, lid) for r in self.avail[i]}
+                x, y = self._batch(b, i)
+                feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
                 logits = self.head[i](feats)
                 loss = ce(logits, y)
                 self.opt[i].zero_grad(); loss.backward(); self.opt[i].step()
@@ -147,11 +163,11 @@ class RealMFL:
         idx, yv = (self.val if which == "val" else self.test)
         idx_t = torch.tensor(idx, device=self.device)
         y_t = torch.tensor(yv, device=self.device, dtype=torch.long)
-        img = self.img_t[idx_t]; lid = self.lid_t[idx_t]
+        x = {m: t[idx_t] for m, t in self.t.items()}
         accs = np.zeros(self.N); losses = np.zeros(self.N)
         for i in range(self.N):
             self._set_train(i, False)
-            feats = {r: encoder_forward(self.enc[i][r], r, img, lid) for r in self.avail[i]}
+            feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
             logits = self.head[i](feats)
             accs[i] = float((logits.argmax(1) == y_t).float().mean())
             if return_loss:
@@ -217,6 +233,8 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
     samples are dropped (e.g. the very rare nuScenes Cyclist class), which lets
     the remaining classes keep far more data. Returns balanced img/lid/y plus
     train/val/test."""
+    if dataset == "deepsense":
+        return _prep_deepsense(seed, min_class_count or 250)
     if dataset == "nuscenes":
         from .nuscenes_dataset import build as _bld
         img, lid, y, frame, boxh = _bld(cache="results/nuscenes_mm.npz")
@@ -239,6 +257,34 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
     print(f"  [data] balanced classes {np.bincount(y)}  "
           f"train {len(train_idx)} val {len(val_idx)} test {len(test_idx)}")
     return dict(img=img, lid=lid, y=y,
+                val=(val_idx, y[val_idx]), test=(test_idx, y[test_idx]),
+                train_idx=train_idx)
+
+
+def _prep_deepsense(seed, min_class_count=250):
+    """DeepSense 6G scenario 32: 4 modalities, beam-sector labels. Small
+    (~1.4k balanced samples), so vehicles draw overlapping local sets."""
+    from .deepsense_dataset import build as _bld
+    mods, y, _beam = _bld()
+    rng = np.random.default_rng(seed)
+    counts = np.bincount(y)
+    use = [c for c in range(len(counts)) if counts[c] >= min_class_count]
+    cap = int(min(counts[c] for c in use))
+    keep = []
+    for c in use:
+        ci = np.where(y == c)[0]
+        keep.append(rng.choice(ci, min(cap, len(ci)), replace=False))
+    keep = rng.permutation(np.concatenate(keep))
+    y = np.searchsorted(np.array(use), y[keep])
+    mods = {{"img": "camera", "lid": "lidar", "rad": "radar",
+             "gps": "gps"}[k]: v[keep] for k, v in mods.items()}
+    n = len(y); perm = rng.permutation(n)
+    n_test = int(0.20 * n); n_val = int(0.12 * n)
+    test_idx = perm[:n_test]; val_idx = perm[n_test:n_test + n_val]
+    train_idx = perm[n_test + n_val:]
+    print(f"  [deepsense] balanced classes {np.bincount(y)}  "
+          f"train {len(train_idx)} val {len(val_idx)} test {len(test_idx)}")
+    return dict(mods=mods, y=y, ncls=len(use), overlap=True,
                 val=(val_idx, y[val_idx]), test=(test_idx, y[test_idx]),
                 train_idx=train_idx)
 
