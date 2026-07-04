@@ -1,6 +1,6 @@
 \begin{table}[t]
     \centering
-    \caption{Component ablation of FACE on the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 55.6\%, nuScenes: 72.2\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound; \textsc{n/r} entries in \textsc{Tx@$\tau$} mean the target was not reached).}
+    \caption{Component ablation of FACE on the real Seoul-Gangnam V2X trace ($N{=}180$, 250 rounds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 55.6\%, nuScenes: 71.0\%); \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound; \textsc{n/r} entries in \textsc{Tx@$\tau$} mean the target was not reached).}
     \label{tab:seoul_ablation}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{3pt}
@@ -18,12 +18,12 @@
         & \textsc{FACE (full)} & 57.4 $\pm$ 1.6 & 53.0 $\pm$ 1.6 & 11923 \\
         \hline
         \multirow{5}{*}{\textsc{nuScenes}}
-        & \textsc{w/o caching} & 73.3 $\pm$ 1.0 & 69.8 $\pm$ 1.5 & 9480 \\
-        & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & 64.5 $\pm$ 2.3 & $>21149$ \\
-        & \textsc{w/o queue} & 73.8 $\pm$ 0.8 & 70.5 $\pm$ 0.4 & 11145 \\
-        & \textsc{w/o prediction} & 75.6 $\pm$ 2.2 & \textbf{72.6 $\pm$ 2.4} & 9389 \\
+        & \textsc{w/o caching} & 72.9 $\pm$ 0.9 & 69.2 $\pm$ 1.3 & 8655 \\
+        & \textsc{w/o demand} & 68.8 $\pm$ 2.6 & 64.6 $\pm$ 2.4 & $>21149$ \\
+        & \textsc{w/o queue} & \textbf{74.2 $\pm$ 1.3} & \textbf{71.0 $\pm$ 1.3} & 9954 \\
+        & \textsc{w/o prediction} & 74.1 $\pm$ 1.2 & 70.9 $\pm$ 0.8 & 8273 \\
         \cline{2-5}
-        & \textsc{FACE (full)} & \textbf{75.6 $\pm$ 1.5} & 72.6 $\pm$ 1.6 & 9522 \\
+        & \textsc{FACE (full)} & 74.1 $\pm$ 1.1 & 70.8 $\pm$ 1.3 & 8990 \\
         \hline
     \end{tabular}}
 \end{table}
