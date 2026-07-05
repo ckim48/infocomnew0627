@@ -553,9 +553,13 @@ def fig_analysis_combined():
         A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
         M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
 
+        def gv(sn, metric):     # prefer the 3-seed main run; fall back to A
+            k = f"{sn}__{metric}"
+            return M[k] if k in M.files else A[k]
+
         ax = axg[row, 0]                                  # CDF
         for sn in order:
-            v = np.sort(A[f"{sn}__accveh_all"].ravel())
+            v = np.sort(gv(sn, "accveh_all").ravel())
             cdf = np.arange(1, len(v) + 1) / len(v)
             st = {k: val for k, val in STY[sn].items() if k != "marker"}
             ax.plot(v, cdf, label=DISPLAY.get(sn, sn), **st)
@@ -564,10 +568,10 @@ def fig_analysis_combined():
         ax.set_ylim(0, 1)
 
         ax = axg[row, 1]                                  # traffic Pareto
-        budget = min(np.cumsum(A[f"{sn}__txmb"])[-1] for sn in order) / 1024.0
+        budget = min(np.cumsum(gv(sn, "txmb"))[-1] for sn in order) / 1024.0
         for sn in order:
-            x = np.cumsum(A[f"{sn}__txmb"]) / 1024.0
-            y = A[f"{sn}__acc"]
+            x = np.cumsum(gv(sn, "txmb")) / 1024.0
+            y = gv(sn, "acc")
             m = x <= budget
             K = int(m.sum())
             ax.plot(x[m], y[m], label=DISPLAY.get(sn, sn),
@@ -579,7 +583,7 @@ def fig_analysis_combined():
 
         ax = axg[row, 2]                                  # encoder availability
         for sn in order:
-            y = _smooth(A[f"{sn}__avail"], 15)
+            y = _smooth(gv(sn, "avail"), 15)
             K = len(y); x = np.arange(1, K + 1)
             ax.plot(x, y, label=DISPLAY.get(sn, sn),
                     markevery=max(K // 8, 1), markersize=4.5,
@@ -588,10 +592,9 @@ def fig_analysis_combined():
         ax.set_xlabel("Global round $k$")
         ax.set_ylabel("Encoder availability")
 
-        ax = axg[row, 3]                                  # useful-delivery
-        dkey = "usat" if f"Proposed__usat" in A.files else "sat"
+        ax = axg[row, 3]                                  # useful-delivery ratio
         for sn in order:
-            y = _smooth(A[f"{sn}__{dkey}"], 15)
+            y = _smooth(gv(sn, "usat"), 15)
             K = len(y); x = np.arange(1, K + 1)
             ax.plot(x, y, label=DISPLAY.get(sn, sn),
                     markevery=max(K // 8, 1), markersize=4.5,
@@ -742,13 +745,21 @@ def fig_analysis(tag="kitti", label="KITTI"):
     A = np.load(apath)
     M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+
+    # prefer the 3-seed main run (real margins); fall back to the single-run
+    # instrumented analysis only for keys the mains do not carry (e.g. KITTI
+    # availability). A single instrumented seed understated FACE's true gap.
+    def gv(sname, metric):
+        k = f"{sname}__{metric}"
+        return M[k] if k in M.files else A[k]
+
     # wider-than-tall panels: the stacked 2x2 was too tall for a column
     fig, axg = plt.subplots(2, 2, figsize=(6.6, 5.0))
 
-    # (a) per-vehicle final accuracy CDF
+    # (a) per-vehicle final accuracy CDF (pooled over all seeds)
     ax = axg[0, 0]
     for sname in order:
-        v = np.sort(A[f"{sname}__accveh_all"].ravel())
+        v = np.sort(gv(sname, "accveh_all").ravel())
         cdf = np.arange(1, len(v) + 1) / len(v)
         st = {k: val for k, val in STY[sname].items() if k != "marker"}
         ax.plot(v, cdf, label=DISPLAY.get(sname, sname), **st)
@@ -758,10 +769,10 @@ def fig_analysis(tag="kitti", label="KITTI"):
     # (b) accuracy vs cumulative traffic (GB), cropped at the smallest total
     # so every scheme spans the full axis (equal-budget comparison)
     ax = axg[0, 1]
-    budget = min(np.cumsum(A[f"{sn}__txmb"])[-1] for sn in order) / 1024.0
+    budget = min(np.cumsum(gv(sn, "txmb"))[-1] for sn in order) / 1024.0
     for sname in order:
-        x = np.cumsum(A[f"{sname}__txmb"]) / 1024.0
-        y = A[f"{sname}__acc"]
+        x = np.cumsum(gv(sname, "txmb")) / 1024.0
+        y = gv(sname, "acc")
         m = x <= budget
         K = int(m.sum())
         ax.plot(x[m], y[m], label=DISPLAY.get(sname, sname),
@@ -776,7 +787,7 @@ def fig_analysis(tag="kitti", label="KITTI"):
     # is optimizing for)
     ax = axg[1, 0]
     for sname in order:
-        y = _smooth(A[f"{sname}__avail"], 15)
+        y = _smooth(gv(sname, "avail"), 15)
         K = len(y); x = np.arange(1, K + 1)
         ax.plot(x, y, label=DISPLAY.get(sname, sname),
                 markevery=max(K // 9, 1), markersize=5,
@@ -785,19 +796,17 @@ def fig_analysis(tag="kitti", label="KITTI"):
     ax.set_ylabel("Encoder availability")
     ax.set_xlim(0, K)
 
-    # (d) useful-delivery ratio vs round (deliveries that actually improve
-    # the receiver; raw coverage would reward indiscriminate spraying)
+    # (d) useful-delivery ratio vs round (deliveries that actually improve the
+    # receiver; the Gamma/demand-driven delivery quality)
     ax = axg[1, 1]
-    dkey = "usat" if f"Proposed__usat" in A.files else "sat"
     for sname in order:
-        y = _smooth(A[f"{sname}__{dkey}"], 15)
+        y = _smooth(gv(sname, "usat"), 15)
         K = len(y); x = np.arange(1, K + 1)
         ax.plot(x, y, label=DISPLAY.get(sname, sname),
                 markevery=max(K // 9, 1), markersize=5,
                 markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
     ax.set_xlabel("Global round $k$")
-    ax.set_ylabel("Useful-delivery ratio" if dkey == "usat"
-                  else "Demand-satisfaction ratio")
+    ax.set_ylabel("Useful-delivery ratio")
     ax.set_xlim(0, K)
 
     for i, ax in enumerate(axg.ravel()):
