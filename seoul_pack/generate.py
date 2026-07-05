@@ -253,6 +253,75 @@ def tab_ablation(tail=20):
         f.write("\n".join(lines) + "\n")
 
 
+def tab_gamma_horizon():
+    """How well the future-contact score Gamma_j ranks vehicles by their
+    realized future co-locations, vs prediction horizon H and vs a topology-
+    blind density count. Two regimes: all future contacts / beyond-encounter
+    (out-of-range now = the store-carry-forward reach). tab_seoul_gamma.tex."""
+    path = os.path.join(ROOT, "results/gamma_horizon.npz")
+    if not os.path.exists(path):
+        print("  [skip] tab_seoul_gamma: run  python3 -m sim.gamma_horizon")
+        return
+    D = np.load(path)
+    n = max(int(D["n_rounds"]), 1)
+    W = int(D["window"]); Hs = [int(h) for h in D["horizons"]]
+    se = lambda s: float(s) / np.sqrt(n)
+
+    def cell(m, s, best):
+        txt = f"{float(m):.2f} $\\pm$ {se(s):.2f}"
+        return f"\\textbf{{{txt}}}" if best else txt
+
+    # rows: topology-blind baseline, then Gamma at each horizon
+    bmax = float(D["gamma_mean_all"].max())          # best 'all' column value
+    bmax_b = float(D["gamma_mean"].max())            # best 'beyond' column value
+    rows = []
+    rows.append("        Topology-blind density & "
+                + cell(D["blind_mean_all"], D["blind_std_all"], False) + " & "
+                + cell(D["blind_mean"], D["blind_std"], False) + " \\\\")
+    rows.append("        \\hline")
+    for i, h in enumerate(Hs):
+        ma, sa = float(D["gamma_mean_all"][i]), float(D["gamma_std_all"][i])
+        mb, sb = float(D["gamma_mean"][i]), float(D["gamma_std"][i])
+        rows.append(f"        $\\Gamma_j$ ($H{{=}}{h}$) & "
+                    + cell(ma, sa, ma == bmax) + " & "
+                    + cell(mb, sb, mb == bmax_b) + " \\\\")
+
+    # relative gains H1 -> H4 for the caption
+    ga = D["gamma_mean_all"]; gb = D["gamma_mean"]
+    rel_all = 100 * (ga[-1] - ga[0]) / ga[0]
+    rel_bey = 100 * (gb[-1] - gb[0]) / gb[0]
+    lines = [
+        "\\begin{table}[t]",
+        "    \\centering",
+        "    \\caption{Predictor quality of the future-contact score"
+        " $\\Gamma_j$ on the real Seoul-Gangnam V2X trace ($N{=}180$):"
+        " Spearman rank correlation $r_s$ between the predicted score and the"
+        f" realized future co-locations over the next $W{{=}}{W}$ rounds"
+        f" (averaged over {n} rounds, $\\pm$ s.e.). \\textsc{{All}} counts every"
+        " future co-location; \\textsc{Beyond} keeps only vehicles out of range"
+        " at round $k$ (the store-carry-forward reach). The road-segment-aware"
+        " $\\Gamma_j$ rises monotonically with the horizon $H$ and exceeds the"
+        " topology-blind density count; the gain concentrates in the"
+        f" beyond-encounter regime (${rel_bey:+.0f}\\%$ vs ${rel_all:+.0f}\\%$"
+        " over $H{=}1{\\to}4$).}",
+        "    \\label{tab:seoul_gamma}",
+        "    \\renewcommand{\\arraystretch}{1.15}",
+        "    \\setlength{\\tabcolsep}{6pt}",
+        "    \\begin{tabular}{l|c|c}",
+        "        \\hline",
+        "        \\textsc{Predictor} & \\textsc{All} $r_s$ &"
+        " \\textsc{Beyond} $r_s$ \\\\",
+        "        \\hline",
+        *rows,
+        "        \\hline",
+        "    \\end{tabular}",
+        "\\end{table}",
+    ]
+    with open(os.path.join(HERE, "tab_seoul_gamma.tex"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("  saved tab_seoul_gamma")
+
+
 def copy_artifacts():
     pairs = [
         # mobility-predictor swap (3-seed paired, Seoul)
@@ -687,6 +756,7 @@ if __name__ == "__main__":
     fig_convergence(key="poor", ylabel="Poor-data accuracy",
                     fname="fig_seoul_poor_convergence")
     fig_efficiency()
+    tab_gamma_horizon()
     fig_gamma_horizon()
     fig_analysis("kitti", "KITTI")
     fig_analysis("nuscenes", "nuScenes")

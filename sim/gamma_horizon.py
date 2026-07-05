@@ -53,14 +53,14 @@ def compute(cfg=None, device=None, horizons=(1, 2, 3, 4), window=8,
         np.fill_diagonal(A, False)
         return A
 
-    def realized_beyond(k):
-        """distinct future co-locations over k+1..k+W with vehicles NOT in
-        range now (the beyond-direct-encounter contacts)."""
-        now = adj(k)
+    def realized(k, beyond):
+        """distinct future co-locations over k+1..k+W. beyond=True keeps only
+        vehicles NOT in range now (the store-carry-forward reach)."""
         seen = np.zeros((N, N), dtype=bool)
         for t in range(k + 1, min(k + window, K - 1) + 1):
             seen |= adj(t)
-        seen &= ~now
+        if beyond:
+            seen &= ~adj(k)
         np.fill_diagonal(seen, False)
         return seen.sum(1).astype(float)
 
@@ -69,36 +69,48 @@ def compute(cfg=None, device=None, horizons=(1, 2, 3, 4), window=8,
         cnt = np.bincount(seg, minlength=road.V)
         return cnt[seg].astype(float)
 
+    REGIMES = ("all", "beyond")
     rounds = list(range(3, K - window, stride))
-    gamma_c = {H: [] for H in horizons}
-    blind_c = []
+    gamma_c = {r: {H: [] for H in horizons} for r in REGIMES}
+    blind_c = {r: [] for r in REGIMES}
     for k in rounds:
         mob.k = k
-        gt = realized_beyond(k)
-        if gt.std() == 0:
+        gts = {r: realized(k, r == "beyond") for r in REGIMES}
+        if gts["beyond"].std() == 0:
             continue
         bd = blind_density(k)
-        if bd.std() > 0:
-            blind_c.append(spearmanr(bd, gt).correlation)
+        preds = {}
         for H in horizons:
             cfg.H_max = H
-            g = future_contact_scores(cfg, road, mob, model, road_ei,
-                                      device=device)
-            if np.std(g) > 0:
-                gamma_c[H].append(spearmanr(g, gt).correlation)
+            preds[H] = future_contact_scores(cfg, road, mob, model, road_ei,
+                                             device=device)
+        for r in REGIMES:
+            gt = gts[r]
+            if gt.std() == 0:
+                continue
+            if bd.std() > 0:
+                blind_c[r].append(spearmanr(bd, gt).correlation)
+            for H in horizons:
+                if np.std(preds[H]) > 0:
+                    gamma_c[r][H].append(spearmanr(preds[H], gt).correlation)
 
     H = np.array(horizons, float)
-    gm = np.array([np.mean(gamma_c[h]) for h in horizons])
-    gs = np.array([np.std(gamma_c[h]) for h in horizons])
-    bm = float(np.mean(blind_c))
-    bs = float(np.std(blind_c))
+    kw = {}
+    for r in REGIMES:
+        sfx = "" if r == "beyond" else "_all"   # 'beyond' keeps legacy names
+        kw[f"gamma_mean{sfx}"] = np.array([np.mean(gamma_c[r][h]) for h in horizons])
+        kw[f"gamma_std{sfx}"] = np.array([np.std(gamma_c[r][h]) for h in horizons])
+        kw[f"blind_mean{sfx}"] = float(np.mean(blind_c[r]))
+        kw[f"blind_std{sfx}"] = float(np.std(blind_c[r]))
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    np.savez(out, horizons=H, gamma_mean=gm, gamma_std=gs,
-             blind_mean=bm, blind_std=bs, window=window,
-             n_rounds=len(blind_c))
-    print(f"[gamma-horizon] blind={bm:.3f}  "
-          + "  ".join(f"H{h}={m:.3f}" for h, m in zip(horizons, gm)))
-    print(f"[gamma-horizon] saved {out} (n_rounds={len(blind_c)})")
+    np.savez(out, horizons=H, window=window,
+             n_rounds=len(blind_c["beyond"]), **kw)
+    for r in REGIMES:
+        sfx = "" if r == "beyond" else "_all"
+        print(f"[gamma-horizon] {r:7s} blind={kw['blind_mean'+sfx]:.3f}  "
+              + "  ".join(f"H{h}={m:.3f}"
+                          for h, m in zip(horizons, kw['gamma_mean'+sfx])))
+    print(f"[gamma-horizon] saved {out} (n_rounds={len(blind_c['beyond'])})")
     return out
 
 
