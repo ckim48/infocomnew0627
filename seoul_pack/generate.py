@@ -474,6 +474,101 @@ def fig_analysis_combined():
     print("  saved fig_seoul_analysis_2x4")
 
 
+def _analysis_panel(ax, kind, A, M, order, STY, _smooth, DISPLAY):
+    if kind == "cdf":
+        for sn in order:
+            v = np.sort(A[f"{sn}__accveh_all"].ravel())
+            cdf = np.arange(1, len(v) + 1) / len(v)
+            st = {k: val for k, val in STY[sn].items() if k != "marker"}
+            ax.plot(v, cdf, label=DISPLAY.get(sn, sn), **st)
+        ax.set_xlabel("Per-vehicle final accuracy")
+        ax.set_ylim(0, 1)
+        return "CDF"
+    if kind == "traffic":
+        budget = min(np.cumsum(A[f"{sn}__txmb"])[-1] for sn in order) / 1024.0
+        for sn in order:
+            x = np.cumsum(A[f"{sn}__txmb"]) / 1024.0
+            y = A[f"{sn}__acc"]
+            m = x <= budget
+            K = int(m.sum())
+            ax.plot(x[m], y[m], label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, budget)
+        ax.set_xlabel("Cumulative traffic (GB)")
+        return "Test accuracy"
+    if kind == "mhop":
+        for sn in order:
+            y = _smooth(A[f"{sn}__mhop"], 15)
+            K = len(y); x = np.arange(1, K + 1)
+            ax.plot(x, y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        return "Multi-hop delivery ratio"
+    # useful-delivery
+    dkey = "usat" if "Proposed__usat" in A.files else "sat"
+    for sn in order:
+        y = _smooth(A[f"{sn}__{dkey}"], 15)
+        K = len(y); x = np.arange(1, K + 1)
+        ax.plot(x, y, label=DISPLAY.get(sn, sn),
+                markevery=max(K // 8, 1), markersize=4.5,
+                markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+    ax.set_xlim(0, K)
+    ax.set_xlabel("Global round $k$")
+    return "Useful-delivery ratio"
+
+
+def fig_analysis_split():
+    """The 2x4 combined figure split into two single-column 2x2 figures:
+    (I) per-vehicle CDF + traffic Pareto, (II) multi-hop + useful-delivery;
+    rows = datasets."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY, _smooth
+    datasets = [(t, l) for t, l in DATASETS if os.path.exists(
+        os.path.join(ROOT, f"results/metrics_v2x_analysis_{t}.npz"))]
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_analysis split: need both analysis runs")
+        return
+    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+    for part, kinds in [("2x2a", ["cdf", "traffic"]),
+                        ("2x2b", ["mhop", "useful"])]:
+        fig, axg = plt.subplots(2, 2, figsize=(6.6, 6.1))
+        for row, (tag, label) in enumerate(datasets):
+            A = np.load(os.path.join(ROOT,
+                                     f"results/metrics_v2x_analysis_{tag}.npz"))
+            M = np.load(os.path.join(ROOT,
+                                     f"results/metrics_v2x_real_{tag}.npz"))
+            for col, kind in enumerate(kinds):
+                ax = axg[row, col]
+                ylab = _analysis_panel(ax, kind, A, M, order, STY, _smooth,
+                                       DISPLAY)
+                ax.set_ylabel(f"{label}\n{ylab}" if col == 0 else ylab)
+        for i, ax in enumerate(axg.ravel()):
+            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+            ax.set_box_aspect(1)
+            ax.set_title(f"({'abcd'[i]})", y=-0.33, fontsize=12)
+        h, l = axg[0, 0].get_legend_handles_labels()
+        fig.legend(h, l, loc="upper center", ncol=3,
+                   bbox_to_anchor=(0.5, 1.06),
+                   columnspacing=1.4, handlelength=2.2, fontsize=10)
+        fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.2, w_pad=2.4)
+        for ext in ("png", "pdf"):
+            fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_{part}.{ext}"),
+                        dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  saved fig_seoul_analysis_{part}")
+
+
 def _has_vloss():
     for tag, _ in _avail("results/metrics_v2x_real_{}.npz"):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -632,6 +727,7 @@ if __name__ == "__main__":
     fig_analysis("kitti", "KITTI")
     fig_analysis("nuscenes", "nuScenes")
     fig_analysis_combined()
+    fig_analysis_split()
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")
