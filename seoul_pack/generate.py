@@ -564,7 +564,7 @@ def fig_gamma_horizon(fname="fig_seoul_gamma_horizon"):
                 xy=(H[-1], gm[-1]), xytext=(H[0] + 0.15, gm[-1] + 0.008),
                 fontsize=10, color="#e8000b")
     ax.set_xlabel(r"Prediction horizon $H$ (segment hops)")
-    ax.set_ylabel("Future-contact rank corr. " + r"$\rho$")
+    ax.set_ylabel("Future-contact rank corr. " + r"$r_s$")   # Spearman;
     ax.set_xticks(H)
     ax.set_xlim(H[0] - 0.15, H[-1] + 0.15)
     ax.grid(True, ls="--", lw=0.6, alpha=0.5)
@@ -662,11 +662,14 @@ def fig_analysis(tag="kitti", label="KITTI"):
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_box_aspect(0.62)                       # flatter panels (space)
-        ax.set_title(f"({'abcd'[i]})", y=-0.42, fontsize=12)
+        # panel letter placed BELOW the x-axis label (transAxes) so the two
+        # never collide on the short panels
+        ax.text(0.5, -0.62, f"({'abcd'[i]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.04),
                columnspacing=1.1, handlelength=2.0, fontsize=10)
-    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=1.3, w_pad=2.4)
+    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=1.6, w_pad=2.4)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_{tag}.{ext}"),
                     dpi=300, bbox_inches="tight")
