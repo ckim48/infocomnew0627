@@ -113,8 +113,11 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         # method label BELOW the panel (xlabel), so it never overlaps the dots
         ax.set_xlabel(f"{disp(s)}\nmean acc = {acc.mean():.3f}", fontsize=12)
 
-    fig.subplots_adjust(wspace=0.04, hspace=0.16)
-    cbar = fig.colorbar(sc, ax=axes.tolist(), fraction=0.03, pad=0.02)
+    # horizontal colorbar UNDER the 2x2 grid so the maps stay left-right
+    # centered (a right-side colorbar shifts the map block visibly left)
+    fig.subplots_adjust(wspace=0.04, hspace=0.22)
+    cbar = fig.colorbar(sc, ax=axes.tolist(), orientation="horizontal",
+                        fraction=0.045, pad=0.10, aspect=45)
     cbar.set_label("Vehicle model accuracy")
 
     out = os.path.join(fig_dir, "fig_infocom_v2x_map.png")
