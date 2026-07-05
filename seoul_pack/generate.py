@@ -271,22 +271,31 @@ def tab_gamma_horizon():
         txt = f"{float(m):.2f} $\\pm$ {se(s):.2f}"
         return f"\\textbf{{{txt}}}" if best else txt
 
-    # rows: topology-blind baseline, then Gamma at each horizon
-    bmax = float(D["gamma_mean_all"].max())          # best 'all' column value
-    bmax_b = float(D["gamma_mean"].max())            # best 'beyond' column value
-    rows = []
-    rows.append("        Topology-blind density & "
-                + cell(D["blind_mean_all"], D["blind_std_all"], False) + " & "
-                + cell(D["blind_mean"], D["blind_std"], False) + " \\\\")
-    rows.append("        \\hline")
-    for i, h in enumerate(Hs):
-        ma, sa = float(D["gamma_mean_all"][i]), float(D["gamma_std_all"][i])
-        mb, sb = float(D["gamma_mean"][i]), float(D["gamma_std"][i])
-        rows.append(f"        $\\Gamma_j$ ($H{{=}}{h}$) & "
-                    + cell(ma, sa, ma == bmax) + " & "
-                    + cell(mb, sb, mb == bmax_b) + " \\\\")
+    # column order: (All r_s, All AUC, Beyond r_s, Beyond AUC)
+    COLS = [("gamma_mean_all", "gamma_std_all", "blind_mean_all", "blind_std_all"),
+            ("gamma_auc_mean_all", "gamma_auc_std_all",
+             "blind_auc_mean_all", "blind_auc_std_all"),
+            ("gamma_mean", "gamma_std", "blind_mean", "blind_std"),
+            ("gamma_auc_mean", "gamma_auc_std", "blind_auc_mean", "blind_auc_std")]
+    best = [float(D[gm].max()) for gm, _, _, _ in COLS]   # Gamma best per column
 
-    # relative gains H1 -> H4 for the caption
+    def line(label, getter):
+        cells = []
+        for j, (gm, gs, bm, bs) in enumerate(COLS):
+            m, s, isbest = getter(gm, gs, bm, bs, j)
+            cells.append(cell(m, s, isbest))
+        return f"        {label} & " + " & ".join(cells) + " \\\\"
+
+    rows = [line("Topology-blind density",
+                 lambda gm, gs, bm, bs, j: (float(D[bm]), float(D[bs]), False)),
+            "        \\hline"]
+    for i, h in enumerate(Hs):
+        rows.append(line(
+            f"$\\Gamma_j$ ($H{{=}}{h}$)",
+            lambda gm, gs, bm, bs, j, i=i:
+                (float(D[gm][i]), float(D[gs][i]), float(D[gm][i]) == best[j])))
+
+    # relative gains H1 -> H4 (r_s) for the caption
     ga = D["gamma_mean_all"]; gb = D["gamma_mean"]
     rel_all = 100 * (ga[-1] - ga[0]) / ga[0]
     rel_bey = 100 * (gb[-1] - gb[0]) / gb[0]
@@ -294,27 +303,32 @@ def tab_gamma_horizon():
         "\\begin{table}[t]",
         "    \\centering",
         "    \\caption{Predictor quality of the future-contact score"
-        " $\\Gamma_j$ on the real Seoul-Gangnam V2X trace ($N{=}180$):"
-        " Spearman rank correlation $r_s$ between the predicted score and the"
-        f" realized future co-locations over the next $W{{=}}{W}$ rounds"
-        f" (averaged over {n} rounds, $\\pm$ s.e.). \\textsc{{All}} counts every"
-        " future co-location; \\textsc{Beyond} keeps only vehicles out of range"
-        " at round $k$ (the store-carry-forward reach). The road-segment-aware"
-        " $\\Gamma_j$ rises monotonically with the horizon $H$ and exceeds the"
+        " $\\Gamma_j$ on the real Seoul-Gangnam V2X trace ($N{=}180$), scoring"
+        " each vehicle against its realized future co-locations over the next"
+        f" $W{{=}}{W}$ rounds (averaged over {n} rounds, $\\pm$ s.e.). $r_s$ is"
+        " the Spearman rank correlation; \\textsc{Auc} is the probability the"
+        " predictor ranks a truly high-contact vehicle above a low-contact one"
+        " ($0.5$ = random). \\textsc{All} counts every future co-location;"
+        " \\textsc{Beyond} keeps only vehicles out of range at round $k$ (the"
+        " store-carry-forward reach). The road-segment-aware $\\Gamma_j$ rises"
+        " monotonically with the horizon $H$ on every metric and exceeds the"
         " topology-blind density count; the gain concentrates in the"
         f" beyond-encounter regime (${rel_bey:+.0f}\\%$ vs ${rel_all:+.0f}\\%$"
-        " over $H{=}1{\\to}4$).}",
+        " in $r_s$ over $H{=}1{\\to}4$).}",
         "    \\label{tab:seoul_gamma}",
         "    \\renewcommand{\\arraystretch}{1.15}",
-        "    \\setlength{\\tabcolsep}{6pt}",
-        "    \\begin{tabular}{l|c|c}",
+        "    \\setlength{\\tabcolsep}{4pt}",
+        "    \\resizebox{\\columnwidth}{!}{%",
+        "    \\begin{tabular}{l|cc|cc}",
         "        \\hline",
-        "        \\textsc{Predictor} & \\textsc{All} $r_s$ &"
-        " \\textsc{Beyond} $r_s$ \\\\",
+        "        & \\multicolumn{2}{c|}{\\textsc{All future}}"
+        " & \\multicolumn{2}{c}{\\textsc{Beyond-encounter}} \\\\",
+        "        \\textsc{Predictor} & $r_s$ & \\textsc{Auc}"
+        " & $r_s$ & \\textsc{Auc} \\\\",
         "        \\hline",
         *rows,
         "        \\hline",
-        "    \\end{tabular}",
+        "    \\end{tabular}}",
         "\\end{table}",
     ]
     with open(os.path.join(HERE, "tab_seoul_gamma.tex"), "w") as f:

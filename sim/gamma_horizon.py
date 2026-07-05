@@ -22,6 +22,7 @@ import os
 import numpy as np
 import torch
 from scipy.stats import spearmanr
+from sklearn.metrics import roc_auc_score
 
 from .config import Config
 from .mobility import RoadNetwork, MobilitySim
@@ -69,17 +70,29 @@ def compute(cfg=None, device=None, horizons=(1, 2, 3, 4), window=8,
         cnt = np.bincount(seg, minlength=road.V)
         return cnt[seg].astype(float)
 
+    def rs(pred, gt):
+        return spearmanr(pred, gt).correlation
+
+    def auc(pred, gt):
+        """P(pred ranks a true high-contact vehicle above a low one); the
+        top-quartile by realized contacts are the positives. 0.5 = random."""
+        lab = (gt >= np.quantile(gt, 0.75)).astype(int)
+        if lab.sum() == 0 or lab.sum() == len(lab):
+            return np.nan
+        return roc_auc_score(lab, pred)
+
+    METRICS = {"rs": rs, "auc": auc}
     REGIMES = ("all", "beyond")
     rounds = list(range(3, K - window, stride))
-    gamma_c = {r: {H: [] for H in horizons} for r in REGIMES}
-    blind_c = {r: [] for r in REGIMES}
+    # collector[metric][regime]['blind' | H] -> list over rounds
+    coll = {m: {r: {"blind": [], **{H: [] for H in horizons}}
+                for r in REGIMES} for m in METRICS}
     for k in rounds:
         mob.k = k
         gts = {r: realized(k, r == "beyond") for r in REGIMES}
         if gts["beyond"].std() == 0:
             continue
-        bd = blind_density(k)
-        preds = {}
+        preds = {"blind": blind_density(k)}
         for H in horizons:
             cfg.H_max = H
             preds[H] = future_contact_scores(cfg, road, mob, model, road_ei,
@@ -88,29 +101,37 @@ def compute(cfg=None, device=None, horizons=(1, 2, 3, 4), window=8,
             gt = gts[r]
             if gt.std() == 0:
                 continue
-            if bd.std() > 0:
-                blind_c[r].append(spearmanr(bd, gt).correlation)
-            for H in horizons:
-                if np.std(preds[H]) > 0:
-                    gamma_c[r][H].append(spearmanr(preds[H], gt).correlation)
+            for name, p in preds.items():
+                if np.std(p) == 0:
+                    continue
+                for m, fn in METRICS.items():
+                    coll[m][r][name].append(fn(p, gt))
 
     H = np.array(horizons, float)
     kw = {}
-    for r in REGIMES:
-        sfx = "" if r == "beyond" else "_all"   # 'beyond' keeps legacy names
-        kw[f"gamma_mean{sfx}"] = np.array([np.mean(gamma_c[r][h]) for h in horizons])
-        kw[f"gamma_std{sfx}"] = np.array([np.std(gamma_c[r][h]) for h in horizons])
-        kw[f"blind_mean{sfx}"] = float(np.mean(blind_c[r]))
-        kw[f"blind_std{sfx}"] = float(np.std(blind_c[r]))
+    for m in METRICS:
+        mp = "" if m == "rs" else f"{m}_"        # 'rs' keeps legacy key names
+        for r in REGIMES:
+            sfx = "" if r == "beyond" else "_all"
+            c = coll[m][r]
+            kw[f"gamma_{mp}mean{sfx}"] = np.array(
+                [np.nanmean(c[h]) for h in horizons])
+            kw[f"gamma_{mp}std{sfx}"] = np.array(
+                [np.nanstd(c[h]) for h in horizons])
+            kw[f"blind_{mp}mean{sfx}"] = float(np.nanmean(c["blind"]))
+            kw[f"blind_{mp}std{sfx}"] = float(np.nanstd(c["blind"]))
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    np.savez(out, horizons=H, window=window,
-             n_rounds=len(blind_c["beyond"]), **kw)
-    for r in REGIMES:
-        sfx = "" if r == "beyond" else "_all"
-        print(f"[gamma-horizon] {r:7s} blind={kw['blind_mean'+sfx]:.3f}  "
-              + "  ".join(f"H{h}={m:.3f}"
-                          for h, m in zip(horizons, kw['gamma_mean'+sfx])))
-    print(f"[gamma-horizon] saved {out} (n_rounds={len(blind_c['beyond'])})")
+    n_rounds = len(coll["rs"]["beyond"]["blind"])
+    np.savez(out, horizons=H, window=window, n_rounds=n_rounds, **kw)
+    for m in METRICS:
+        mp = "" if m == "rs" else f"{m}_"
+        for r in REGIMES:
+            sfx = "" if r == "beyond" else "_all"
+            print(f"[gamma-horizon] {m:4s} {r:7s} "
+                  f"blind={kw[f'blind_{mp}mean'+sfx]:.3f}  "
+                  + "  ".join(f"H{h}={x:.3f}" for h, x
+                              in zip(horizons, kw[f'gamma_{mp}mean'+sfx])))
+    print(f"[gamma-horizon] saved {out} (n_rounds={n_rounds})")
     return out
 
 

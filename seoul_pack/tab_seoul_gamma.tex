@@ -1,19 +1,21 @@
 \begin{table}[t]
     \centering
-    \caption{Predictor quality of the future-contact score $\Gamma_j$ on the real Seoul-Gangnam V2X trace ($N{=}180$): Spearman rank correlation $r_s$ between the predicted score and the realized future co-locations over the next $W{=}8$ rounds (averaged over 39 rounds, $\pm$ s.e.). \textsc{All} counts every future co-location; \textsc{Beyond} keeps only vehicles out of range at round $k$ (the store-carry-forward reach). The road-segment-aware $\Gamma_j$ rises monotonically with the horizon $H$ and exceeds the topology-blind density count; the gain concentrates in the beyond-encounter regime ($+52\%$ vs $+18\%$ over $H{=}1{\to}4$).}
+    \caption{Predictor quality of the future-contact score $\Gamma_j$ on the real Seoul-Gangnam V2X trace ($N{=}180$), scoring each vehicle against its realized future co-locations over the next $W{=}8$ rounds (averaged over 39 rounds, $\pm$ s.e.). $r_s$ is the Spearman rank correlation; \textsc{Auc} is the probability the predictor ranks a truly high-contact vehicle above a low-contact one ($0.5$ = random). \textsc{All} counts every future co-location; \textsc{Beyond} keeps only vehicles out of range at round $k$ (the store-carry-forward reach). The road-segment-aware $\Gamma_j$ rises monotonically with the horizon $H$ on every metric and exceeds the topology-blind density count; the gain concentrates in the beyond-encounter regime ($+52\%$ vs $+18\%$ in $r_s$ over $H{=}1{\to}4$).}
     \label{tab:seoul_gamma}
     \renewcommand{\arraystretch}{1.15}
-    \setlength{\tabcolsep}{6pt}
-    \begin{tabular}{l|c|c}
+    \setlength{\tabcolsep}{4pt}
+    \resizebox{\columnwidth}{!}{%
+    \begin{tabular}{l|cc|cc}
         \hline
-        \textsc{Predictor} & \textsc{All} $r_s$ & \textsc{Beyond} $r_s$ \\
+        & \multicolumn{2}{c|}{\textsc{All future}} & \multicolumn{2}{c}{\textsc{Beyond-encounter}} \\
+        \textsc{Predictor} & $r_s$ & \textsc{Auc} & $r_s$ & \textsc{Auc} \\
         \hline
-        Topology-blind density & 0.38 $\pm$ 0.01 & 0.15 $\pm$ 0.01 \\
+        Topology-blind density & 0.38 $\pm$ 0.01 & 0.66 $\pm$ 0.01 & 0.15 $\pm$ 0.01 & 0.57 $\pm$ 0.01 \\
         \hline
-        $\Gamma_j$ ($H{=}1$) & 0.41 $\pm$ 0.01 & 0.18 $\pm$ 0.01 \\
-        $\Gamma_j$ ($H{=}2$) & 0.42 $\pm$ 0.01 & 0.19 $\pm$ 0.01 \\
-        $\Gamma_j$ ($H{=}3$) & 0.46 $\pm$ 0.01 & 0.24 $\pm$ 0.01 \\
-        $\Gamma_j$ ($H{=}4$) & \textbf{0.48 $\pm$ 0.01} & \textbf{0.27 $\pm$ 0.01} \\
+        $\Gamma_j$ ($H{=}1$) & 0.41 $\pm$ 0.01 & 0.69 $\pm$ 0.01 & 0.18 $\pm$ 0.01 & 0.58 $\pm$ 0.01 \\
+        $\Gamma_j$ ($H{=}2$) & 0.42 $\pm$ 0.01 & 0.70 $\pm$ 0.01 & 0.19 $\pm$ 0.01 & 0.59 $\pm$ 0.01 \\
+        $\Gamma_j$ ($H{=}3$) & 0.46 $\pm$ 0.01 & 0.72 $\pm$ 0.01 & 0.24 $\pm$ 0.01 & 0.62 $\pm$ 0.01 \\
+        $\Gamma_j$ ($H{=}4$) & \textbf{0.49 $\pm$ 0.01} & \textbf{0.74 $\pm$ 0.01} & \textbf{0.27 $\pm$ 0.01} & \textbf{0.64 $\pm$ 0.01} \\
         \hline
-    \end{tabular}
+    \end{tabular}}
 \end{table}
