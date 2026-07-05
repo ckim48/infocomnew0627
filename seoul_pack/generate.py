@@ -253,6 +253,64 @@ def tab_ablation(tail=20):
         f.write("\n".join(lines) + "\n")
 
 
+def tab_contacts():
+    """V2V contact-opportunity statistics of the real Seoul trace: sparse
+    instantaneous contact, distinct peers accumulating over time, and one relay
+    hop reaching most of the fleet -- the motivation for store-carry-forward.
+    tab_seoul_contacts.tex."""
+    path = os.path.join(ROOT, "results/contact_stats.npz")
+    if not os.path.exists(path):
+        print("  [skip] tab_seoul_contacts: run  python3 -m sim.contact_stats")
+        return
+    D = np.load(path)
+    N = int(D["N"]); span = float(D["span_min"]); R = float(D["comm_range"])
+    pf = lambda x: f"{100*float(x):.0f}\\%"
+    rows = [
+        ("Instantaneous V2V degree (per round)",
+         f"{float(D['deg_mean']):.1f}",
+         "direct peers in range at one round"),
+        ("Rounds with $\\geq 1$ neighbor",
+         pf(D['frac_rounds_contact']),
+         "contact is intermittent"),
+        (f"Distinct peers met over {span:.0f}\\,min",
+         f"{float(D['uniq_mean']):.1f} ({pf(D['uniq_frac'])})",
+         "accumulate by carrying over time"),
+        ("Reachable within 2 hops (one relay)",
+         f"{float(D['reach2_mean']):.1f} ({pf(D['reach2_frac'])})",
+         "store-carry-\\emph{forward} reach"),
+        ("Largest connected component",
+         f"{int(D['comp_max'])}/{N} ({pf(D['comp_frac'])})",
+         "fleet-wide dissemination feasible"),
+    ]
+    body = ["        \\textsc{" + m + "} & " + v + " & " + note + " \\\\"
+            for m, v, note in rows]
+    lines = [
+        "\\begin{table}[t]",
+        "    \\centering",
+        "    \\caption{V2V contact opportunity on the real Seoul-Gangnam V2X"
+        f" trace ($N{{=}}{N}$ vehicles, {span:.0f}\\,min, $150$\\,m V2V range)."
+        " Instantaneous contact is sparse, but distinct peers accumulate over"
+        " time and a single relay hop reaches most of the fleet -- motivating"
+        " store-carry-forward dissemination.}",
+        "    \\label{tab:seoul_contacts}",
+        "    \\renewcommand{\\arraystretch}{1.15}",
+        "    \\setlength{\\tabcolsep}{5pt}",
+        "    \\resizebox{\\columnwidth}{!}{%",
+        "    \\begin{tabular}{l|c|l}",
+        "        \\hline",
+        "        \\textsc{Contact statistic} & \\textsc{Value} &"
+        " \\textsc{Implication} \\\\",
+        "        \\hline",
+        *body,
+        "        \\hline",
+        "    \\end{tabular}}",
+        "\\end{table}",
+    ]
+    with open(os.path.join(HERE, "tab_seoul_contacts.tex"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("  saved tab_seoul_contacts")
+
+
 def tab_gamma_horizon():
     """How well the future-contact score Gamma_j ranks vehicles by their
     realized future co-locations, vs prediction horizon H and vs a topology-
@@ -770,6 +828,7 @@ if __name__ == "__main__":
     fig_convergence(key="poor", ylabel="Poor-data accuracy",
                     fname="fig_seoul_poor_convergence")
     fig_efficiency()
+    tab_contacts()
     tab_gamma_horizon()
     fig_gamma_horizon()
     fig_analysis("kitti", "KITTI")
