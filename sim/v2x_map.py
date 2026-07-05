@@ -92,7 +92,9 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     }
     src = providers.get(basemap, providers["voyager"])
 
-    fig, axgrid = plt.subplots(2, 2, figsize=(9.6, 9.2),
+    # match the seoul_pack analysis figures' width (~6.6in) so both render at a
+    # consistent font scale when placed at the same column width in the paper
+    fig, axgrid = plt.subplots(2, 2, figsize=(6.6, 6.3),
                                sharex=True, sharey=True)
     axes = axgrid.ravel()
     pad = 400
