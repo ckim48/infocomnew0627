@@ -66,7 +66,14 @@ class RealMFL:
         # encoder is therefore what determines their accuracy.
         self.D, self.Q, self.strength, self.theta, self.pairs = {}, {}, {}, {}, []
         self.enc, self.head, self.opt, self.local, self.rich = {}, {}, {}, {}, {}
-        riches = [rng.random() < cfg.frac_good for _ in range(self.N)]
+        rich_mask = data.get("rich_mask")
+        if rich_mask is not None:
+            # partitioned scenario: strong-data vehicles only within a region
+            pr = cfg.frac_good * self.N / max(int(np.sum(rich_mask)), 1)
+            riches = [bool(rich_mask[i]) and (rng.random() < pr)
+                      for i in range(self.N)]
+        else:
+            riches = [rng.random() < cfg.frac_good for _ in range(self.N)]
         n_rich = max(sum(riches), 1)
         pool = rng.permutation(data["train_idx"])
         poor_sizes = {i: int(rng.integers(4, 12)) for i in range(self.N) if not riches[i]}

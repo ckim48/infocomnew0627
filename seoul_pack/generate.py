@@ -436,16 +436,16 @@ def fig_analysis_combined():
         ax.set_xlabel("Cumulative traffic (GB)")
         ax.set_ylabel("Test accuracy")
 
-        ax = axg[row, 2]                                  # multi-hop ratio
+        ax = axg[row, 2]                                  # encoder availability
         for sn in order:
-            y = _smooth(A[f"{sn}__mhop"], 15)
+            y = _smooth(A[f"{sn}__avail"], 15)
             K = len(y); x = np.arange(1, K + 1)
             ax.plot(x, y, label=DISPLAY.get(sn, sn),
                     markevery=max(K // 8, 1), markersize=4.5,
                     markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
         ax.set_xlim(0, K)
         ax.set_xlabel("Global round $k$")
-        ax.set_ylabel("Multi-hop delivery ratio")
+        ax.set_ylabel("Encoder availability")
 
         ax = axg[row, 3]                                  # useful-delivery
         dkey = "usat" if f"Proposed__usat" in A.files else "sat"
@@ -472,101 +472,6 @@ def fig_analysis_combined():
                     dpi=300, bbox_inches="tight")
     plt.close(fig)
     print("  saved fig_seoul_analysis_2x4")
-
-
-def _analysis_panel(ax, kind, A, M, order, STY, _smooth, DISPLAY):
-    if kind == "cdf":
-        for sn in order:
-            v = np.sort(A[f"{sn}__accveh_all"].ravel())
-            cdf = np.arange(1, len(v) + 1) / len(v)
-            st = {k: val for k, val in STY[sn].items() if k != "marker"}
-            ax.plot(v, cdf, label=DISPLAY.get(sn, sn), **st)
-        ax.set_xlabel("Per-vehicle final accuracy")
-        ax.set_ylim(0, 1)
-        return "CDF"
-    if kind == "traffic":
-        budget = min(np.cumsum(A[f"{sn}__txmb"])[-1] for sn in order) / 1024.0
-        for sn in order:
-            x = np.cumsum(A[f"{sn}__txmb"]) / 1024.0
-            y = A[f"{sn}__acc"]
-            m = x <= budget
-            K = int(m.sum())
-            ax.plot(x[m], y[m], label=DISPLAY.get(sn, sn),
-                    markevery=max(K // 8, 1), markersize=4.5,
-                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
-        ax.set_xlim(0, budget)
-        ax.set_xlabel("Cumulative traffic (GB)")
-        return "Test accuracy"
-    if kind == "mhop":
-        for sn in order:
-            y = _smooth(A[f"{sn}__mhop"], 15)
-            K = len(y); x = np.arange(1, K + 1)
-            ax.plot(x, y, label=DISPLAY.get(sn, sn),
-                    markevery=max(K // 8, 1), markersize=4.5,
-                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
-        ax.set_xlim(0, K)
-        ax.set_xlabel("Global round $k$")
-        return "Multi-hop delivery ratio"
-    # useful-delivery
-    dkey = "usat" if "Proposed__usat" in A.files else "sat"
-    for sn in order:
-        y = _smooth(A[f"{sn}__{dkey}"], 15)
-        K = len(y); x = np.arange(1, K + 1)
-        ax.plot(x, y, label=DISPLAY.get(sn, sn),
-                markevery=max(K // 8, 1), markersize=4.5,
-                markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
-    ax.set_xlim(0, K)
-    ax.set_xlabel("Global round $k$")
-    return "Useful-delivery ratio"
-
-
-def fig_analysis_split():
-    """The 2x4 combined figure split into two single-column 2x2 figures:
-    (I) per-vehicle CDF + traffic Pareto, (II) multi-hop + useful-delivery;
-    rows = datasets."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    plt.rcParams.update({
-        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
-        "mathtext.fontset": "dejavuserif", "font.size": 12,
-        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
-        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
-    })
-    from sim.paper_figs import STY, _smooth
-    datasets = [(t, l) for t, l in DATASETS if os.path.exists(
-        os.path.join(ROOT, f"results/metrics_v2x_analysis_{t}.npz"))]
-    if len(datasets) < 2:
-        print("  [skip] fig_seoul_analysis split: need both analysis runs")
-        return
-    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
-    for part, kinds in [("2x2a", ["cdf", "traffic"]),
-                        ("2x2b", ["mhop", "useful"])]:
-        fig, axg = plt.subplots(2, 2, figsize=(6.6, 6.1))
-        for row, (tag, label) in enumerate(datasets):
-            A = np.load(os.path.join(ROOT,
-                                     f"results/metrics_v2x_analysis_{tag}.npz"))
-            M = np.load(os.path.join(ROOT,
-                                     f"results/metrics_v2x_real_{tag}.npz"))
-            for col, kind in enumerate(kinds):
-                ax = axg[row, col]
-                ylab = _analysis_panel(ax, kind, A, M, order, STY, _smooth,
-                                       DISPLAY)
-                ax.set_ylabel(f"{label}\n{ylab}" if col == 0 else ylab)
-        for i, ax in enumerate(axg.ravel()):
-            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-            ax.set_box_aspect(1)
-            ax.set_title(f"({'abcd'[i]})", y=-0.33, fontsize=12)
-        h, l = axg[0, 0].get_legend_handles_labels()
-        fig.legend(h, l, loc="upper center", ncol=3,
-                   bbox_to_anchor=(0.5, 1.06),
-                   columnspacing=1.4, handlelength=2.2, fontsize=10)
-        fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.2, w_pad=2.4)
-        for ext in ("png", "pdf"):
-            fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_{part}.{ext}"),
-                        dpi=300, bbox_inches="tight")
-        plt.close(fig)
-        print(f"  saved fig_seoul_analysis_{part}")
 
 
 def _has_vloss():
@@ -620,6 +525,59 @@ def fig_efficiency():
     print("  saved fig_seoul_efficiency")
 
 
+def fig_gamma_horizon(fname="fig_seoul_gamma_horizon"):
+    """Why the future-contact score Gamma_j needs BOTH road segmentation and a
+    multi-hop horizon.  As the prediction horizon H grows, Gamma -- propagated
+    along the road-segment graph -- ranks vehicles by their realized future
+    beyond-encounter co-locations increasingly well, overtaking a topology-blind
+    density count.  Dataset-independent (shared Seoul V2X mobility)."""
+    path = os.path.join(ROOT, "results/gamma_horizon.npz")
+    if not os.path.exists(path):
+        print("  [skip] fig_seoul_gamma_horizon: run  python3 -m sim.gamma_horizon")
+        return
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.9,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    D = np.load(path)
+    n = max(int(D["n_rounds"]), 1)
+    H = D["horizons"]; gm = D["gamma_mean"]; bm = float(D["blind_mean"])
+    gs = D["gamma_std"] / np.sqrt(n)          # standard error of the round-mean
+    bs = float(D["blind_std"]) / np.sqrt(n)
+    fig, ax = plt.subplots(figsize=(3.5, 2.9))
+    # topology-blind baseline (flat reference)
+    ax.axhspan(bm - bs, bm + bs, color="#7f7f7f", alpha=0.12, lw=0)
+    ax.axhline(bm, color="#7f7f7f", ls=(0, (5, 2)), lw=1.6,
+               label="Topology-blind density")
+    # segment-aware Gamma vs horizon
+    ax.fill_between(H, gm - gs, gm + gs, color="#e8000b", alpha=0.13, lw=0)
+    ax.plot(H, gm, color="#e8000b", ls="-", marker="o", markersize=6,
+            markerfacecolor="white", markeredgewidth=1.4,
+            label=r"$\Gamma_j$ (road-segment aware)")
+    rel = (gm[-1] - gm[0]) / gm[0] * 100.0
+    ax.annotate(f"+{rel:.0f}% over horizon",
+                xy=(H[-1], gm[-1]), xytext=(H[0] + 0.15, gm[-1] + 0.008),
+                fontsize=10, color="#e8000b")
+    ax.set_xlabel(r"Prediction horizon $H$ (segment hops)")
+    ax.set_ylabel("Future-contact rank corr. " + r"$\rho$")
+    ax.set_xticks(H)
+    ax.set_xlim(H[0] - 0.15, H[-1] + 0.15)
+    ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+    ax.legend(loc="lower right", fontsize=9.5, handlelength=1.9,
+              borderaxespad=0.3)
+    fig.tight_layout()
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(HERE, f"{fname}.{ext}"), dpi=300,
+                    bbox_inches="tight")
+    plt.close(fig)
+    print("  saved fig_seoul_gamma_horizon")
+
+
 def fig_analysis(tag="kitti", label="KITTI"):
     """2x2 mechanism/fairness panel:
     (a) per-vehicle final-accuracy CDF   (b) accuracy vs cumulative traffic
@@ -643,7 +601,8 @@ def fig_analysis(tag="kitti", label="KITTI"):
     A = np.load(apath)
     M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
-    fig, axg = plt.subplots(2, 2, figsize=(6.6, 6.1))
+    # wider-than-tall panels: the stacked 2x2 was too tall for a column
+    fig, axg = plt.subplots(2, 2, figsize=(6.6, 5.0))
 
     # (a) per-vehicle final accuracy CDF
     ax = axg[0, 0]
@@ -670,18 +629,19 @@ def fig_analysis(tag="kitti", label="KITTI"):
     ax.set_xlim(0, budget)
     ax.set_xlabel("Cumulative traffic (GB)"); ax.set_ylabel("Test accuracy")
 
-    # (c) multi-hop delivery ratio: fraction of received encoders whose
-    # owner the receiver NEVER directly encountered -- the beyond-direct-
-    # encounter mechanism (structurally zero without store-carry-forward)
+    # (c) encoder availability: fraction of each vehicle's demanded encoders
+    # that are actually present when needed -- the realized payoff of the
+    # Gamma-guided caching + store-carry-forward (what the future-value score
+    # is optimizing for)
     ax = axg[1, 0]
     for sname in order:
-        y = _smooth(A[f"{sname}__mhop"], 15)
+        y = _smooth(A[f"{sname}__avail"], 15)
         K = len(y); x = np.arange(1, K + 1)
         ax.plot(x, y, label=DISPLAY.get(sname, sname),
                 markevery=max(K // 9, 1), markersize=5,
                 markerfacecolor="white", markeredgewidth=1.1, **STY[sname])
     ax.set_xlabel("Global round $k$")
-    ax.set_ylabel("Multi-hop delivery ratio")
+    ax.set_ylabel("Encoder availability")
     ax.set_xlim(0, K)
 
     # (d) useful-delivery ratio vs round (deliveries that actually improve
@@ -701,12 +661,12 @@ def fig_analysis(tag="kitti", label="KITTI"):
 
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-        ax.set_box_aspect(1)
-        ax.set_title(f"({'abcd'[i]})", y=-0.33, fontsize=12)
+        ax.set_box_aspect(0.62)                       # flatter panels (space)
+        ax.set_title(f"({'abcd'[i]})", y=-0.42, fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.03),
+    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.04),
                columnspacing=1.1, handlelength=2.0, fontsize=10)
-    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.2, w_pad=2.4)
+    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=1.3, w_pad=2.4)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_{tag}.{ext}"),
                     dpi=300, bbox_inches="tight")
@@ -724,10 +684,10 @@ if __name__ == "__main__":
     fig_convergence(key="poor", ylabel="Poor-data accuracy",
                     fname="fig_seoul_poor_convergence")
     fig_efficiency()
+    fig_gamma_horizon()
     fig_analysis("kitti", "KITTI")
     fig_analysis("nuscenes", "nuScenes")
     fig_analysis_combined()
-    fig_analysis_split()
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")
