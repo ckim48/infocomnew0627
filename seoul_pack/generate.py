@@ -548,7 +548,7 @@ def fig_analysis_combined():
         print("  [skip] fig_seoul_analysis_2x4: need both analysis runs")
         return
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
-    fig, axg = plt.subplots(2, 4, figsize=(12.6, 6.4))
+    fig, axg = plt.subplots(2, 4, figsize=(12.6, 5.0))
     for row, (tag, label) in enumerate(datasets):
         A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
         M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -605,12 +605,12 @@ def fig_analysis_combined():
 
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-        ax.set_box_aspect(1)
-        ax.set_title(f"({'abcdefgh'[i]})", y=-0.36, fontsize=12)
+        ax.set_box_aspect(0.66)                          # flatter (less tall)
+        ax.set_title(f"({'abcdefgh'[i]})", y=-0.40, fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.02),
                columnspacing=1.3, handlelength=2.2, fontsize=11)
-    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=2.4, w_pad=1.6)
+    fig.tight_layout(rect=[0, 0, 1, 0.985], h_pad=1.4, w_pad=1.6)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_2x4.{ext}"),
                     dpi=300, bbox_inches="tight")
