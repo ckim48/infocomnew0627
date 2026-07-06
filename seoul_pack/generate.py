@@ -55,10 +55,16 @@ def tab_main():
         for s in schemes:
             st[s]["gap"] = st[s]["acc"] - st[s]["poor"]
             if have_parts:
-                for key in ("utl", "utf", "util"):
+                for key in ("utl", "utf"):
                     per_seed = raw[f"{s}__{key}_all"].mean(axis=1)
                     st[s][key] = float(per_seed.mean())
                     st[s][key + "_sd"] = float(per_seed.std())
+                # utility per transmission: raw total utility scales with
+                # volume, so U/Tx is the constraint-faithful comparison
+                tx_rd = float(raw[f"{s}__tx"].mean())
+                per_seed = raw[f"{s}__util_all"].mean(axis=1) / tx_rd
+                st[s]["upt"] = float(per_seed.mean())
+                st[s]["upt_sd"] = float(per_seed.std())
             elif have_util:
                 st[s]["util"] = float(raw[f"{s}__util"].mean())
             if f"{s}__vloss" in raw.files:
@@ -73,9 +79,10 @@ def tab_main():
                           default=None)
         best_tx = min((st[s]["cumtx"] for s in schemes if st[s]["cumtx"]),
                       default=None)
-        best_util = max(st[s]["util"] for s in schemes) if have_util else None
+        best_util = (max(st[s]["util"] for s in schemes)
+                     if (have_util and not have_parts) else None)
         best_parts = ({k: max(st[s][k] for s in schemes)
-                       for k in ("utl", "utf", "util")} if have_parts else None)
+                       for k in ("utl", "utf", "upt")} if have_parts else None)
         best_loss = min(st[s]["loss"] for s in schemes)
 
         def _row(s):
@@ -94,8 +101,10 @@ def tab_main():
                  if e["cumtx"] else f"$>{e['totaltx']}$"),
             ]
             if have_parts:
-                for key in ("utl", "utf", "util"):
-                    u = f"{e[key]:.1f} $\\pm$ {e[key + '_sd']:.1f}"
+                for key, fmt in (("utl", "{:.1f}"), ("utf", "{:.1f}"),
+                                 ("upt", "{:.2f}")):
+                    u = (fmt.format(e[key]) + " $\\pm$ "
+                         + fmt.format(e[key + '_sd']))
                     if e[key] == best_parts[key]:
                         u = f"\\textbf{{{u}}}"
                     cells.append(u)
@@ -124,13 +133,15 @@ def tab_main():
         body.append(r)
     if have_parts:
         util_hdr = (" & \\textsc{U$^{\\mathrm{learn}}$}"
-                    " & \\textsc{U$^{\\mathrm{fwd}}$} & \\textsc{U (total)}")
+                    " & \\textsc{U$^{\\mathrm{fwd}}$} & \\textsc{U/Tx}")
     else:
         util_hdr = " & \\textsc{Utility}" if have_util else ""
     util_cap = ((" \\textsc{U} = mean achieved per-round utility"
-                 " (learning term, $\\nu$-weighted forwarding term, and"
-                 " total $R(\\mathbf{a}(k))$), scored with the true"
-                 " $\\Gamma$ for all schemes;") if have_parts else
+                 " (learning term and $\\nu$-weighted forwarding term of"
+                 " $R(\\mathbf{a}(k))$), scored with the true $\\Gamma$"
+                 " for all schemes; raw total utility scales with"
+                 " transmission volume, so \\textsc{U/Tx} reports utility"
+                 " per encoder transmission;") if have_parts else
                 (" \\textsc{Utility} = mean achieved per-round utility"
                  " $R(\\mathbf{a}(k))$, scored with the true $\\Gamma$ for"
                  " all schemes;" if have_util else ""))
@@ -606,7 +617,9 @@ def fig_analysis_combined():
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_box_aspect(0.66)                          # flatter (less tall)
-        ax.set_title(f"({'abcdefgh'[i]})", y=-0.40, fontsize=12)
+        # panel letter BELOW the x-axis label (transAxes) so they never touch
+        ax.text(0.5, -0.56, f"({'abcdefgh'[i]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.02),
                columnspacing=1.3, handlelength=2.2, fontsize=11)

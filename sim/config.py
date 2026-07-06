@@ -57,6 +57,12 @@ class Config:
     V: float = 2.0                    # Lyapunov V (drift-plus-penalty weight)
     nu: float = 1.0                   # weight nu on forwarding (dissemination) utility
     lam: float = 0.02                 # lambda: cache-cost weight in normalized marginal gain
+    # lambda_tx: optional per-transmission cost R(a) - lam_tx*|a| (modular ->
+    # submodularity preserved). Default 0: pilots showed pricing tx inside the
+    # greedy either prunes forwarding-valuable volume (learn-only selection) or
+    # diverts budget from learning (use_dis=True, acc -5pp); the published
+    # operating point already wins per-transmission utility U/Tx.
+    lam_tx: float = 0.0
     eps0: float = 1e-6                # epsilon_0
 
     # ----- contact budget (C1) -----

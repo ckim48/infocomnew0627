@@ -154,7 +154,10 @@ class CachingForwarding:
         u_fwd = sum(1.0 - p for p in fwd_prod.values())
         self.last_utility_learn = float(u_learn)
         self.last_utility_fwd = float(cfg.nu * u_fwd)
-        self.last_utility = self.last_utility_learn + self.last_utility_fwd
+        # net objective R(a) - lam_tx*|a|; same scoring for every scheme
+        self.last_utility_txcost = float(cfg.lam_tx * len(selected))
+        self.last_utility = (self.last_utility_learn + self.last_utility_fwd
+                             - self.last_utility_txcost)
 
         # ----- apply forwarding: receivers aggregate (Eq. 2), update cache & queue -----
         self._apply(selected, info, need)
@@ -234,7 +237,9 @@ class CachingForwarding:
                     delta_dis = V * nu * dp * d["beta_dis"]
                 else:
                     delta_dis = 0.0
-                delta = delta_learn + delta_dis
+                # per-transmission cost: objective term -lam_tx*|a| enters the
+                # drift-plus-penalty as -V*lam_tx per selected candidate
+                delta = delta_learn + delta_dis - V * cfg.lam_tx
                 eta = delta / (d["t_tx"] + cfg.lam * d["S"])
                 if eta > best_eta:
                     best_eta, best_e, best_delta = eta, e, delta
