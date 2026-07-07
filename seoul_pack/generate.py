@@ -631,6 +631,86 @@ def fig_analysis_combined():
     print("  saved fig_seoul_analysis_2x4")
 
 
+def fig_analysis_3x2():
+    """3x2 companion of the 2x4: availability column dropped; rows = per-vehicle
+    CDF / traffic Pareto / useful-delivery, columns = datasets."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY, _smooth
+    datasets = [(t, l) for t, l in DATASETS if os.path.exists(
+        os.path.join(ROOT, f"results/metrics_v2x_analysis_{t}.npz"))]
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_analysis_3x2: need both analysis runs")
+        return
+    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+    fig, axg = plt.subplots(3, 2, figsize=(6.8, 7.6))
+    for col, (tag, label) in enumerate(datasets):
+        A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
+        M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+
+        def gv(sn, metric):     # prefer the 3-seed main run; fall back to A
+            k = f"{sn}__{metric}"
+            return M[k] if k in M.files else A[k]
+
+        ax = axg[0, col]                                  # CDF
+        for sn in order:
+            v = np.sort(gv(sn, "accveh_all").ravel())
+            cdf = np.arange(1, len(v) + 1) / len(v)
+            st = {k: val for k, val in STY[sn].items() if k != "marker"}
+            ax.plot(v, cdf, label=DISPLAY.get(sn, sn), **st)
+        ax.set_title(label, fontsize=12)
+        ax.set_xlabel("Per-vehicle final accuracy")
+        ax.set_ylabel("CDF" if col == 0 else "")
+        ax.set_ylim(0, 1)
+
+        ax = axg[1, col]                                  # traffic Pareto
+        budget = min(np.cumsum(gv(sn, "txmb"))[-1] for sn in order) / 1024.0
+        for sn in order:
+            x = np.cumsum(gv(sn, "txmb")) / 1024.0
+            y = gv(sn, "acc")
+            m = x <= budget
+            K = int(m.sum())
+            ax.plot(x[m], y[m], label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, budget)
+        ax.set_xlabel("Cumulative traffic (GB)")
+        ax.set_ylabel("Test accuracy" if col == 0 else "")
+
+        ax = axg[2, col]                                  # useful-delivery
+        for sn in order:
+            y = _smooth(gv(sn, "usat"), 15)
+            K = len(y); x = np.arange(1, K + 1)
+            ax.plot(x, y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("Useful-delivery ratio" if col == 0 else "")
+
+    for i, ax in enumerate(axg.ravel()):
+        ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.set_box_aspect(0.66)
+        ax.text(0.5, -0.52, f"({'abcdef'[i]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=12)
+    h, l = axg[0, 0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.015),
+               columnspacing=1.0, handlelength=1.8, fontsize=9.5)
+    fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=1.8, w_pad=2.0)
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_3x2.{ext}"),
+                    dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print("  saved fig_seoul_analysis_3x2")
+
+
 def _has_vloss():
     for tag, _ in _avail("results/metrics_v2x_real_{}.npz"):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -856,6 +936,7 @@ if __name__ == "__main__":
     fig_analysis("kitti", "KITTI")
     fig_analysis("nuscenes", "nuScenes")
     fig_analysis_combined()
+    fig_analysis_3x2()
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")
