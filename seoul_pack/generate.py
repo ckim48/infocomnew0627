@@ -708,12 +708,12 @@ def fig_analysis_3x2():
         ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
         if i % 2 == 1:                       # right column: y numbers on the outer edge
             ax.yaxis.tick_right()
-        ax.text(0.5, -0.52, f"({'abcdef'[i]})", transform=ax.transAxes,
-                ha="center", va="top", fontsize=12)
+        ax.text(0.5, -0.43, f"({'abcdef'[i]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=12)   # tuck the label under its own xlabel
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.015),
                columnspacing=1.0, handlelength=1.8, fontsize=9.5)
-    fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=1.8, w_pad=0.5)
+    fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=3.0, w_pad=0.5)
     fig.subplots_adjust(wspace=0.05)   # tight columns; right-col y numbers moved outward
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_3x2.{ext}"),
