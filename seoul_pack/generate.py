@@ -706,7 +706,8 @@ def fig_analysis_3x2():
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.015),
                columnspacing=1.0, handlelength=1.8, fontsize=9.5)
-    fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=1.8, w_pad=2.0)
+    fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=1.8, w_pad=0.5)
+    fig.subplots_adjust(wspace=0.13)   # halve inter-column gap (0.70 -> 0.36in)
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_3x2.{ext}"),
                     dpi=300, bbox_inches="tight")
