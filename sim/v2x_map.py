@@ -115,7 +115,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
 
     # horizontal colorbar UNDER the 2x2 grid so the maps stay left-right
     # centered (a right-side colorbar shifts the map block visibly left)
-    fig.subplots_adjust(wspace=0.04, hspace=0.22)
+    fig.subplots_adjust(wspace=0.04, hspace=0.35)   # keep top-row 'mean acc' off the bottom maps
     cbar = fig.colorbar(sc, ax=axes.tolist(), orientation="horizontal",
                         fraction=0.045, pad=0.10, aspect=45)
     cbar.set_label("Vehicle model accuracy")
