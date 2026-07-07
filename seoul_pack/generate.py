@@ -650,6 +650,7 @@ def fig_analysis_3x2():
         print("  [skip] fig_seoul_analysis_3x2: need both analysis runs")
         return
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+    from matplotlib.ticker import MultipleLocator, FormatStrFormatter
     fig, axg = plt.subplots(3, 2, figsize=(6.8, 7.6))
     for col, (tag, label) in enumerate(datasets):
         A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
@@ -694,6 +695,8 @@ def fig_analysis_3x2():
         ax.set_xlim(0, K)
         ax.set_xlabel("Global round $k$")
         ax.set_ylabel("Useful-delivery ratio" if col == 0 else "")
+        ax.yaxis.set_major_locator(MultipleLocator(0.1))   # drops 0.15 tick
+        ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))  # 0.10 -> 0.1
 
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
