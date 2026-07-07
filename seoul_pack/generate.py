@@ -651,7 +651,7 @@ def fig_analysis_3x2():
         return
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
     from matplotlib.ticker import FormatStrFormatter
-    fig, axg = plt.subplots(3, 2, figsize=(6.8, 7.6))
+    fig, axg = plt.subplots(3, 2, figsize=(6.3, 7.6))
     for col, (tag, label) in enumerate(datasets):
         A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
         M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
