@@ -650,7 +650,7 @@ def fig_analysis_3x2():
         print("  [skip] fig_seoul_analysis_3x2: need both analysis runs")
         return
     order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
-    from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+    from matplotlib.ticker import FormatStrFormatter
     fig, axg = plt.subplots(3, 2, figsize=(6.8, 7.6))
     for col, (tag, label) in enumerate(datasets):
         A = np.load(os.path.join(ROOT, f"results/metrics_v2x_analysis_{tag}.npz"))
@@ -670,6 +670,7 @@ def fig_analysis_3x2():
         ax.set_xlabel("Per-vehicle final accuracy")
         ax.set_ylabel("CDF" if col == 0 else "")
         ax.set_ylim(0, 1)
+        ax.set_yticks([0, 0.5, 1.0])
 
         ax = axg[1, col]                                  # traffic Pareto
         budget = min(np.cumsum(gv(sn, "txmb"))[-1] for sn in order) / 1024.0
@@ -684,6 +685,10 @@ def fig_analysis_3x2():
         ax.set_xlim(0, budget)
         ax.set_xlabel("Cumulative traffic (GB)")
         ax.set_ylabel("Test accuracy" if col == 0 else "")
+        if tag == "kitti":
+            ax.set_ylim(0.3, 0.6); ax.set_yticks([0.3, 0.4, 0.5, 0.6])
+        else:
+            ax.set_ylim(0.4, 0.8); ax.set_yticks([0.4, 0.5, 0.6, 0.7, 0.8])
 
         ax = axg[2, col]                                  # useful-delivery
         for sn in order:
@@ -695,19 +700,21 @@ def fig_analysis_3x2():
         ax.set_xlim(0, K)
         ax.set_xlabel("Global round $k$")
         ax.set_ylabel("Useful-delivery ratio" if col == 0 else "")
-        ax.yaxis.set_major_locator(MultipleLocator(0.1))   # drops 0.15 tick
-        ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))  # 0.10 -> 0.1
+        ax.set_ylim(0, 0.2); ax.set_yticks([0, 0.1, 0.2])   # top/bottom values, no 0.15
 
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         ax.set_box_aspect(0.66)
+        ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        if i % 2 == 1:                       # right column: y numbers on the outer edge
+            ax.yaxis.tick_right()
         ax.text(0.5, -0.52, f"({'abcdef'[i]})", transform=ax.transAxes,
                 ha="center", va="top", fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, bbox_to_anchor=(0.5, 1.015),
                columnspacing=1.0, handlelength=1.8, fontsize=9.5)
     fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=1.8, w_pad=0.5)
-    fig.subplots_adjust(wspace=0.13)   # halve inter-column gap (0.70 -> 0.36in)
+    fig.subplots_adjust(wspace=0.05)   # tight columns; right-col y numbers moved outward
     for ext in ("png", "pdf"):
         fig.savefig(os.path.join(HERE, f"fig_seoul_analysis_3x2.{ext}"),
                     dpi=300, bbox_inches="tight")
