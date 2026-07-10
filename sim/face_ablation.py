@@ -33,6 +33,7 @@ VARIANTS = {
     "w/o future value":   dict(use_future=False),
     "w/o coverage":       dict(use_coverage=False),
     "w/o tickets":        dict(use_tickets=False),
+    "w/o ticket split":   dict(use_split=False),
     "w/o ridge gain":     dict(use_ridge=False),
     "w/o cache refresh":  dict(refresh="lru"),
 }

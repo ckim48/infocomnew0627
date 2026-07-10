@@ -80,12 +80,14 @@ class Config:
     face_Qpub: int = 10               # publication period Q_pub (real backend)
     face_alpha_g: float = 0.6         # optimism bonus alpha_g in the ridge gain predictor
     face_ridge_lam: float = 1.0       # ridge regularization
-    face_ridge_decay: float = 0.995   # sliding-window decay of the ridge sufficient stats
+    face_ridge_decay: float = 0.98    # sliding-window decay of the ridge sufficient stats
+    face_g_floor: float = 0.2         # exploration floor on the immediate gain term
     face_decay: float = 0.97          # exponential decay of zone transition/contact counts
     face_alpha_P: float = 0.3         # adjacency smoothing alpha_P in P-hat (Eq. 11)
     face_alpha_C: float = 1.0         # Beta prior alpha_C in kappa-hat (Eq. 12)
     face_beta_C: float = 3.0          # Beta prior beta_C in kappa-hat (Eq. 12)
     face_mu: float = 0.85             # forecast blend mu_q = mu_v (Eq. 13)
+    face_Nev: int = 6                 # per-round candidate evaluation budget N_ev
 
     # ----- hierarchical GAT mobility prediction -----
     gat_hidden: int = 32

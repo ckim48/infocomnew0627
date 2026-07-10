@@ -26,6 +26,8 @@ LABELS = {
                           r"$\Omega_{z,x}^{(h)}\!\equiv\!1$ in \eqref{eq:residual_coverage}"),
     "w/o tickets":       (r"w/o copy tickets",
                           r"$K_x\!=\!\infty$ in \eqref{eq:ticket_update}"),
+    "w/o ticket split":  (r"w/o value-weighted split",
+                          r"$g_{ijx}\!=\!1$ in \eqref{eq:ticket_split}"),
     "w/o ridge gain":    (r"w/o gain prediction",
                           r"mean bandit for \eqref{eq:predicted_gain}"),
     "w/o cache refresh": (r"w/o coverage-aware refresh",

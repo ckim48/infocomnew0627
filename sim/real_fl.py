@@ -238,6 +238,13 @@ class RealMFL:
         g = max(float(s_m) - float(self.strength[(i, r)]), 0.0)
         return g, None, None
 
+    def _enc_weight(self, i, r):
+        """Sample-size weight n_i of vehicle i's own modality-r encoder in
+        aggregation (Eq. 1): poor vehicles freeze their encoders and train
+        only the fusion head, so their encoder-training sample count is 0 and
+        a received encoder replaces the frozen one (omega = 1)."""
+        return float(self.Dmr(i, r)) if self.rich.get(i, False) else 0.0
+
     # ---- encoder-version support (new FACE system model) ----
     def snapshot_encoder(self, i, r):
         """Immutable CPU snapshot theta_x of the current modality-r encoder."""
@@ -264,7 +271,7 @@ class RealMFL:
                   for k, v in self.enc[i][r].state_dict().items()}
         cand = _fedavg(
             [backup, {k: v.to(self.device) for k, v in sd.items()}],
-            [self.Dmr(i, r), self.Dmr(m, r)])
+            [self._enc_weight(i, r), self.Dmr(m, r)])
         self.enc[i][r].load_state_dict(cand)
         after = self._val_acc_single(i)
         self.enc[i][r].load_state_dict(backup)
@@ -276,7 +283,7 @@ class RealMFL:
         if not received or r not in self.avail[i]:
             return
         sds = [self.enc[i][r].state_dict()]
-        ws = [self.Dmr(i, r)]
+        ws = [self._enc_weight(i, r)]
         for (m, s_m) in received:
             if isinstance(s_m, dict):             # immutable version snapshot
                 sds.append({k: v.to(self.device) for k, v in s_m.items()})

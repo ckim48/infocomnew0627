@@ -76,7 +76,10 @@ class RidgeGain:
     def _get(self, r):
         if r not in self.A:
             self.A[r] = np.eye(self.DIM) * self.cfg.face_ridge_lam
+            # weak prior mean of 0.3 on the intercept: bootstraps forwarding
+            # before any gains are observed, washed out by real samples
             self.b[r] = np.zeros(self.DIM)
+            self.b[r][0] = self.cfg.face_ridge_lam * 0.3
         return self.A[r], self.b[r]
 
     def update(self, r, psi, y):
@@ -86,19 +89,23 @@ class RidgeGain:
             + (1 - g) * np.eye(self.DIM) * self.cfg.face_ridge_lam
         self.b[r] = g * b + psi * y
 
-    def predict(self, r, Psi):
-        """Psi: [n, d] -> optimistic gains in [0,1]."""
+    def predict(self, r, Psi, optimistic=False):
+        """Psi: [n, d] -> gains in [0,1]. Posterior mean by default (used for
+        forwarding and zone summaries, Eq. 10); the optimistic UCB variant is
+        used only to rank candidates for local evaluation under N_ev."""
         A, b = self._get(r)
         Ainv = np.linalg.inv(A)
         mu = Psi @ (Ainv @ b)
-        bonus = self.cfg.face_alpha_g * np.sqrt(
-            np.maximum(np.einsum("nd,dk,nk->n", Psi, Ainv, Psi), 0.0))
-        return np.clip(mu + bonus, 0.0, 1.0)
+        if optimistic:
+            mu = mu + self.cfg.face_alpha_g * np.sqrt(
+                np.maximum(np.einsum("nd,dk,nk->n", Psi, Ainv, Psi), 0.0))
+        return np.clip(mu, 0.0, 1.0)
 
 
 FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
                   use_coverage=True,   # residual coverage Omega (Eq. 15)
                   use_tickets=True,    # replication bound K_x / custody transfer
+                  use_split=True,      # value-weighted ticket splitting (Eq. 7)
                   use_ridge=True,      # ridge gain prediction (else mean bandit)
                   use_relay=True,      # forward cached copies of OTHERS' versions
                   use_demand=True,     # receiver-demand-aware immediate value
@@ -195,15 +202,11 @@ class FACE:
                 if s <= cap_mb:
                     self.Czb[zn[i], b] += 1.0
 
-    def _P_powers(self):
+    def _P_hat(self):
+        """Smoothed one-step zone transition matrix (Eq. 11)."""
         cfg = self.cfg
         M = self.Ntrans + cfg.face_alpha_P * self.zones.adj
-        P = M / np.maximum(M.sum(1, keepdims=True), 1e-12)
-        out, cur = [], np.eye(self.zones.Z)
-        for _ in range(cfg.face_H):
-            cur = cur @ P
-            out.append(cur)
-        return out
+        return M / np.maximum(M.sum(1, keepdims=True), 1e-12)
 
     def _kappa(self, S):
         b = next(a for a, s in enumerate(self.size_bins) if S <= s + 1e-9)
@@ -212,8 +215,10 @@ class FACE:
                (self.Ez + cfg.face_alpha_C + cfg.face_beta_C)
 
     # ------------------------------------------------------------ value packs
-    def _pack(self, x, zn, need_vec, Ppow, zstats):
-        """Per-version arrays: p [H,Z], M [H,Z], Gamma [H,Z], W [H,Z]."""
+    def _pack(self, x, zn, need_vec, P, zstats):
+        """Per-version arrays: per-round useful-delivery prob D [H,Z]
+        (Eq. useful_contact_probability), reward W [H,Z], and lazily filled
+        first-contact rows f_a [H,Z] (Eq. first_contact_dist)."""
         cfg, v = self.cfg, self.versions[x]
         H, Z = cfg.face_H, self.zones.Z
         ri = self.r_idx[v.r]
@@ -222,7 +227,7 @@ class FACE:
         cnt_esv = np.bincount(zn[esv], minlength=Z).astype(float)
         q_cur = np.divide(cnt_esv, cnt_all, out=np.zeros(Z),
                           where=cnt_all > 0)
-        # conditional mean predicted reward per zone (Eq. 13 numerator)
+        # conditional mean predicted reward per zone (Eq. 13, posterior mean)
         s_mean, need_mean, logD_mean = zstats[v.r]
         Psi = np.stack([np.ones(Z),
                         np.full(Z, v.s_meta),
@@ -233,22 +238,30 @@ class FACE:
         v_cur = need_mean * g_z
         mu = cfg.face_mu
         kap = self._kappa(v.S)
-        p = np.empty((H, Z))
+        D = np.empty((H, Z))
         W = np.empty((H, Z))
-        Mv = np.empty((H, Z))
         for h in range(H):
             w = mu ** (h + 1)
             qh = w * q_cur + (1 - w) * self.q_hist[:, ri]
             vh = w * v_cur + (1 - w) * self.v_hist[:, ri]
-            p[h] = kap * qh
-            W[h] = (cfg.face_beta ** h) * np.maximum(
-                vh - cfg.face_lam * v.S, 0.0)
-            Mv[h] = Ppow[h] @ p[h]
-        Gam = np.empty((H, Z))
-        Gam[0] = 1.0
-        for h in range(1, H):
-            Gam[h] = Gam[h - 1] * np.clip(1.0 - Mv[h - 1], 0.0, 1.0)
-        return dict(p=p, M=Mv, Gam=Gam, W=W)
+            D[h] = kap * qh
+            W[h] = np.maximum(vh - cfg.face_lam * v.S, 0.0)
+        return dict(D=D, W=W, f={})
+
+    def _f_rows(self, pk, P, a):
+        """First-useful-contact distribution f_{az}^{(h)} of a copy starting
+        in zone a, via the absorbing recursion (Eq. first_contact_survival)."""
+        f = pk["f"].get(a)
+        if f is None:
+            H, Z = pk["D"].shape
+            f = np.empty((H, Z))
+            rho = np.zeros(Z)
+            rho[a] = 1.0
+            for h in range(H):
+                f[h] = rho * pk["D"][h]
+                rho = (rho * (1.0 - pk["D"][h])) @ P
+            pk["f"][a] = f
+        return f
 
     def _gain_zone(self, v, Psi):
         if self.flags["use_ridge"]:
@@ -256,27 +269,28 @@ class FACE:
         n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
         return np.full(Psi.shape[0], mu if n else 1.0)
 
-    def _omega(self, pk, Ppow, nvec):
-        """Residual coverage Omega [H,Z] for background copy vector nvec."""
-        H, Z = pk["p"].shape
+    def _omega(self, pk, P, nvec):
+        """Residual coverage Omega [H,Z] (Eq. residual_coverage) for the
+        background copy vector nvec."""
+        H, Z = pk["D"].shape
         Om = np.ones((H, Z))
         if not self.flags["use_coverage"]:
             return Om
         for zeta in np.nonzero(nvec)[0]:
-            n = nvec[zeta]
-            for h in range(H):
-                cov = pk["Gam"][h, zeta] * Ppow[h][zeta] * pk["p"][h]
-                Om[h] *= np.clip(1.0 - cov, 0.0, 1.0) ** n
+            f_z = self._f_rows(pk, P, int(zeta))
+            Om *= np.clip(1.0 - f_z, 0.0, 1.0) ** nvec[zeta]
         return Om
 
-    def _F(self, a, pk, Ppow, nvec):
-        """First-contact continuation value of one copy in zone a (Eq. 16)."""
+    def _F(self, a, pk, P, nvec):
+        """First-contact continuation value of one copy in zone a
+        (Eq. forwarding_potential)."""
         if not self.flags["use_future"]:
             return 0.0
-        Om = self._omega(pk, Ppow, nvec)
-        H = pk["p"].shape[0]
-        return float(sum(pk["Gam"][h, a] *
-                         (Ppow[h][a] @ (pk["p"][h] * Om[h] * pk["W"][h]))
+        Om = self._omega(pk, P, nvec)
+        f_a = self._f_rows(pk, P, int(a))
+        H = pk["D"].shape[0]
+        beta = self.cfg.face_beta
+        return float(sum((beta ** h) * (f_a[h] @ (Om[h] * pk["W"][h]))
                          for h in range(H)))
 
     # ------------------------------------------------------------ adoption
@@ -284,12 +298,34 @@ class FACE:
         mfl, cfg = self.mfl, self.cfg
         self._n_adopt = 0
         for i in range(mfl.N):
-            by_mod = {}
+            cand = []
             for x, m in self.tickets[i].items():
                 v = self.versions.get(x)
                 if v is None or m <= 0 or v.resolved[i] or not v.compat[i]:
                     continue
-                by_mod.setdefault(v.r, []).append(x)
+                cand.append(x)
+            # evaluation budget N_ev: rank candidates by the OPTIMISTIC
+            # predicted reward (exploration lives here, Eq. 10) and evaluate
+            # only the top N_ev this round; the rest stay unresolved
+            if len(cand) > cfg.face_Nev:
+                scores = []
+                for x in cand:
+                    v = self.versions[x]
+                    s_own = float(mfl.strength.get((i, v.r), 0.0))
+                    logD = np.log1p(mfl.Dmr(i, v.r)) / np.log1p(cfg.data_max)
+                    psi = self._psi(x, s_own, need.get((i, v.r), 0.0), logD, k)
+                    if self.flags["use_ridge"]:
+                        g = float(self.ridge.predict(v.r, psi[None],
+                                                     optimistic=True)[0])
+                    else:
+                        n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
+                        g = mu if n else 1.0
+                    scores.append((need.get((i, v.r), 0.0) * g, x))
+                scores.sort(reverse=True)
+                cand = [x for _, x in scores[:cfg.face_Nev]]
+            by_mod = {}
+            for x in cand:
+                by_mod.setdefault(self.versions[x].r, []).append(x)
             for r, xs in by_mod.items():
                 s_own = float(mfl.strength.get((i, r), 0.0))
                 logD = np.log1p(mfl.Dmr(i, r)) / np.log1p(cfg.data_max)
@@ -337,7 +373,7 @@ class FACE:
                 self._evermet.add((i, int(j)))
                 self._evermet.add((int(j), i))
 
-        Ppow = self._P_powers()
+        P = self._P_hat()
         # zone-mean receiver features per modality (for v-bar in Eq. 13)
         Z = self.zones.Z
         zstats = {}
@@ -389,7 +425,7 @@ class FACE:
         packs = {}
         def pack(x):
             if x not in packs:
-                packs[x] = self._pack(x, zn, need, Ppow, zstats)
+                packs[x] = self._pack(x, zn, need, P, zstats)
             return packs[x]
 
         # copy vectors n_x over zones (tentative during matching)
@@ -435,17 +471,21 @@ class FACE:
                     else:
                         n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
                         g = mu if n else 1.0
+                    # exploration floor: an unresolved compatible encoder
+                    # retains minimal transfer value, so posterior-mean
+                    # collapse cannot deadlock the evaluate-transfer loop
+                    g = max(g, cfg.face_g_floor)
                     vhat = need.get((j, v.r), 0.0) * g
                 else:
                     vhat = 0.0
                 # continuation-value change D_ijx (Eq. 17)
                 if m > 1:
-                    D = self._F(zn[j], pk, Ppow, nvec[x])
+                    D = self._F(zn[j], pk, P, nvec[x])
                 else:
                     ex = nvec[x].copy()
                     ex[zn[i]] = max(ex[zn[i]] - 1, 0)
-                    D = self._F(zn[j], pk, Ppow, ex) \
-                        - self._F(zn[i], pk, Ppow, ex)
+                    D = self._F(zn[j], pk, P, ex) \
+                        - self._F(zn[i], pk, P, ex)
                 adv = vhat + D - cfg.face_lam * v.S
                 if adv <= 0:
                     continue
@@ -507,36 +547,41 @@ class FACE:
                 break
             i, j = bkey
             sel = pairs.pop(bkey)[1]
-            committed.append((i, j, sel))
-            dirty_veh.add(j)
-            for (_, _, S, x) in sel:        # tentative ticket/copy updates
+            # round-frozen valuation: values/copy vectors stay at their
+            # round-start state; only ticket/cache FEASIBILITY is updated,
+            # so re-computed bundles keep identical weights (Prop. 2)
+            sel_g = []
+            for (_, _, S, x) in sel:
+                m_avail = tent_m[i].get(x, 0)
+                pk = pack(x)
+                Fi = self._F(zn[i], pk, P, nvec[x])
+                Fj = self._F(zn[j], pk, P, nvec[x])
+                g = self._split_tickets(m_avail, Fi, Fj)
+                sel_g.append((x, S, g))
                 got.add((j, x))
                 tent_cfree[j] -= S
-                if tent_m[i][x] > 1:        # replication
-                    nvec[x][zn[j]] += 1
-                else:                       # custody transfer
-                    nvec[x][zn[i]] = max(nvec[x][zn[i]] - 1, 0)
-                    nvec[x][zn[j]] += 1
-                tent_m[i][x] -= 1
+                tent_m[i][x] = m_avail - g
                 dirty.add(x)
+            committed.append((i, j, sel_g))
+            dirty_veh.add(j)
 
         # ---------- execute transfers (Bernoulli link success) ----------
         self._n_tx = self._n_deliv = self._n_relay = self._n_beyond = 0
         self.last_tx_mb = 0.0
         sched, recv = [], {}
-        for (i, j, sel) in committed:
+        for (i, j, sel_g) in committed:
             ptx = mob.link_quality(i, j)
-            for (_, _, S, x) in sel:
+            for (x, S, g) in sel_g:
                 v = self.versions[x]
                 sched.append((i, j, v))
                 self._n_tx += 1
                 self.last_tx_mb += S
                 if self.rng.random() > ptx:
                     continue                # terminated transfer: airtime lost
-                self.tickets[i][x] -= 1
+                self.tickets[i][x] -= g     # value-weighted split (Eq. 7)
                 if self.tickets[i][x] <= 0:      # custody transferred away
                     del self.tickets[i][x]
-                self.tickets[j][x] = 1
+                self.tickets[j][x] = g
                 self.lru[j][x] = k
                 self._n_deliv += 1
                 recv.setdefault((j, v.r), []).append(v.s_meta)
@@ -564,7 +609,7 @@ class FACE:
                         continue
                     ex = nvec.get(x, np.zeros(Z)).copy()
                     ex[zn[i]] = max(ex[zn[i]] - 1, 0)
-                    keepv = self._F(zn[i], pack(x), Ppow, ex)
+                    keepv = self._F(zn[i], pack(x), P, ex)
                     scored.append((keepv / v.S, x))
                 # Eq. 19 tie-breaking toward eviction: a copy with no positive
                 # continuation value is dropped even if it fits, freeing relay
@@ -594,10 +639,21 @@ class FACE:
             self.versions.pop(x)
 
         self.last_selected = [(i, j, self.versions[x].src, self.versions[x].r)
-                              for (i, j, sel) in committed
-                              for (_, _, _, x) in sel
+                              for (i, j, sel_g) in committed
+                              for (x, _, _) in sel_g
                               if x in self.versions]
         return self.last_selected
+
+    def _split_tickets(self, m, Fi, Fj):
+        """Value-weighted ticket split g_ijx (Eq. ticket_split): tickets move
+        in proportion to the receiver's share of continuation value; a
+        replicating sender always retains at least one ticket."""
+        if m <= 1:
+            return max(m, 1)                # custody transfer
+        if not self.flags["use_split"]:
+            return 1
+        frac = Fj / (Fi + Fj + 1e-12)
+        return int(np.clip(np.ceil(m * frac), 1, m - 1))
 
     # ---------- scheme-independent round scoring (same formulas the old
     # engine reports, so Table I utilities are comparable across schemes) ----
