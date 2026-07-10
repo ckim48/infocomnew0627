@@ -17,6 +17,7 @@ from .real_fl import REAL_SCHEMES
 from .mobility import RoadNetwork, MobilitySim
 from .hgat import train_hgat, future_contact_scores
 from .algorithm import CachingForwarding
+from .face import FACE
 from .simulator import make_modality_availability
 from .real_fl import RealMFL, _prep_data, _device
 from .v2x_trace import build_v2x_trace
@@ -45,6 +46,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     while FL keeps training/propagating so the accuracy curve plateaus."""
     cfg = cfg or Config()
     cfg.num_vehicles = num_vehicles
+    cfg.face_ttl = 60           # real backend: versions expire, sources
+    cfg.face_Qpub = 10          # republish updated encoders every Q_pub rounds
     if dataset == "deepsense":
         import sim.multimodal_model as _MM
         _MM.ENCODER_OVERRIDES.update({"radar": _MM.RadarMapEncoder,
@@ -85,7 +88,12 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
-            alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
+            # "Proposed" = the new FACE system model (versions/tickets/zone
+            # estimators/coverage value); baselines keep the legacy engine
+            if scheme == "Proposed":
+                alg = FACE(cfg, mfl, mob, scheme, seed=sd)
+            else:
+                alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
             sat_h, usat_h, mb_h = [], [], []
@@ -98,7 +106,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 # paper-defined validation loss L^val = (1 - Q^eff)^2, with
                 # Q^eff the real per-vehicle validation accuracy
                 vl_h.append(float(np.mean((1.0 - mfl.acc) ** 2)))
-                g = gammas[kk] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
+                g = gammas[kk] if alg.flags.get("use_dis") \
+                    or alg.flags.get("cache_policy") == "psi" \
                     else np.zeros(mob.N)
                 selected = alg.run_round(k, g, gamma_eval=gammas[kk])
                 accs = mfl.evaluate("test")
@@ -158,7 +167,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
 def _panel(ax, results, key, ylabel):
     K = len(results["Proposed"][key]); x = np.arange(1, K + 1)
     me = max(K // 11, 1)
-    for s in REAL_SCHEMES:
+    for s in [s for s in REAL_SCHEMES if s in results]:
         ax.plot(x, results[s][key], label=disp(s), markevery=me, markersize=5.5,
                 markerfacecolor="white", markeredgewidth=1.2, **STY[s])
         ax.fill_between(x, results[s][key] - results[s][key + "_std"],

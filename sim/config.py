@@ -69,6 +69,24 @@ class Config:
     contact_time_per_round: float = 1.6   # \bar T^con_{i,j} budget (s) per contact
     tx_rate_mbps: float = 12.0            # effective V2V link rate (MB/s) for tx time
 
+    # ----- FACE (new system model): versions, tickets, zones, first-contact value -----
+    face_zone_cell: float = 300.0     # road-zone grid cell size (m)
+    face_H: int = 6                   # future-contact valuation horizon H (rounds)
+    face_beta: float = 0.85           # discount beta in the first-contact value
+    face_lam: float = 0.004           # lambda: communication price per MB in P1
+    face_delta: float = 0.005         # adoption threshold delta_i on the validation gain
+    face_K_tickets: int = 6           # K_x: max distributed copies per encoder version
+    face_ttl: int = 1_000_000         # version lifetime t_exp - t_gen (rounds)
+    face_Qpub: int = 10               # publication period Q_pub (real backend)
+    face_alpha_g: float = 0.6         # optimism bonus alpha_g in the ridge gain predictor
+    face_ridge_lam: float = 1.0       # ridge regularization
+    face_ridge_decay: float = 0.995   # sliding-window decay of the ridge sufficient stats
+    face_decay: float = 0.97          # exponential decay of zone transition/contact counts
+    face_alpha_P: float = 0.3         # adjacency smoothing alpha_P in P-hat (Eq. 11)
+    face_alpha_C: float = 1.0         # Beta prior alpha_C in kappa-hat (Eq. 12)
+    face_beta_C: float = 3.0          # Beta prior beta_C in kappa-hat (Eq. 12)
+    face_mu: float = 0.85             # forecast blend mu_q = mu_v (Eq. 13)
+
     # ----- hierarchical GAT mobility prediction -----
     gat_hidden: int = 32
     gat_heads: int = 4

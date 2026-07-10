@@ -1,0 +1,654 @@
+"""
+FACE: future-contact-aware encoder caching and forwarding (new system model).
+
+Implements the revised paper model (Sec. III-IV):
+  * immutable encoder VERSIONS x = (src, r, nu, payload, t_gen, t_exp, S, K)
+    with copy tickets m_{i,x} bounded by K_x (replication / custody transfer)
+  * relay caches separate from the vehicle's own latest published encoders
+  * causal zone estimators: decayed transition counts -> P-hat (Eq. 11),
+    Beta-smoothed size-binned complete-contact prob kappa-hat (Eq. 12),
+    ESV fraction q_{z,x} and conditional mean reward v-bar (Eq. 13)
+  * sliding-window ridge gain prediction with optimism (Eq. 10)
+  * first-contact survival Gamma (Eq. 14), residual coverage Omega (Eq. 15),
+    coverage-aware continuation value F (Eq. 16)
+  * marginal transfer advantage A_ijx (Eq. 17), per-contact 0/1 knapsack
+    bundles (Eq. 18) under half-duplex local-maximal link matching
+  * coverage-aware cache refresh knapsack (Eq. 19)
+
+Ablation flags (FACE_FLAGS) switch each mechanism off independently so the
+component ablation can attribute the end-to-end gain.
+"""
+
+import numpy as np
+from .utility import modality_needs, mean_modality_data
+
+
+# ---------------------------------------------------------------- versions
+class Version:
+    __slots__ = ("vid", "src", "r", "nu", "payload", "s_meta",
+                 "t_gen", "t_exp", "S", "K", "compat", "resolved")
+
+    def __init__(self, vid, src, r, nu, payload, s_meta, t_gen, t_exp, S, K, N,
+                 avail):
+        self.vid, self.src, self.r, self.nu = vid, src, r, nu
+        self.payload = payload            # immutable snapshot (strength / sd)
+        self.s_meta = float(s_meta)       # source-quality metadata at t_gen
+        self.t_gen, self.t_exp, self.S, self.K = t_gen, t_exp, float(S), K
+        self.compat = np.array([r in avail[i] for i in range(N)])   # chi_{i,x}
+        self.resolved = np.zeros(N, dtype=bool)                     # rho_{i,x}
+
+
+# ---------------------------------------------------------------- road zones
+class Zones:
+    """Compact grid road-zones over the trace extent (occupied cells only)."""
+
+    def __init__(self, cfg, mob):
+        cell = cfg.face_zone_cell
+        xy = mob.veh_xy.reshape(-1, 2)
+        self.x0, self.y0, self.cell = xy[:, 0].min(), xy[:, 1].min(), cell
+        gx = ((mob.veh_xy[..., 0] - self.x0) // cell).astype(np.int64)
+        gy = ((mob.veh_xy[..., 1] - self.y0) // cell).astype(np.int64)
+        self.nx = int(gx.max()) + 1
+        raw = gx * 10_000 + gy                              # [K,N] raw cell key
+        keys = np.unique(raw)
+        lut = {int(kk): z for z, kk in enumerate(keys)}
+        self.Z = len(keys)
+        self.zone = np.vectorize(lambda v: lut[int(v)])(raw)   # [K,N] zone ids
+        # 8-neighbour adjacency (+self) among occupied cells
+        A = np.eye(self.Z)
+        cx, cy = keys // 10_000, keys % 10_000
+        for a in range(self.Z):
+            near = (np.abs(cx - cx[a]) <= 1) & (np.abs(cy - cy[a]) <= 1)
+            A[a, near] = 1.0
+        self.adj = A
+
+
+# ---------------------------------------------------------------- ridge gain
+class RidgeGain:
+    """Per-modality sliding-window ridge with optimism (Eq. 10)."""
+    DIM = 6
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.A = {}   # r -> [d,d]
+        self.b = {}   # r -> [d]
+
+    def _get(self, r):
+        if r not in self.A:
+            self.A[r] = np.eye(self.DIM) * self.cfg.face_ridge_lam
+            self.b[r] = np.zeros(self.DIM)
+        return self.A[r], self.b[r]
+
+    def update(self, r, psi, y):
+        A, b = self._get(r)
+        g = self.cfg.face_ridge_decay
+        self.A[r] = g * A + np.outer(psi, psi) \
+            + (1 - g) * np.eye(self.DIM) * self.cfg.face_ridge_lam
+        self.b[r] = g * b + psi * y
+
+    def predict(self, r, Psi):
+        """Psi: [n, d] -> optimistic gains in [0,1]."""
+        A, b = self._get(r)
+        Ainv = np.linalg.inv(A)
+        mu = Psi @ (Ainv @ b)
+        bonus = self.cfg.face_alpha_g * np.sqrt(
+            np.maximum(np.einsum("nd,dk,nk->n", Psi, Ainv, Psi), 0.0))
+        return np.clip(mu + bonus, 0.0, 1.0)
+
+
+FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
+                  use_coverage=True,   # residual coverage Omega (Eq. 15)
+                  use_tickets=True,    # replication bound K_x / custody transfer
+                  use_ridge=True,      # ridge gain prediction (else mean bandit)
+                  use_relay=True,      # forward cached copies of OTHERS' versions
+                  use_demand=True,     # receiver-demand-aware immediate value
+                  refresh="knapsack")  # cache refresh: 'knapsack' | 'lru'
+
+
+class FACE:
+    """Drop-in replacement for CachingForwarding implementing the new model."""
+
+    def __init__(self, cfg, mfl, mob, scheme="FACE", seed=0, flags=None):
+        self.cfg, self.mfl, self.mob, self.scheme = cfg, mfl, mob, scheme
+        self.flags = dict(FACE_FLAGS, **(flags or {}))
+        self.rng = np.random.default_rng(seed + 101)
+        self.zones = Zones(cfg, mob)
+        Z = self.zones.Z
+        self.ridge = RidgeGain(cfg)
+        self.gstat = {}                     # (src,r) -> (n, mean) mean-bandit
+        # --- causal estimator state ---
+        self.Ntrans = np.zeros((Z, Z))      # decayed transition counts
+        self.Ez = np.zeros(Z)               # decayed vehicle-round counts
+        self.size_bins = sorted(set(cfg.encoder_size.values()))
+        self.Czb = np.zeros((Z, len(self.size_bins)))
+        R = list(cfg.modalities)
+        self.r_idx = {r: a for a, r in enumerate(R)}
+        self.q_hist = np.zeros((Z, len(R)))   # missing history -> zero value
+        self.v_hist = np.zeros((Z, len(R)))
+        # --- version / ticket state ---
+        self.versions = {}                  # vid -> Version
+        self.tickets = {i: {} for i in range(mfl.N)}   # i -> vid -> m_{i,x}
+        self.own_pub = {}                   # (i,r) -> vid (latest, ell=1)
+        self.lru = {i: {} for i in range(mfl.N)}
+        self._vid = 0
+        self._clock = 0
+        self._evermet = set()
+        self._publish_all(t=0)
+
+    # ------------------------------------------------------------ publication
+    def _snapshot(self, i, r):
+        snap = getattr(self.mfl, "snapshot_encoder", None)
+        return snap(i, r) if snap else float(self.mfl.theta[(i, r)])
+
+    def _publish_all(self, t):
+        cfg = self.cfg
+        Kt = cfg.face_K_tickets if self.flags["use_tickets"] else 10 ** 9
+        for (i, r) in self.mfl.pairs:
+            old = self.own_pub.get((i, r))
+            nu = 0 if old is None or old not in self.versions \
+                else self.versions[old].nu + 1
+            v = Version(self._vid, i, r, nu, self._snapshot(i, r),
+                        self.mfl.strength[(i, r)], t, t + cfg.face_ttl,
+                        cfg.encoder_size[r], Kt, self.mfl.N, self.mfl.avail)
+            v.resolved[i] = True            # source never re-adopts its own
+            self.versions[self._vid] = v
+            self.own_pub[(i, r)] = self._vid
+            self.tickets[i][self._vid] = Kt
+            self._vid += 1
+
+    # ------------------------------------------------------------ helpers
+    def _zone_now(self):
+        return self.zones.zone[min(self.mob.k, self.zones.zone.shape[0] - 1)]
+
+    def _is_own_pub(self, i, x):
+        v = self.versions[x]
+        return v.src == i and self.own_pub.get((i, v.r)) == x
+
+    def _cache_used(self, i):
+        return sum(self.versions[x].S for x, m in self.tickets[i].items()
+                   if m > 0 and not self._is_own_pub(i, x))
+
+    def _psi(self, x, s_own, need, logD, t):
+        v = self.versions[x]
+        age = min((t - v.t_gen) / max(self.cfg.face_ttl, 1), 1.0)
+        return np.array([1.0, v.s_meta, s_own, need, logD, age])
+
+    # ------------------------------------------------------------ estimators
+    def _update_estimators(self, k, A, zn):
+        cfg, d = self.cfg, self.cfg.face_decay
+        self.Ntrans *= d
+        self.Ez *= d
+        self.Czb *= d
+        if k > 0:
+            zp = self.zones.zone[min(k - 1, self.zones.zone.shape[0] - 1)]
+            np.add.at(self.Ntrans, (zp, zn), 1.0)
+        np.add.at(self.Ez, zn, 1.0)
+        # size-binned complete-contact capability per vehicle-round (Eq. 12)
+        rate, T = cfg.tx_rate_mbps, cfg.contact_time_per_round
+        for i in range(self.mfl.N):
+            nbrs = self.mob.neighbors(A, i)
+            if len(nbrs) == 0:
+                continue
+            best = max(self.mob.link_quality(i, int(j)) for j in nbrs)
+            cap_mb = rate * max(best, 0.05) * T
+            for b, s in enumerate(self.size_bins):
+                if s <= cap_mb:
+                    self.Czb[zn[i], b] += 1.0
+
+    def _P_powers(self):
+        cfg = self.cfg
+        M = self.Ntrans + cfg.face_alpha_P * self.zones.adj
+        P = M / np.maximum(M.sum(1, keepdims=True), 1e-12)
+        out, cur = [], np.eye(self.zones.Z)
+        for _ in range(cfg.face_H):
+            cur = cur @ P
+            out.append(cur)
+        return out
+
+    def _kappa(self, S):
+        b = next(a for a, s in enumerate(self.size_bins) if S <= s + 1e-9)
+        cfg = self.cfg
+        return (self.Czb[:, b] + cfg.face_alpha_C) / \
+               (self.Ez + cfg.face_alpha_C + cfg.face_beta_C)
+
+    # ------------------------------------------------------------ value packs
+    def _pack(self, x, zn, need_vec, Ppow, zstats):
+        """Per-version arrays: p [H,Z], M [H,Z], Gamma [H,Z], W [H,Z]."""
+        cfg, v = self.cfg, self.versions[x]
+        H, Z = cfg.face_H, self.zones.Z
+        ri = self.r_idx[v.r]
+        esv = v.compat & ~v.resolved
+        cnt_all = np.bincount(zn, minlength=Z).astype(float)
+        cnt_esv = np.bincount(zn[esv], minlength=Z).astype(float)
+        q_cur = np.divide(cnt_esv, cnt_all, out=np.zeros(Z),
+                          where=cnt_all > 0)
+        # conditional mean predicted reward per zone (Eq. 13 numerator)
+        s_mean, need_mean, logD_mean = zstats[v.r]
+        Psi = np.stack([np.ones(Z),
+                        np.full(Z, v.s_meta),
+                        s_mean, need_mean, logD_mean,
+                        np.full(Z, min((self._clock - v.t_gen)
+                                       / max(cfg.face_ttl, 1), 1.0))], axis=1)
+        g_z = self._gain_zone(v, Psi)
+        v_cur = need_mean * g_z
+        mu = cfg.face_mu
+        kap = self._kappa(v.S)
+        p = np.empty((H, Z))
+        W = np.empty((H, Z))
+        Mv = np.empty((H, Z))
+        for h in range(H):
+            w = mu ** (h + 1)
+            qh = w * q_cur + (1 - w) * self.q_hist[:, ri]
+            vh = w * v_cur + (1 - w) * self.v_hist[:, ri]
+            p[h] = kap * qh
+            W[h] = (cfg.face_beta ** h) * np.maximum(
+                vh - cfg.face_lam * v.S, 0.0)
+            Mv[h] = Ppow[h] @ p[h]
+        Gam = np.empty((H, Z))
+        Gam[0] = 1.0
+        for h in range(1, H):
+            Gam[h] = Gam[h - 1] * np.clip(1.0 - Mv[h - 1], 0.0, 1.0)
+        return dict(p=p, M=Mv, Gam=Gam, W=W)
+
+    def _gain_zone(self, v, Psi):
+        if self.flags["use_ridge"]:
+            return self.ridge.predict(v.r, Psi)
+        n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
+        return np.full(Psi.shape[0], mu if n else 1.0)
+
+    def _omega(self, pk, Ppow, nvec):
+        """Residual coverage Omega [H,Z] for background copy vector nvec."""
+        H, Z = pk["p"].shape
+        Om = np.ones((H, Z))
+        if not self.flags["use_coverage"]:
+            return Om
+        for zeta in np.nonzero(nvec)[0]:
+            n = nvec[zeta]
+            for h in range(H):
+                cov = pk["Gam"][h, zeta] * Ppow[h][zeta] * pk["p"][h]
+                Om[h] *= np.clip(1.0 - cov, 0.0, 1.0) ** n
+        return Om
+
+    def _F(self, a, pk, Ppow, nvec):
+        """First-contact continuation value of one copy in zone a (Eq. 16)."""
+        if not self.flags["use_future"]:
+            return 0.0
+        Om = self._omega(pk, Ppow, nvec)
+        H = pk["p"].shape[0]
+        return float(sum(pk["Gam"][h, a] *
+                         (Ppow[h][a] @ (pk["p"][h] * Om[h] * pk["W"][h]))
+                         for h in range(H)))
+
+    # ------------------------------------------------------------ adoption
+    def _adopt(self, k, need, zn):
+        mfl, cfg = self.mfl, self.cfg
+        self._n_adopt = 0
+        for i in range(mfl.N):
+            by_mod = {}
+            for x, m in self.tickets[i].items():
+                v = self.versions.get(x)
+                if v is None or m <= 0 or v.resolved[i] or not v.compat[i]:
+                    continue
+                by_mod.setdefault(v.r, []).append(x)
+            for r, xs in by_mod.items():
+                s_own = float(mfl.strength.get((i, r), 0.0))
+                logD = np.log1p(mfl.Dmr(i, r)) / np.log1p(cfg.data_max)
+                evals = []
+                for x in xs:
+                    v = self.versions[x]
+                    delta = mfl.gain_single(i, r, v.src, v.payload)[0]
+                    delta = float(np.clip(delta, 0.0, 1.0))
+                    v.resolved[i] = True                     # rho update
+                    psi = self._psi(x, s_own, need.get((i, r), 0.0), logD, k)
+                    self.ridge.update(r, psi, delta)
+                    n, mu = self.gstat.get((v.src, r), (0, 0.0))
+                    self.gstat[(v.src, r)] = (n + 1, mu + (delta - mu) / (n + 1))
+                    evals.append((delta, x))
+                delta, x = max(evals)
+                if delta >= cfg.face_delta:                  # Eq. adoption
+                    v = self.versions[x]
+                    mfl.commit(i, r, [(v.src, v.payload)])
+                    self._n_adopt += 1
+                    if (v.src, i) not in self._evermet and v.src != i:
+                        self._n_beyond_adopt += 1
+
+    # ------------------------------------------------------------ round entry
+    def run_round(self, k, gamma=None, gamma_eval=None):
+        cfg, mfl, mob = self.cfg, self.mfl, self.mob
+        self._clock = k
+        self._n_beyond_adopt = 0
+        A = mob.v2v_graph()
+        zn = self._zone_now()
+        # expiry (a vehicle's own latest publication lives in model storage,
+        # ell=1, and never expires from the relay system)
+        latest = set(self.own_pub.values())
+        for x in [x for x, v in self.versions.items()
+                  if k > v.t_exp and x not in latest]:
+            for i in range(mfl.N):
+                self.tickets[i].pop(x, None)
+            self.versions.pop(x)
+        self._update_estimators(k, A, zn)
+        need = modality_needs(cfg, mfl)
+        # evaluate + adopt candidates received in previous rounds
+        self._adopt(k, need, zn)
+        # per-vehicle contact registration (evermet AFTER adoption bookkeeping)
+        for i in range(mfl.N):
+            for j in mob.neighbors(A, i):
+                self._evermet.add((i, int(j)))
+                self._evermet.add((int(j), i))
+
+        Ppow = self._P_powers()
+        # zone-mean receiver features per modality (for v-bar in Eq. 13)
+        Z = self.zones.Z
+        zstats = {}
+        for r in cfg.modalities:
+            s = np.zeros(Z)
+            nd = np.zeros(Z)
+            ld = np.zeros(Z)
+            c = np.zeros(Z)
+            for i in range(mfl.N):
+                if r in mfl.avail[i]:
+                    z = zn[i]
+                    c[z] += 1
+                    s[z] += mfl.strength[(i, r)]
+                    nd[z] += need.get((i, r), 0.0)
+                    ld[z] += np.log1p(mfl.Dmr(i, r)) / np.log1p(cfg.data_max)
+            occ = c > 0
+            for arr in (s, nd, ld):
+                arr[occ] /= c[occ]
+            zstats[r] = (s, nd, ld)
+
+        # historical zone profiles feeding the Eq. 13 forecast blend,
+        # updated once per round from causal (current-round) observations
+        cnt_all = np.bincount(zn, minlength=Z).astype(float)
+        occ_z = cnt_all > 0
+        for r in cfg.modalities:
+            ri = self.r_idx[r]
+            vs = [v for v in self.versions.values() if v.r == r]
+            if not vs:
+                continue
+            esv_frac = np.mean([(v.compat & ~v.resolved) for v in vs], axis=0)
+            q_cur = np.divide(np.bincount(zn, weights=esv_frac, minlength=Z),
+                              cnt_all, out=np.zeros(Z), where=occ_z)
+            s_mean, need_mean, logD_mean = zstats[r]
+            s_meta = float(np.mean([v.s_meta for v in vs]))
+            Psi = np.stack([np.ones(Z), np.full(Z, s_meta), s_mean,
+                            need_mean, logD_mean, np.zeros(Z)], axis=1)
+            if self.flags["use_ridge"]:
+                g_z = self.ridge.predict(r, Psi)
+            else:
+                stats = [m for (src, rr), (n, m) in self.gstat.items()
+                         if rr == r and n > 0]
+                g_z = np.full(Z, float(np.mean(stats)) if stats else 1.0)
+            v_cur = need_mean * g_z
+            self.q_hist[occ_z, ri] = (0.9 * self.q_hist[occ_z, ri]
+                                      + 0.1 * q_cur[occ_z])
+            self.v_hist[occ_z, ri] = (0.9 * self.v_hist[occ_z, ri]
+                                      + 0.1 * v_cur[occ_z])
+
+        packs = {}
+        def pack(x):
+            if x not in packs:
+                packs[x] = self._pack(x, zn, need, Ppow, zstats)
+            return packs[x]
+
+        # copy vectors n_x over zones (tentative during matching)
+        nvec = {}
+        for x in self.versions:
+            holders = [i for i in range(mfl.N) if self.tickets[i].get(x, 0) > 0]
+            if holders:
+                nvec[x] = np.bincount(zn[holders], minlength=Z).astype(float)
+
+        # ---------- bundle value per directed contact (Eq. 17-18) ----------
+        rate, T = cfg.tx_rate_mbps, cfg.contact_time_per_round
+
+        # tentative state during contact scheduling: remaining tickets,
+        # committed receptions, and remaining receiver cache slack
+        tent_m = {i: dict(self.tickets[i]) for i in range(mfl.N)}
+        got = set()                       # (j, x) committed this round
+        tent_cfree = {j: cfg.cache_capacity_mb - self._cache_used(j)
+                      for j in range(mfl.N)}
+
+        def bundle(i, j):
+            items = []
+            ptx = mob.link_quality(i, j)
+            cfree = tent_cfree[j]
+            for x, m in tent_m[i].items():
+                if m <= 0 or self.tickets[j].get(x, 0) > 0 or (j, x) in got:
+                    continue
+                if not self.flags["use_relay"] and not self._is_own_pub(i, x):
+                    continue                # ablation: no encoder ferrying
+                v = self.versions[x]
+                if x not in nvec:
+                    continue
+                pk = pack(x)
+                # immediate predicted reward at j (Eq. 10)
+                if not self.flags["use_demand"]:
+                    vhat = 0.05 if (v.compat[j] and not v.resolved[j]) else 0.0
+                elif v.compat[j] and not v.resolved[j]:
+                    psi = self._psi(x, float(mfl.strength.get((j, v.r), 0.0)),
+                                    need.get((j, v.r), 0.0),
+                                    np.log1p(mfl.Dmr(j, v.r))
+                                    / np.log1p(cfg.data_max), k)
+                    if self.flags["use_ridge"]:
+                        g = float(self.ridge.predict(v.r, psi[None])[0])
+                    else:
+                        n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
+                        g = mu if n else 1.0
+                    vhat = need.get((j, v.r), 0.0) * g
+                else:
+                    vhat = 0.0
+                # continuation-value change D_ijx (Eq. 17)
+                if m > 1:
+                    D = self._F(zn[j], pk, Ppow, nvec[x])
+                else:
+                    ex = nvec[x].copy()
+                    ex[zn[i]] = max(ex[zn[i]] - 1, 0)
+                    D = self._F(zn[j], pk, Ppow, ex) \
+                        - self._F(zn[i], pk, Ppow, ex)
+                adv = vhat + D - cfg.face_lam * v.S
+                if adv <= 0:
+                    continue
+                t_tx = v.S / (rate * max(ptx, 0.05))
+                items.append((adv, t_tx, v.S, x))
+            if not items:
+                return 0.0, []
+            # 0/1 knapsack on airtime (DP, 0.05 s units)
+            cap = int(T / 0.05)
+            wts = [max(int(np.ceil(t / 0.05)), 1) for (_, t, _, _) in items]
+            dp = np.zeros(cap + 1)
+            keep = np.zeros((len(items), cap + 1), dtype=bool)
+            for a, (val, _, _, _) in enumerate(items):
+                w = wts[a]
+                if w > cap:
+                    continue
+                cand = dp[:cap + 1 - w] + val
+                upd = cand > dp[w:]
+                keep[a, w:][upd] = True
+                dp[w:][upd] = cand[upd]
+            sel, c = [], int(np.argmax(dp))
+            for a in range(len(items) - 1, -1, -1):
+                if keep[a, c]:
+                    sel.append(items[a])
+                    c -= wts[a]
+            # receiver relay-cache feasibility (bytes)
+            sel.sort(key=lambda it: -it[0] / it[2])
+            out, used = [], 0.0
+            for it in sel:
+                if used + it[2] <= cfree + 1e-9:    # receiver relay-cache slack
+                    out.append(it)
+                    used += it[2]
+            return sum(it[0] for it in out), out
+
+        # ---------- greedy contact scheduling (locally maximal bundles) ----
+        # A directed contact (i -> j) is committed when its bundle value is
+        # the current maximum; one T-second airtime budget per direction, and
+        # a vehicle may serve several contacts sequentially within a decision
+        # round (same per-contact physics as the baseline engine).
+        pairs = {}
+        for i in range(mfl.N):
+            for j in mob.neighbors(A, i):
+                j = int(j)
+                pairs[(i, j)] = None
+        committed = []
+        dirty = set(self.versions)          # all packs fresh -> compute lazily
+        dirty_veh = set()
+        while True:
+            best, bkey = 0.0, None
+            for (i, j) in list(pairs):
+                if pairs[(i, j)] is None or j in dirty_veh or \
+                        any(it[3] in dirty for it in pairs[(i, j)][1]):
+                    pairs[(i, j)] = bundle(i, j)
+                if pairs[(i, j)][0] > best:
+                    best, bkey = pairs[(i, j)][0], (i, j)
+            dirty = set()
+            dirty_veh = set()
+            if bkey is None or best <= 1e-12:
+                break
+            i, j = bkey
+            sel = pairs.pop(bkey)[1]
+            committed.append((i, j, sel))
+            dirty_veh.add(j)
+            for (_, _, S, x) in sel:        # tentative ticket/copy updates
+                got.add((j, x))
+                tent_cfree[j] -= S
+                if tent_m[i][x] > 1:        # replication
+                    nvec[x][zn[j]] += 1
+                else:                       # custody transfer
+                    nvec[x][zn[i]] = max(nvec[x][zn[i]] - 1, 0)
+                    nvec[x][zn[j]] += 1
+                tent_m[i][x] -= 1
+                dirty.add(x)
+
+        # ---------- execute transfers (Bernoulli link success) ----------
+        self._n_tx = self._n_deliv = self._n_relay = self._n_beyond = 0
+        self.last_tx_mb = 0.0
+        sched, recv = [], {}
+        for (i, j, sel) in committed:
+            ptx = mob.link_quality(i, j)
+            for (_, _, S, x) in sel:
+                v = self.versions[x]
+                sched.append((i, j, v))
+                self._n_tx += 1
+                self.last_tx_mb += S
+                if self.rng.random() > ptx:
+                    continue                # terminated transfer: airtime lost
+                self.tickets[i][x] -= 1
+                if self.tickets[i][x] <= 0:      # custody transferred away
+                    del self.tickets[i][x]
+                self.tickets[j][x] = 1
+                self.lru[j][x] = k
+                self._n_deliv += 1
+                recv.setdefault((j, v.r), []).append(v.s_meta)
+                if v.src != i:
+                    self._n_relay += 1
+                if (v.src, j) not in self._evermet and v.src != j:
+                    self._n_beyond += 1
+        self._score_round(sched, recv, need, gamma_eval, zn)
+
+        # ---------- coverage-aware cache refresh (Eq. 19) ----------
+        for i in range(mfl.N):
+            relay = [x for x, m in self.tickets[i].items()
+                     if m > 0 and not self._is_own_pub(i, x)]
+            if not relay:
+                continue
+            cap = cfg.cache_capacity_mb
+            if self.flags["refresh"] == "lru" or not self.flags["use_future"]:
+                ranked = sorted(relay, key=lambda x: -self.lru[i].get(x, -1))
+            else:
+                scored = []
+                for x in relay:
+                    v = self.versions[x]
+                    if v.compat[i] and not v.resolved[i]:
+                        scored.append((np.inf, x))   # pending own evaluation
+                        continue
+                    ex = nvec.get(x, np.zeros(Z)).copy()
+                    ex[zn[i]] = max(ex[zn[i]] - 1, 0)
+                    keepv = self._F(zn[i], pack(x), Ppow, ex)
+                    scored.append((keepv / v.S, x))
+                # Eq. 19 tie-breaking toward eviction: a copy with no positive
+                # continuation value is dropped even if it fits, freeing relay
+                # space for future receptions
+                ranked = [x for d, x in sorted(scored, reverse=True)
+                          if d > 1e-9]
+            used, keep = 0.0, set()
+            for x in ranked:
+                if used + self.versions[x].S <= cap + 1e-9:
+                    keep.add(x)
+                    used += self.versions[x].S
+            for x in relay:
+                if x not in keep:           # eviction burns the copy tickets
+                    self.tickets[i].pop(x, None)
+                    self.lru[i].pop(x, None)
+
+        # ---------- publication (real backend; no-op with static encoders) ---
+        if hasattr(self.mfl, "snapshot_encoder") and \
+                cfg.face_Qpub > 0 and (k + 1) % cfg.face_Qpub == 0:
+            self._publish_all(t=k + 1)
+
+        # prune dead versions (no tickets anywhere, not a latest publication)
+        alive = set(self.own_pub.values())
+        for i in range(mfl.N):
+            alive.update(x for x, m in self.tickets[i].items() if m > 0)
+        for x in [x for x in self.versions if x not in alive]:
+            self.versions.pop(x)
+
+        self.last_selected = [(i, j, self.versions[x].src, self.versions[x].r)
+                              for (i, j, sel) in committed
+                              for (_, _, _, x) in sel
+                              if x in self.versions]
+        return self.last_selected
+
+    # ---------- scheme-independent round scoring (same formulas the old
+    # engine reports, so Table I utilities are comparable across schemes) ----
+    def _score_round(self, sched, recv, need, gamma_eval, zn):
+        cfg, mfl, mob = self.cfg, self.mfl, self.mob
+        Dr = mean_modality_data(mfl)
+        learn_prod, fwd_prod = {}, {}
+        for (i, j, v) in sched:
+            ptx = mob.link_quality(i, j)
+            g = max(v.s_meta - float(mfl.strength.get((j, v.r), 0.0)), 0.0)
+            be = float(np.clip(ptx * (mfl.Dmr(v.src, v.r)
+                                      / (Dr[v.r] + cfg.eps0)) * g, 0.0, 0.999))
+            learn_prod[(j, v.r)] = learn_prod.get((j, v.r), 1.0) * (1.0 - be)
+            if gamma_eval is not None:
+                bf = ptx * (1.0 - np.exp(-float(gamma_eval[j]) * v.s_meta))
+                fwd_prod[(i, v.src, v.r)] = \
+                    fwd_prod.get((i, v.src, v.r), 1.0) * (1.0 - bf)
+        u_learn = sum(need.get(jr, 0.0) * (1.0 - p)
+                      for jr, p in learn_prod.items())
+        u_fwd = sum(1.0 - p for p in fwd_prod.values())
+        self.last_utility_learn = float(u_learn)
+        self.last_utility_fwd = float(cfg.nu * u_fwd)
+        self.last_utility_txcost = float(cfg.lam_tx * len(sched))
+        self.last_utility = (self.last_utility_learn + self.last_utility_fwd
+                             - self.last_utility_txcost)
+        # demand-weighted satisfaction of successful deliveries
+        tot_need = sum(need.values()) + 1e-9
+        self.last_satisfaction = sum(need.get(jr, 0.0) for jr in recv) / tot_need
+        useful = [jr for jr, lst in recv.items()
+                  if any(s > float(mfl.strength.get(jr, 0.0)) + 0.02
+                         for s in lst)]
+        self.last_useful_sat = sum(need.get(jr, 0.0) for jr in useful) / tot_need
+        # high-demand road-segment availability (same metric as the old engine)
+        seg_need, seg_have = {}, {}
+        segs = mob.seg
+        for i in range(mfl.N):
+            e = int(segs[i])
+            held = [self.versions[x] for x, m in self.tickets[i].items()
+                    if m > 0 and x in self.versions]
+            for r in mfl.avail[i]:
+                a = need.get((i, r), 0.0)
+                seg_need[(e, r)] = 1.0 - (1.0 - seg_need.get((e, r), 0.0)) \
+                    * (1.0 - a)
+                if not seg_have.get((e, r), False):
+                    if any(v.r == r and v.s_meta >= 0.6 for v in held):
+                        seg_have[(e, r)] = True
+        if seg_need:
+            lam = np.array(list(seg_need.values()))
+            thr = np.quantile(lam, 0.75)
+            top = [kk for kk, vv in seg_need.items() if vv >= thr]
+            self.last_avail = (sum(seg_have.get(kk, False) for kk in top)
+                               / max(len(top), 1))
+        else:
+            self.last_avail = 0.0

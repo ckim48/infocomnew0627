@@ -233,8 +233,43 @@ class RealMFL:
         return self.val_loss(i, r)
 
     def gain_single(self, i, r, m, s_m):
+        if isinstance(s_m, dict):                 # immutable version snapshot
+            return self._gain_snapshot(i, r, m, s_m)
         g = max(float(s_m) - float(self.strength[(i, r)]), 0.0)
         return g, None, None
+
+    # ---- encoder-version support (new FACE system model) ----
+    def snapshot_encoder(self, i, r):
+        """Immutable CPU snapshot theta_x of the current modality-r encoder."""
+        return {k: v.detach().cpu().clone()
+                for k, v in self.enc[i][r].state_dict().items()}
+
+    @torch.no_grad()
+    def _val_acc_single(self, i):
+        idx, yv = self.val
+        idx_t = torch.tensor(idx, device=self.device)
+        y_t = torch.tensor(yv, device=self.device, dtype=torch.long)
+        x = {m: t[idx_t] for m, t in self.t.items()}
+        self._set_train(i, False)
+        feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
+        return float((self.head[i](feats).argmax(1) == y_t).float().mean())
+
+    @torch.no_grad()
+    def _gain_snapshot(self, i, r, m, sd):
+        """Realized normalized validation gain Delta_{i,x} (Eq. 2): evaluate
+        the candidate model that aggregates the immutable snapshot into the
+        local modality-r encoder, then restore the local model."""
+        base = self._val_acc_single(i)
+        backup = {k: v.detach().clone()
+                  for k, v in self.enc[i][r].state_dict().items()}
+        cand = _fedavg(
+            [backup, {k: v.to(self.device) for k, v in sd.items()}],
+            [self.Dmr(i, r), self.Dmr(m, r)])
+        self.enc[i][r].load_state_dict(cand)
+        after = self._val_acc_single(i)
+        self.enc[i][r].load_state_dict(backup)
+        g = max(after - base, 0.0) / max(1.0 - base, 1e-6)
+        return g, base, after
 
     # ---- real FedAvg aggregation of received encoders (Eq. 2) ----
     def commit(self, i, r, received):
@@ -243,7 +278,10 @@ class RealMFL:
         sds = [self.enc[i][r].state_dict()]
         ws = [self.Dmr(i, r)]
         for (m, s_m) in received:
-            if r in self.enc.get(m, {}):
+            if isinstance(s_m, dict):             # immutable version snapshot
+                sds.append({k: v.to(self.device) for k, v in s_m.items()})
+                ws.append(self.Dmr(m, r))
+            elif r in self.enc.get(m, {}):
                 sds.append(self.enc[m][r].state_dict())
                 ws.append(self.Dmr(m, r))
         if len(sds) > 1:
