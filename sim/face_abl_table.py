@@ -13,23 +13,23 @@ import numpy as np
 ROW = re.compile(r"\[seed (\d+)\] (.{18}) acc ([\d.]+) poor ([\d.]+) "
                  r"tx/rd ([\d.]+) MB/rd ([\d.]+) beyond (\d+)")
 
-# variant -> (paper label, mechanism disabled)
+# variant -> (paper label, disabled mechanism in paper notation)
 LABELS = {
     "FACE (full)":       (r"\textbf{FACE (full)}", ""),
     "w/o relay ferrying": (r"w/o encoder ferrying",
-                           r"relay cache fwd.\ disabled"),
+                           r"$\mathcal A_{ij}(t)$ own versions only"),
     "w/o demand":        (r"w/o demand awareness",
-                          r"$\widehat v_{j,x}(t)\!\equiv\!\mathrm{const}$ in \eqref{eq:transfer_advantage}"),
+                          r"$\widehat v_{j,x}\!\equiv\!\mathrm{const}$ in \eqref{eq:transfer_advantage}"),
     "w/o future value":  (r"w/o future-contact value",
-                          r"$F_{a,x}\!\equiv\!0$ \eqref{eq:forwarding_potential}"),
+                          r"$F_{a,x}\!\equiv\!0$ in \eqref{eq:forwarding_potential}"),
     "w/o coverage":      (r"w/o residual coverage",
-                          r"$\Omega_{z,x}^{(h)}\!\equiv\!1$ \eqref{eq:residual_coverage}"),
+                          r"$\Omega_{z,x}^{(h)}\!\equiv\!1$ in \eqref{eq:residual_coverage}"),
     "w/o tickets":       (r"w/o copy tickets",
-                          r"$K_x\!=\!\infty$ \eqref{eq:ticket_update}"),
-    "w/o ridge gain":    (r"w/o optimistic gain pred.",
-                          r"mean estimate for \eqref{eq:predicted_gain}"),
+                          r"$K_x\!=\!\infty$ in \eqref{eq:ticket_update}"),
+    "w/o ridge gain":    (r"w/o gain prediction",
+                          r"mean bandit for \eqref{eq:predicted_gain}"),
     "w/o cache refresh": (r"w/o coverage-aware refresh",
-                          r"LRU instead of \eqref{eq:cache_refresh}"),
+                          r"LRU replaces \eqref{eq:cache_refresh}"),
 }
 ORDER = list(LABELS)
 
@@ -88,14 +88,15 @@ def make(log="results/face_abl_part.log",
     best = max(np.mean([v[0] for v in res[n].values()])
                for n in ORDER if n in res) if res else None
     for name in ORDER:
-        lbl, _ = LABELS[name]
+        lbl, mech = LABELS[name]
+        full_lbl = lbl if not mech else f"{lbl} ({mech})"
         if name in res:
             acc, _ = _cell(res[name], 0, best=best)
             poor, _ = _cell(res[name], 1)
             mb = f"{np.mean([v[3] for v in res[name].values()]):.0f}"
-            cells = [lbl, acc, poor, mb]
+            cells = [full_lbl, acc, poor, mb]
         else:
-            cells = [lbl, "--", "--", "--"]
+            cells = [full_lbl, "--", "--", "--"]
         a(" & ".join(cells) + r" \\")
         if name == "FACE (full)":
             a(r"\hline")
