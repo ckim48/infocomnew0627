@@ -46,8 +46,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     while FL keeps training/propagating so the accuracy curve plateaus."""
     cfg = cfg or Config()
     cfg.num_vehicles = num_vehicles
-    cfg.face_ttl = 60           # real backend: versions expire, sources
-    cfg.face_Qpub = 10          # republish updated encoders every Q_pub rounds
+    cfg.face_ttl = 15           # real backend: versions expire, sources
+    cfg.face_Qpub = 1           # republish updated encoders every round
+    cfg.face_lam = 0.001        # communication price per MB
     if dataset == "deepsense":
         import sim.multimodal_model as _MM
         _MM.ENCODER_OVERRIDES.update({"radar": _MM.RadarMapEncoder,
@@ -88,12 +89,10 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
-            # "Proposed" = the new FACE system model (versions/tickets/zone
-            # estimators/coverage value); baselines keep the legacy engine
-            if scheme == "Proposed":
-                alg = FACE(cfg, mfl, mob, scheme, seed=sd)
-            else:
-                alg = CachingForwarding(cfg, mfl, mob, scheme, seed=sd)
+            # ALL schemes run under the same system-model protocol (encoder
+            # versions, copy tickets, evaluation-gated adoption, Sec. III);
+            # they differ only in the forwarding policy (SCHEME_FACE_FLAGS)
+            alg = FACE(cfg, mfl, mob, scheme, seed=sd)
             pm = mfl.poor_mask()
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
             sat_h, usat_h, mb_h = [], [], []

@@ -82,6 +82,7 @@ class Config:
     face_ridge_lam: float = 1.0       # ridge regularization
     face_ridge_decay: float = 0.98    # sliding-window decay of the ridge sufficient stats
     face_g_floor: float = 0.2         # exploration floor on the immediate gain term
+    face_gain_prior: bool = True      # causal (s_meta - s_own)/(1 - s_own) prior on gains
     face_decay: float = 0.97          # exponential decay of zone transition/contact counts
     face_alpha_P: float = 0.3         # adjacency smoothing alpha_P in P-hat (Eq. 11)
     face_alpha_C: float = 1.0         # Beta prior alpha_C in kappa-hat (Eq. 12)

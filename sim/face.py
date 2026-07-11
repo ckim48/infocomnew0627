@@ -109,7 +109,34 @@ FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
                   use_ridge=True,      # ridge gain prediction (else mean bandit)
                   use_relay=True,      # forward cached copies of OTHERS' versions
                   use_demand=True,     # receiver-demand-aware immediate value
+                  link_blind=False,    # schedule ignoring the V2V link quality
+                  select=None,         # candidate rule: None|'mmfedmc'|'autofed'
                   refresh="knapsack")  # cache refresh: 'knapsack' | 'lru'
+
+# All schemes run under the SAME system-model protocol (encoder versions,
+# copy tickets, evaluation-gated adoption, publication cadence, Sec. III);
+# they differ only in the forwarding POLICY, exactly as in the paper.
+SCHEME_FACE_FLAGS = {
+    "Proposed":         {},
+    # direct V2V exchange of own encoders, demand + link aware, no carrying
+    "V2V-aware":        dict(use_relay=False, use_future=False,
+                             use_coverage=False, refresh="lru"),
+    # like V2V-aware but blind to the V2V link condition when scheduling
+    "Learning-aware":   dict(use_relay=False, use_future=False,
+                             use_coverage=False, refresh="lru",
+                             link_blind=True),
+    # relays cached encoders, LRU, demand-blind
+    "Caching-assisted": dict(use_demand=False, use_future=False,
+                             use_coverage=False, refresh="lru"),
+    # mmFedMC: sender offers only its top own modality by contribution/cost
+    "mmFedMC":          dict(use_relay=False, use_future=False,
+                             use_coverage=False, refresh="lru",
+                             select="mmfedmc"),
+    # AutoFed: prioritize high-quality (clean, data-rich) sources
+    "AutoFed":          dict(use_relay=False, use_future=False,
+                             use_coverage=False, refresh="lru",
+                             select="autofed"),
+}
 
 
 class FACE:
@@ -117,7 +144,9 @@ class FACE:
 
     def __init__(self, cfg, mfl, mob, scheme="FACE", seed=0, flags=None):
         self.cfg, self.mfl, self.mob, self.scheme = cfg, mfl, mob, scheme
-        self.flags = dict(FACE_FLAGS, **(flags or {}))
+        self.flags = dict(FACE_FLAGS)
+        self.flags.update(SCHEME_FACE_FLAGS.get(scheme, {}))
+        self.flags.update(flags or {})
         self.rng = np.random.default_rng(seed + 101)
         self.zones = Zones(cfg, mob)
         Z = self.zones.Z
@@ -161,6 +190,11 @@ class FACE:
             self.versions[self._vid] = v
             self.own_pub[(i, r)] = self._vid
             self.tickets[i][self._vid] = Kt
+            # retire the superseded version at the source: its unsent tickets
+            # are burned so the stale snapshot does not occupy the source's
+            # relay cache (distributed copies elsewhere remain valid)
+            if old is not None:
+                self.tickets[i].pop(old, None)
             self._vid += 1
 
     # ------------------------------------------------------------ helpers
@@ -265,9 +299,16 @@ class FACE:
 
     def _gain_zone(self, v, Psi):
         if self.flags["use_ridge"]:
-            return self.ridge.predict(v.r, Psi)
-        n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
-        return np.full(Psi.shape[0], mu if n else 1.0)
+            g = self.ridge.predict(v.r, Psi)
+        else:
+            n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
+            g = np.full(Psi.shape[0], mu if n else 1.0)
+        if self.cfg.face_gain_prior:
+            # same causal prior as the per-receiver term, at zone-mean strength
+            prior = np.clip((v.s_meta - Psi[:, 2])
+                            / np.maximum(1.0 - Psi[:, 2], 1e-6), 0.0, 1.0)
+            g = np.maximum(g, prior)
+        return g
 
     def _omega(self, pk, P, nvec):
         """Residual coverage Omega [H,Z] (Eq. residual_coverage) for the
@@ -445,7 +486,20 @@ class FACE:
         tent_cfree = {j: cfg.cache_capacity_mb - self._cache_used(j)
                       for j in range(mfl.N)}
 
-        def bundle(i, j):
+        dbg = getattr(self, "dbg", None)
+        # mmFedMC: each sender offers only its top own modality encoder,
+        # ranked by contribution per communication cost
+        top_own = {}
+        if self.flags["select"] == "mmfedmc":
+            for i in range(mfl.N):
+                own = [(mfl.strength[(i, r)] / cfg.encoder_size[r],
+                        self.own_pub[(i, r)]) for r in mfl.avail[i]
+                       if (i, r) in self.own_pub]
+                if own:
+                    top_own[i] = max(own)[1]
+
+        def bundle(i, j, count=False):
+            c = dbg if (count and dbg is not None) else None
             items = []
             ptx = mob.link_quality(i, j)
             cfree = tent_cfree[j]
@@ -453,17 +507,29 @@ class FACE:
                 if m <= 0 or self.tickets[j].get(x, 0) > 0 or (j, x) in got:
                     continue
                 if not self.flags["use_relay"] and not self._is_own_pub(i, x):
-                    continue                # ablation: no encoder ferrying
+                    continue                # no encoder ferrying
+                if self.flags["select"] == "mmfedmc" and x != top_own.get(i):
+                    continue                # mmFedMC: top own modality only
                 v = self.versions[x]
                 if x not in nvec:
                     continue
+                if c is not None:
+                    c["cand"] += 1
+                    if not (v.compat[j] and not v.resolved[j]):
+                        c["not_esv"] += 1
+                    elif v.s_meta <= float(mfl.strength.get((j, v.r), 0.0)):
+                        c["gap_le0"] += 1
                 pk = pack(x)
                 # immediate predicted reward at j (Eq. 10)
-                if not self.flags["use_demand"]:
+                if self.flags["select"] == "autofed":
+                    # AutoFed: quality-ranked, demand-blind
+                    vhat = (0.05 + 0.5 * v.s_meta) \
+                        if (v.compat[j] and not v.resolved[j]) else 0.0
+                elif not self.flags["use_demand"]:
                     vhat = 0.05 if (v.compat[j] and not v.resolved[j]) else 0.0
                 elif v.compat[j] and not v.resolved[j]:
-                    psi = self._psi(x, float(mfl.strength.get((j, v.r), 0.0)),
-                                    need.get((j, v.r), 0.0),
+                    s_own = float(mfl.strength.get((j, v.r), 0.0))
+                    psi = self._psi(x, s_own, need.get((j, v.r), 0.0),
                                     np.log1p(mfl.Dmr(j, v.r))
                                     / np.log1p(cfg.data_max), k)
                     if self.flags["use_ridge"]:
@@ -471,10 +537,16 @@ class FACE:
                     else:
                         n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
                         g = mu if n else 1.0
-                    # exploration floor: an unresolved compatible encoder
-                    # retains minimal transfer value, so posterior-mean
-                    # collapse cannot deadlock the evaluate-transfer loop
-                    g = max(g, cfg.face_g_floor)
+                    if cfg.face_gain_prior:
+                        # causal prior: under replacement adoption the
+                        # normalized gain is (s_meta - s_own)/(1 - s_own);
+                        # the ridge learns residual structure on top
+                        prior = max(v.s_meta - s_own, 0.0) \
+                            / max(1.0 - s_own, 1e-6)
+                        g = max(g, min(prior, 1.0))
+                    else:
+                        # blind exploration floor (ablation reference)
+                        g = max(g, cfg.face_g_floor)
                     vhat = need.get((j, v.r), 0.0) * g
                 else:
                     vhat = 0.0
@@ -488,8 +560,15 @@ class FACE:
                         - self._F(zn[i], pk, P, ex)
                 adv = vhat + D - cfg.face_lam * v.S
                 if adv <= 0:
+                    if c is not None:
+                        c["adv_le0"] += 1
                     continue
-                t_tx = v.S / (rate * max(ptx, 0.05))
+                # link-blind schemes schedule assuming an ideal link; the
+                # physical airtime is still consumed at execution time
+                ptx_s = 1.0 if self.flags["link_blind"] else max(ptx, 0.05)
+                t_tx = v.S / (rate * ptx_s)
+                if c is not None and t_tx > T:
+                    c["airtime"] += 1
                 items.append((adv, t_tx, v.S, x))
             if not items:
                 return 0.0, []
@@ -536,7 +615,9 @@ class FACE:
         while True:
             best, bkey = 0.0, None
             for (i, j) in list(pairs):
-                if pairs[(i, j)] is None or j in dirty_veh or \
+                if pairs[(i, j)] is None:
+                    pairs[(i, j)] = bundle(i, j, count=True)
+                elif j in dirty_veh or \
                         any(it[3] in dirty for it in pairs[(i, j)][1]):
                     pairs[(i, j)] = bundle(i, j)
                 if pairs[(i, j)][0] > best:
@@ -571,11 +652,14 @@ class FACE:
         sched, recv = [], {}
         for (i, j, sel_g) in committed:
             ptx = mob.link_quality(i, j)
+            T_budget = cfg.contact_time_per_round
             for (x, S, g) in sel_g:
                 v = self.versions[x]
                 sched.append((i, j, v))
                 self._n_tx += 1
                 self.last_tx_mb += S
+                if S / (rate * max(ptx, 0.05)) > T_budget:
+                    continue                # link-blind overrun: airtime lost
                 if self.rng.random() > ptx:
                     continue                # terminated transfer: airtime lost
                 self.tickets[i][x] -= g     # value-weighted split (Eq. 7)
