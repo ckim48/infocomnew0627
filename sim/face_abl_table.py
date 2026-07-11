@@ -61,10 +61,10 @@ def _cell(rows, idx, pct=True, best=None):
     return txt, m
 
 
-def make(log="results/face_abl_part.log",
+def make(log="results/face_abl_uniform.log",
          out_path="new_result/tab_face_ablation.tex"):
-    """Single-scenario ablation table (region-partitioned ECV placement,
-    the Sec. II motivation setting)."""
+    """Single-scenario ablation table (uniform ECV placement, matching the
+    main-comparison setup)."""
     res = _parse(log)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     seeds_note = sorted({len(v) for v in res.values()})
