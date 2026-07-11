@@ -147,8 +147,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         for m in keys:
             arr = np.stack(stacks[s][m])
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
-            if m in ("util", "utl", "utf"):
-                results[s][m + "_all"] = arr        # per-seed (for +- of means)
+            results[s][m + "_all"] = arr            # per-seed (exact +- stats)
         results[s]["accveh_all"] = np.stack(stacks[s]["accveh"])  # seeds x N
     path = os.path.join(cfg.results_dir,
                         out_name or f"metrics_v2x_real_{dataset}.npz")

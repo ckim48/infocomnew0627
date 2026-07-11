@@ -16,19 +16,26 @@ ABL1=$!
 python3 -m sim.face_ablation 250 part > results/face_abl_part.log 2>&1 &
 ABL2=$!
 
-echo "[driver] $(date) launching real FL main" >> "$LOG"
+echo "[driver] $(date) launching real FL main (parallel datasets)" >> "$LOG"
 python3 -c "
 from sim.run_v2x_real import run
 run(seeds=[2026, 2027, 2028], dataset='kitti', rounds=250)
+" > results/face_real_kitti.log 2>&1 &
+M1=$!
+python3 -c "
+from sim.run_v2x_real import run
 run(seeds=[2026, 2027, 2028], dataset='nuscenes', rounds=250)
-" > results/face_real_main.log 2>&1
-echo "[driver] $(date) real FL main done (rc=$?)" >> "$LOG"
+" > results/face_real_nuscenes.log 2>&1 &
+M2=$!
+wait $M1 $M2
+echo "[driver] $(date) real FL main done" >> "$LOG"
 
 wait $ABL1 $ABL2
 echo "[driver] $(date) ablation sweeps done" >> "$LOG"
 
 echo "[driver] $(date) regenerating assets" >> "$LOG"
 python3 -m sim.face_abl_table >> "$LOG" 2>&1
+python3 -m sim.face_main_table >> "$LOG" 2>&1
 python3 -m sim.face_figs >> "$LOG" 2>&1
 python3 -m sim.make_tables >> "$LOG" 2>&1 || echo "[driver] make_tables FAILED" >> "$LOG"
 python3 seoul_pack/generate.py >> "$LOG" 2>&1 || echo "[driver] seoul_pack FAILED" >> "$LOG"

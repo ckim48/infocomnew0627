@@ -480,11 +480,15 @@ class FACE:
         rate, T = cfg.tx_rate_mbps, cfg.contact_time_per_round
 
         # tentative state during contact scheduling: remaining tickets,
-        # committed receptions, and remaining receiver cache slack
+        # committed receptions, remaining receiver cache slack, and the
+        # per-vehicle half-duplex airtime budget (one radio: transmit and
+        # receive time both consume it, shared across ALL of the vehicle's
+        # contacts in the round)
         tent_m = {i: dict(self.tickets[i]) for i in range(mfl.N)}
         got = set()                       # (j, x) committed this round
         tent_cfree = {j: cfg.cache_capacity_mb - self._cache_used(j)
                       for j in range(mfl.N)}
+        air = {i: cfg.contact_time_per_round for i in range(mfl.N)}
 
         dbg = getattr(self, "dbg", None)
         # mmFedMC: each sender offers only its top own modality encoder,
@@ -572,8 +576,11 @@ class FACE:
                 items.append((adv, t_tx, v.S, x))
             if not items:
                 return 0.0, []
-            # 0/1 knapsack on airtime (DP, 0.05 s units)
-            cap = int(T / 0.05)
+            # 0/1 knapsack on airtime (DP, 0.05 s units); the budget is the
+            # smaller of both endpoints' remaining radio time this round
+            cap = int(min(T, air[i], air[j]) / 0.05)
+            if cap <= 0:
+                return 0.0, []
             wts = [max(int(np.ceil(t / 0.05)), 1) for (_, t, _, _) in items]
             dp = np.zeros(cap + 1)
             keep = np.zeros((len(items), cap + 1), dtype=bool)
@@ -617,7 +624,7 @@ class FACE:
             for (i, j) in list(pairs):
                 if pairs[(i, j)] is None:
                     pairs[(i, j)] = bundle(i, j, count=True)
-                elif j in dirty_veh or \
+                elif i in dirty_veh or j in dirty_veh or \
                         any(it[3] in dirty for it in pairs[(i, j)][1]):
                     pairs[(i, j)] = bundle(i, j)
                 if pairs[(i, j)][0] > best:
@@ -632,7 +639,8 @@ class FACE:
             # round-start state; only ticket/cache FEASIBILITY is updated,
             # so re-computed bundles keep identical weights (Prop. 2)
             sel_g = []
-            for (_, _, S, x) in sel:
+            t_used = 0.0
+            for (_, t_tx, S, x) in sel:
                 m_avail = tent_m[i].get(x, 0)
                 pk = pack(x)
                 Fi = self._F(zn[i], pk, P, nvec[x])
@@ -643,8 +651,11 @@ class FACE:
                 tent_cfree[j] -= S
                 tent_m[i][x] = m_avail - g
                 dirty.add(x)
+                t_used += t_tx
+            air[i] -= t_used              # half-duplex radio time consumed
+            air[j] -= t_used              # at BOTH endpoints
             committed.append((i, j, sel_g))
-            dirty_veh.add(j)
+            dirty_veh.update((i, j))
 
         # ---------- execute transfers (Bernoulli link success) ----------
         self._n_tx = self._n_deliv = self._n_relay = self._n_beyond = 0

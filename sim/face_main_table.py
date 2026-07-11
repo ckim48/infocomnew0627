@@ -12,23 +12,44 @@ from .make_tables import SCHEMES, FRAMEWORK, PUBLISHED, DISPLAY, TAIL, \
     _load, NR
 
 
+def _seed_curves(res_s, key):
+    """Per-seed curves [n_seeds, K]; falls back to the seed-mean curve for
+    npz files predating the *_all keys."""
+    if key + "_all" in res_s:
+        return np.asarray(res_s[key + "_all"])
+    return res_s[key][None, :]
+
+
 def _stats(res):
+    """All entries mean ± std over per-seed statistics."""
     schemes = [x for x in SCHEMES if x in res]
     tau = 0.95 * max(res[s]["acc"][-1] for s in schemes)
     out = {}
     for s in schemes:
-        acc = res[s]["acc"][-TAIL:].mean()
-        acc_sd = res[s]["acc_std"][-TAIL:].mean()
-        poor = res[s]["poor"][-TAIL:].mean()
-        poor_sd = res[s]["poor_std"][-TAIL:].mean()
-        loss = res[s]["vloss"][-TAIL:].mean()
-        reached = res[s]["acc"] >= tau
-        rounds = int(np.argmax(reached)) + 1 if reached.any() else None
-        tx = res[s]["tx"]
-        cumtx = int(tx[:rounds].sum()) if rounds else None
-        out[s] = dict(acc=acc, acc_sd=acc_sd, poor=poor, poor_sd=poor_sd,
-                      loss=loss, gap=acc - poor, rounds=rounds, cumtx=cumtx,
-                      totaltx=int(tx.sum()))
+        acc_c = _seed_curves(res[s], "acc")
+        poor_c = _seed_curves(res[s], "poor")
+        loss_c = _seed_curves(res[s], "vloss")
+        tx_c = _seed_curves(res[s], "tx")
+        acc = acc_c[:, -TAIL:].mean(1)
+        poor = poor_c[:, -TAIL:].mean(1)
+        loss = loss_c[:, -TAIL:].mean(1)
+        gap = acc - poor
+        rounds, cumtx = [], []
+        for a, t in zip(acc_c, tx_c):
+            reach = a >= tau
+            if reach.any():
+                r = int(np.argmax(reach)) + 1
+                rounds.append(r)
+                cumtx.append(float(t[:r].sum()))
+        reached_all = len(rounds) == acc_c.shape[0]
+        out[s] = dict(
+            acc=acc.mean(), acc_sd=acc.std(),
+            poor=poor.mean(), poor_sd=poor.std(),
+            loss=loss.mean(), loss_sd=loss.std(),
+            gap=gap.mean(), gap_sd=gap.std(),
+            rounds=(np.mean(rounds), np.std(rounds)) if reached_all else None,
+            cumtx=(np.mean(cumtx), np.std(cumtx)) if reached_all else None,
+            totaltx=int(tx_c.sum(1).mean()))
     return out
 
 
@@ -70,29 +91,32 @@ def make(out_path="new_result/tab_seoul_combined.tex"):
             poor=max(st[s]["poor"] for s in schemes),
             loss=min(st[s]["loss"] for s in schemes),
             gap=min(st[s]["gap"] for s in schemes),
-            rounds=min((st[s]["rounds"] for s in schemes
+            rounds=min((st[s]["rounds"][0] for s in schemes
                         if st[s]["rounds"]), default=None),
-            cumtx=min((st[s]["cumtx"] for s in schemes
+            cumtx=min((st[s]["cumtx"][0] for s in schemes
                        if st[s]["cumtx"]), default=None))
         a(f"        \\multirow{{{len(schemes)}}}{{*}}"
           f"{{\\textsc{{{label}}}}}")
-        for grp_end, s in [(FRAMEWORK[-1], s) for s in schemes]:
+        for s in schemes:
             d = st[s]
             cells = [
                 f"\\textsc{{{DISPLAY.get(s, s)}}}",
                 _pm(d["acc"], d["acc_sd"], abs(d["acc"] - best["acc"]) < 1e-9),
                 _pm(d["poor"], d["poor_sd"],
                     abs(d["poor"] - best["poor"]) < 1e-9),
-                _num(f"{d['loss']:.3f}",
+                _num(f"{d['loss']:.3f} $\\pm$ {d['loss_sd']:.3f}",
                      abs(d["loss"] - best["loss"]) < 1e-9),
-                _num(f"{100*d['gap']:.1f}",
+                _num(f"{100*d['gap']:.1f} $\\pm$ {100*d['gap_sd']:.1f}",
                      abs(d["gap"] - best["gap"]) < 1e-9),
             ]
             if d["rounds"] is None:
                 cells += [NR, f"$>{d['totaltx']}$"]
             else:
-                cells += [_num(d["rounds"], d["rounds"] == best["rounds"]),
-                          _num(d["cumtx"], d["cumtx"] == best["cumtx"])]
+                cells += [
+                    _num(f"{d['rounds'][0]:.0f} $\\pm$ {d['rounds'][1]:.0f}",
+                         d["rounds"][0] == best["rounds"]),
+                    _num(f"{d['cumtx'][0]:.0f} $\\pm$ {d['cumtx'][1]:.0f}",
+                         d["cumtx"][0] == best["cumtx"])]
             a("        & " + " & ".join(cells) + r" \\")
             if s in (FRAMEWORK[-1], PUBLISHED[-1]):
                 a(r"        \cline{2-8}" if s != schemes[-1] else "")

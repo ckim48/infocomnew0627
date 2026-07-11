@@ -34,6 +34,11 @@ LABELS = {
                           r"LRU replaces \eqref{eq:cache_refresh}"),
 }
 ORDER = list(LABELS)
+# key variants for the paper table (INFOCOM space budget): the components
+# with material end-to-end contribution; the near-zero rows (residual
+# coverage, value-weighted split, gain prediction) are text-only mentions
+KEY = ["FACE (full)", "w/o relay ferrying", "w/o tickets",
+       "w/o cache refresh", "w/o demand", "w/o future value"]
 
 
 def _parse(path):
@@ -62,10 +67,11 @@ def _cell(rows, idx, pct=True, best=None):
 
 
 def make(log="results/face_abl_uniform.log",
-         out_path="new_result/tab_face_ablation.tex"):
+         out_path="new_result/tab_face_ablation.tex", keys=None):
     """Single-scenario ablation table (uniform ECV placement, matching the
-    main-comparison setup)."""
+    main-comparison setup); `keys` selects the variants (default: KEY)."""
     res = _parse(log)
+    order = [n for n in (keys or KEY) if n in LABELS]
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     seeds_note = sorted({len(v) for v in res.values()})
 
@@ -88,14 +94,15 @@ def make(log="results/face_abl_uniform.log",
       r"\textsc{Comm. (MB/rd)} \\")
     a(r"\hline")
     best = max(np.mean([v[0] for v in res[n].values()])
-               for n in ORDER if n in res) if res else None
-    for name in ORDER:
+               for n in order if n in res) if res else None
+    for name in order:
         lbl, mech = LABELS[name]
         full_lbl = lbl if not mech else f"{lbl} ({mech})"
         if name in res:
             acc, _ = _cell(res[name], 0, best=best)
             poor, _ = _cell(res[name], 1)
-            mb = f"{np.mean([v[3] for v in res[name].values()]):.0f}"
+            mbs = [v[3] for v in res[name].values()]
+            mb = f"{np.mean(mbs):.0f} $\\pm$ {np.std(mbs):.0f}"
             cells = [full_lbl, acc, poor, mb]
         else:
             cells = [full_lbl, "--", "--", "--"]
