@@ -488,7 +488,6 @@ class FACE:
         got = set()                       # (j, x) committed this round
         tent_cfree = {j: cfg.cache_capacity_mb - self._cache_used(j)
                       for j in range(mfl.N)}
-        air = {i: cfg.contact_time_per_round for i in range(mfl.N)}
 
         dbg = getattr(self, "dbg", None)
         # mmFedMC: each sender offers only its top own modality encoder,
@@ -576,11 +575,8 @@ class FACE:
                 items.append((adv, t_tx, v.S, x))
             if not items:
                 return 0.0, []
-            # 0/1 knapsack on airtime (DP, 0.05 s units); the budget is the
-            # smaller of both endpoints' remaining radio time this round
-            cap = int(min(T, air[i], air[j]) / 0.05)
-            if cap <= 0:
-                return 0.0, []
+            # 0/1 knapsack on airtime (DP, 0.05 s units)
+            cap = int(T / 0.05)
             wts = [max(int(np.ceil(t / 0.05)), 1) for (_, t, _, _) in items]
             dp = np.zeros(cap + 1)
             keep = np.zeros((len(items), cap + 1), dtype=bool)
@@ -652,8 +648,6 @@ class FACE:
                 tent_m[i][x] = m_avail - g
                 dirty.add(x)
                 t_used += t_tx
-            air[i] -= t_used              # half-duplex radio time consumed
-            air[j] -= t_used              # at BOTH endpoints
             committed.append((i, j, sel_g))
             dirty_veh.update((i, j))
 

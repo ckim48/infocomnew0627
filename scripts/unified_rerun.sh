@@ -22,6 +22,7 @@ wait $P1 $P2
 echo "[driver2] $(date) main runs done" >> "$LOG"
 
 python3 -m sim.face_abl_table >> "$LOG" 2>&1
+python3 -m sim.face_main_table >> "$LOG" 2>&1
 python3 -m sim.face_figs >> "$LOG" 2>&1
 python3 -m sim.make_tables >> "$LOG" 2>&1 || echo "[driver2] make_tables FAILED" >> "$LOG"
 python3 seoul_pack/generate.py >> "$LOG" 2>&1 || echo "[driver2] seoul_pack FAILED" >> "$LOG"
