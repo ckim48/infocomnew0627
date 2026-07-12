@@ -40,10 +40,14 @@ def _prepare_v2x(cfg, device):
 
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         rounds=250, min_class_count=None, schemes=None, merge=False,
-        out_name=None):
+        out_name=None, partitioned=False):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
-    while FL keeps training/propagating so the accuracy curve plateaus."""
+    while FL keeps training/propagating so the accuracy curve plateaus.
+
+    partitioned=True realizes the Sec. II motivation: encoder-carrier vehicles
+    (data-rich taxis) are confined to the commercial west half of the region,
+    so strong encoders must be ferried east to reach the demand there."""
     cfg = cfg or Config()
     cfg.num_vehicles = num_vehicles
     cfg.face_ttl = 15           # real backend: versions expire, sources
@@ -78,6 +82,13 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         min_class_count = 800 if dataset == "nuscenes" else 0
     data = _prep_data(cfg, cfg.seed, dataset=dataset,
                       min_class_count=min_class_count)
+    if partitioned:
+        # data-rich (ECV) candidates confined to the west half of the region,
+        # by each vehicle's starting longitude in the Seoul trace
+        x0 = mob.veh_xy[0, :, 0]
+        data["rich_mask"] = (x0 <= np.median(x0)).astype(bool)
+        print(f"      [partitioned] ECV-eligible vehicles: "
+              f"{int(data['rich_mask'].sum())}/{mob.N} (west half)")
 
     todo = schemes or REAL_SCHEMES
     keys = ["acc", "poor", "tx", "util", "utl", "utf", "vloss", "sat", "usat", "txmb", "mhop", "avail"]
