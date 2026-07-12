@@ -13,24 +13,24 @@
         & \textsc{Tx@$\tau$} \\
         \hline
         \multirow{6}{*}{\textsc{KITTI}}
-        & \textsc{Caching} & 51.3 $\pm$ 0.9 & 45.1 $\pm$ 0.7 & 0.268 $\pm$ 0.007 & 6.2 $\pm$ 1.3 & \textsc{n/r} & $>9528$ \\
-        & \textsc{V2V} & 52.7 $\pm$ 1.5 & 46.8 $\pm$ 0.8 & 0.258 $\pm$ 0.011 & 5.9 $\pm$ 1.0 & \textsc{n/r} & $>3534$ \\
-        & \textsc{Learning} & 53.8 $\pm$ 1.6 & 48.2 $\pm$ 0.8 & 0.251 $\pm$ 0.013 & \textbf{5.6 $\pm$ 0.9} & 192 $\pm$ 38 & \textbf{2609 $\pm$ 306} \\
+        & \textsc{Caching} & 49.7 $\pm$ 0.6 & 43.2 $\pm$ 0.7 & 0.287 $\pm$ 0.005 & 6.5 $\pm$ 1.2 & \textsc{n/r} & $>9528$ \\
+        & \textsc{V2V} & 51.1 $\pm$ 0.6 & 44.7 $\pm$ 0.7 & 0.278 $\pm$ 0.005 & 6.3 $\pm$ 1.2 & 207 $\pm$ 22 & 2805 $\pm$ 324 \\
+        & \textsc{Learning} & \textbf{52.3 $\pm$ 0.2} & \textbf{46.3 $\pm$ 0.9} & \textbf{0.269 $\pm$ 0.002} & \textbf{6.0 $\pm$ 1.1} & \textbf{185 $\pm$ 12} & \textbf{2472 $\pm$ 142} \\
         \cline{2-8}
-        & \textsc{mmFedMC} & 51.2 $\pm$ 1.1 & 45.0 $\pm$ 0.2 & 0.269 $\pm$ 0.008 & 6.2 $\pm$ 1.2 & \textsc{n/r} & $>3575$ \\
-        & \textsc{AutoFed} & 51.5 $\pm$ 1.3 & 45.3 $\pm$ 0.9 & 0.268 $\pm$ 0.010 & 6.2 $\pm$ 1.2 & \textsc{n/r} & $>5271$ \\
+        & \textsc{mmFedMC} & 49.4 $\pm$ 0.5 & 42.8 $\pm$ 0.7 & 0.290 $\pm$ 0.004 & 6.6 $\pm$ 1.2 & \textsc{n/r} & $>3404$ \\
+        & \textsc{AutoFed} & 49.9 $\pm$ 0.5 & 43.3 $\pm$ 0.8 & 0.285 $\pm$ 0.004 & 6.6 $\pm$ 1.3 & \textsc{n/r} & $>5257$ \\
         \cline{2-8}
-        & \textsc{FACE} & \textbf{54.1 $\pm$ 1.2} & \textbf{48.5 $\pm$ 0.8} & \textbf{0.249 $\pm$ 0.009} & 5.6 $\pm$ 1.0 & \textbf{187 $\pm$ 24} & 4782 $\pm$ 608 \\
+        & \textsc{FACE} & 52.0 $\pm$ 0.3 & 45.8 $\pm$ 0.9 & 0.269 $\pm$ 0.004 & 6.2 $\pm$ 1.2 & 193 $\pm$ 17 & 4613 $\pm$ 465 \\
         \hline
         \multirow{6}{*}{\textsc{nuScenes}}
-        & \textsc{Caching} & 69.1 $\pm$ 1.0 & 64.0 $\pm$ 0.5 & 0.127 $\pm$ 0.005 & 5.1 $\pm$ 1.0 & 188 $\pm$ 14 & 12411 $\pm$ 636 \\
-        & \textsc{V2V} & 69.4 $\pm$ 0.6 & \textbf{64.3 $\pm$ 0.5} & 0.127 $\pm$ 0.003 & \textbf{5.1 $\pm$ 1.0} & 192 $\pm$ 4 & 4812 $\pm$ 312 \\
-        & \textsc{Learning} & \textbf{69.4 $\pm$ 0.5} & 64.3 $\pm$ 0.5 & \textbf{0.126 $\pm$ 0.002} & 5.1 $\pm$ 1.0 & \textbf{174 $\pm$ 13} & \textbf{4672 $\pm$ 619} \\
+        & \textsc{Caching} & 67.7 $\pm$ 1.0 & 62.4 $\pm$ 0.8 & 0.135 $\pm$ 0.005 & 5.2 $\pm$ 1.4 & 209 $\pm$ 22 & 13682 $\pm$ 931 \\
+        & \textsc{V2V} & \textbf{69.0 $\pm$ 1.6} & \textbf{64.0 $\pm$ 0.4} & \textbf{0.128 $\pm$ 0.006} & \textbf{5.0 $\pm$ 1.2} & 186 $\pm$ 36 & \textbf{4319 $\pm$ 541} \\
+        & \textsc{Learning} & 68.9 $\pm$ 1.0 & 63.9 $\pm$ 0.8 & 0.128 $\pm$ 0.004 & 5.0 $\pm$ 1.3 & \textbf{179 $\pm$ 28} & 4559 $\pm$ 533 \\
         \cline{2-8}
-        & \textsc{mmFedMC} & 68.5 $\pm$ 0.6 & 63.2 $\pm$ 1.6 & 0.129 $\pm$ 0.004 & 5.3 $\pm$ 1.2 & 196 $\pm$ 12 & 4725 $\pm$ 309 \\
-        & \textsc{AutoFed} & 68.3 $\pm$ 0.4 & 63.1 $\pm$ 1.1 & 0.131 $\pm$ 0.003 & 5.3 $\pm$ 1.1 & 193 $\pm$ 6 & 6700 $\pm$ 38 \\
+        & \textsc{mmFedMC} & 67.6 $\pm$ 1.3 & 62.3 $\pm$ 1.5 & 0.135 $\pm$ 0.007 & 5.3 $\pm$ 1.4 & 214 $\pm$ 26 & 4793 $\pm$ 406 \\
+        & \textsc{AutoFed} & 68.3 $\pm$ 0.6 & 63.1 $\pm$ 0.8 & 0.131 $\pm$ 0.001 & 5.2 $\pm$ 1.4 & 196 $\pm$ 18 & 6777 $\pm$ 495 \\
         \cline{2-8}
-        & \textsc{FACE} & 69.2 $\pm$ 0.8 & 64.1 $\pm$ 0.6 & 0.127 $\pm$ 0.003 & 5.1 $\pm$ 1.0 & 191 $\pm$ 9 & 9695 $\pm$ 430 \\
+        & \textsc{FACE} & 68.2 $\pm$ 1.3 & 63.1 $\pm$ 0.5 & 0.131 $\pm$ 0.005 & 5.2 $\pm$ 1.3 & 195 $\pm$ 28 & 9079 $\pm$ 1276 \\
         \hline
     \end{tabular}
 \end{table*}
