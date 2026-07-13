@@ -11,9 +11,18 @@ Implements the revised paper model (Sec. III-IV):
   * sliding-window ridge gain prediction with optimism (Eq. 10)
   * first-contact survival Gamma (Eq. 14), residual coverage Omega (Eq. 15),
     coverage-aware continuation value F (Eq. 16)
-  * marginal transfer advantage A_ijx (Eq. 17), per-contact 0/1 knapsack
-    bundles (Eq. 18) under half-duplex local-maximal link matching
-  * coverage-aware cache refresh knapsack (Eq. 19)
+  * marginal transfer advantage A_ijx with reciprocal priority factor
+    (Eq. transfer_advantage), JOINT admission-eviction bundle selection
+    (Eq. bundle_knapsack: two 1-D DPs, h(s) admitted value / g(f) min
+    retention loss), greedy max-weight matching under the half-duplex
+    single-peer constraint (Eq. matching_constraint, Prop. 2)
+  * coverage-aware cache refresh knapsack (Eq. cache_refresh)
+  * reputation and reciprocal cooperation (Sec. III-E): delivery credit
+    u v + mu_f (1-u) v-hat (Eq. rep_delivery), storage credit mu_s S c
+    (Eq. rep_storage), decayed state Psi (Eq. rep_update), zone-normalized
+    priority pi (Eq. rep_priority)
+  * ESV demand threshold delta_d (Eq. esv_indicator); evaluation/adoption
+    happens AFTER the contact phase (round steps S2 -> S3)
 
 Ablation flags (FACE_FLAGS) switch each mechanism off independently so the
 component ablation can attribute the end-to-end gain.
@@ -109,6 +118,7 @@ FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
                   use_ridge=True,      # ridge gain prediction (else mean bandit)
                   use_relay=True,      # forward cached copies of OTHERS' versions
                   use_demand=True,     # receiver-demand-aware immediate value
+                  use_recip=True,      # reciprocal priority (Eq. transfer_advantage)
                   link_blind=False,    # schedule ignoring the V2V link quality
                   select=None,         # candidate rule: None|'mmfedmc'|'autofed'
                   refresh="knapsack")  # cache refresh: 'knapsack' | 'lru'
@@ -120,22 +130,24 @@ SCHEME_FACE_FLAGS = {
     "Proposed":         {},
     # direct V2V exchange of own encoders, demand + link aware, no carrying
     "V2V-aware":        dict(use_relay=False, use_future=False,
-                             use_coverage=False, refresh="lru"),
+                             use_coverage=False, refresh="lru",
+                             use_recip=False),
     # like V2V-aware but blind to the V2V link condition when scheduling
     "Learning-aware":   dict(use_relay=False, use_future=False,
                              use_coverage=False, refresh="lru",
-                             link_blind=True),
+                             link_blind=True, use_recip=False),
     # relays cached encoders, LRU, demand-blind
     "Caching-assisted": dict(use_demand=False, use_future=False,
-                             use_coverage=False, refresh="lru"),
+                             use_coverage=False, refresh="lru",
+                             use_recip=False),
     # mmFedMC: sender offers only its top own modality by contribution/cost
     "mmFedMC":          dict(use_relay=False, use_future=False,
                              use_coverage=False, refresh="lru",
-                             select="mmfedmc"),
+                             select="mmfedmc", use_recip=False),
     # AutoFed: prioritize high-quality (clean, data-rich) sources
     "AutoFed":          dict(use_relay=False, use_future=False,
                              use_coverage=False, refresh="lru",
-                             select="autofed"),
+                             select="autofed", use_recip=False),
 }
 
 
@@ -169,6 +181,12 @@ class FACE:
         self._vid = 0
         self._clock = 0
         self._evermet = set()
+        # --- reputation / reciprocal cooperation state (Sec. III-E) ---
+        self.Psi = np.zeros(mfl.N)          # reputation Psi_i (Eq. rep_update)
+        self._dPsi = np.zeros(mfl.N)        # this-round increment dPsi_i
+        self._pi = np.zeros(mfl.N)          # reciprocal priority pi_i (Eq. rep_priority)
+        self._deliv_credit = {}             # (receiver, vid) -> (sender, vhat at delivery)
+        self._need_ok = {}                  # r -> [N] bool, d_{i,r} >= delta_d
         self._publish_all(t=0)
 
     # ------------------------------------------------------------ publication
@@ -256,7 +274,9 @@ class FACE:
         cfg, v = self.cfg, self.versions[x]
         H, Z = cfg.face_H, self.zones.Z
         ri = self.r_idx[v.r]
-        esv = v.compat & ~v.resolved
+        # ESV indicator (Eq. esv_indicator): compatible, unevaluated, and
+        # with modality demand above the threshold delta_d
+        esv = v.compat & ~v.resolved & self._need_ok[v.r]
         cnt_all = np.bincount(zn, minlength=Z).astype(float)
         cnt_esv = np.bincount(zn[esv], minlength=Z).astype(float)
         q_cur = np.divide(cnt_esv, cnt_all, out=np.zeros(Z),
@@ -382,7 +402,18 @@ class FACE:
                     self.gstat[(v.src, r)] = (n + 1, mu + (delta - mu) / (n + 1))
                     evals.append((delta, x))
                 delta, x = max(evals)
-                if delta >= cfg.face_delta:                  # Eq. adoption
+                adopted = delta >= cfg.face_delta
+                # resolve pending delivery-reputation credits (Eq. rep_delivery):
+                # the relay that delivered an ADOPTED encoder earns the realized
+                # gain v_{j,x}; a delivered-but-not-adopted one earns mu_f * vhat
+                for dlt, xx in evals:
+                    cred = self._deliv_credit.pop((i, xx), None)
+                    if cred is not None:
+                        sender, vhat_d = cred
+                        u = adopted and xx == x
+                        self._dPsi[sender] += dlt if u \
+                            else cfg.face_mu_f * vhat_d
+                if adopted:                                  # Eq. adoption
                     v = self.versions[x]
                     mfl.commit(i, r, [(v.src, v.payload)])
                     self._n_adopt += 1
@@ -406,9 +437,18 @@ class FACE:
             self.versions.pop(x)
         self._update_estimators(k, A, zn)
         need = modality_needs(cfg, mfl)
-        # evaluate + adopt candidates received in previous rounds
-        self._adopt(k, need, zn)
-        # per-vehicle contact registration (evermet AFTER adoption bookkeeping)
+        # ESV demand gate (Eq. esv_indicator): d_{i,r} >= delta_d
+        self._need_ok = {r: np.array([need.get((i, r), 0.0) >= cfg.face_delta_d
+                                      for i in range(mfl.N)])
+                         for r in cfg.modalities}
+        # reciprocal priority pi_j from the zone-average reputation
+        # (Eq. rep_priority); identity-free: only zone means are gossiped
+        Zz = self.zones.Z
+        zsum = np.bincount(zn, weights=self.Psi, minlength=Zz)
+        zcnt = np.maximum(np.bincount(zn, minlength=Zz), 1)
+        self._pi = np.clip(self.Psi / (zsum[zn] / zcnt[zn] + 1e-6),
+                           0.0, cfg.face_pi_cap)
+        # per-vehicle contact registration
         for i in range(mfl.N):
             for j in mob.neighbors(A, i):
                 self._evermet.add((i, int(j)))
@@ -444,7 +484,8 @@ class FACE:
             vs = [v for v in self.versions.values() if v.r == r]
             if not vs:
                 continue
-            esv_frac = np.mean([(v.compat & ~v.resolved) for v in vs], axis=0)
+            esv_frac = np.mean([(v.compat & ~v.resolved & self._need_ok[r])
+                                for v in vs], axis=0)
             q_cur = np.divide(np.bincount(zn, weights=esv_frac, minlength=Z),
                               cnt_all, out=np.zeros(Z), where=occ_z)
             s_mean, need_mean, logD_mean = zstats[r]
@@ -479,16 +520,6 @@ class FACE:
         # ---------- bundle value per directed contact (Eq. 17-18) ----------
         rate, T = cfg.tx_rate_mbps, cfg.contact_time_per_round
 
-        # tentative state during contact scheduling: remaining tickets,
-        # committed receptions, remaining receiver cache slack, and the
-        # per-vehicle half-duplex airtime budget (one radio: transmit and
-        # receive time both consume it, shared across ALL of the vehicle's
-        # contacts in the round)
-        tent_m = {i: dict(self.tickets[i]) for i in range(mfl.N)}
-        got = set()                       # (j, x) committed this round
-        tent_cfree = {j: cfg.cache_capacity_mb - self._cache_used(j)
-                      for j in range(mfl.N)}
-
         dbg = getattr(self, "dbg", None)
         # mmFedMC: each sender offers only its top own modality encoder,
         # ranked by contribution per communication cost
@@ -501,13 +532,33 @@ class FACE:
                 if own:
                     top_own[i] = max(own)[1]
 
+        # retention values of the receiver's relay copies
+        # (Eq. retention_value), cached for the round-frozen valuation
+        keepv_cache = {}
+
+        def keep_value(j, y):
+            kv = keepv_cache.get((j, y))
+            if kv is None:
+                v = self.versions[y]
+                if v.compat[j] and not v.resolved[j]:
+                    kv = np.inf                 # pending own evaluation
+                elif self.flags["refresh"] == "lru" or \
+                        not self.flags["use_future"]:
+                    kv = 0.0                    # LRU baselines: drop-oldest
+                else:
+                    ex = nvec.get(y, np.zeros(Z)).copy()
+                    ex[zn[j]] = max(ex[zn[j]] - 1, 0)
+                    kv = self._F(zn[j], pack(y), P, ex)
+                keepv_cache[(j, y)] = kv
+            return kv
+
         def bundle(i, j, count=False):
             c = dbg if (count and dbg is not None) else None
             items = []
             ptx = mob.link_quality(i, j)
-            cfree = tent_cfree[j]
-            for x, m in tent_m[i].items():
-                if m <= 0 or self.tickets[j].get(x, 0) > 0 or (j, x) in got:
+            cfree = cfg.cache_capacity_mb - self._cache_used(j)
+            for x, m in self.tickets[i].items():
+                if m <= 0 or self.tickets[j].get(x, 0) > 0:
                     continue
                 if not self.flags["use_relay"] and not self._is_own_pub(i, x):
                     continue                # no encoder ferrying
@@ -530,7 +581,8 @@ class FACE:
                         if (v.compat[j] and not v.resolved[j]) else 0.0
                 elif not self.flags["use_demand"]:
                     vhat = 0.05 if (v.compat[j] and not v.resolved[j]) else 0.0
-                elif v.compat[j] and not v.resolved[j]:
+                elif v.compat[j] and not v.resolved[j] \
+                        and self._need_ok[v.r][j]:
                     s_own = float(mfl.strength.get((j, v.r), 0.0))
                     psi = self._psi(x, s_own, need.get((j, v.r), 0.0),
                                     np.log1p(mfl.Dmr(j, v.r))
@@ -553,6 +605,12 @@ class FACE:
                     vhat = need.get((j, v.r), 0.0) * g
                 else:
                     vhat = 0.0
+                # reciprocal priority factor (Eq. transfer_advantage): an
+                # above-average contributor's immediate gain is scaled up,
+                # so it is admitted first under link and cache contention
+                if self.flags["use_recip"] and vhat > 0.0:
+                    vhat *= 1.0 + cfg.face_gamma_r \
+                        * max(self._pi[j] - 1.0, 0.0)
                 # continuation-value change D_ijx (Eq. 17)
                 if m > 1:
                     D = self._F(zn[j], pk, P, nvec[x])
@@ -572,93 +630,128 @@ class FACE:
                 t_tx = v.S / (rate * ptx_s)
                 if c is not None and t_tx > T:
                     c["airtime"] += 1
-                items.append((adv, t_tx, v.S, x))
+                items.append((adv, t_tx, v.S, x, vhat))
             if not items:
-                return 0.0, []
-            # 0/1 knapsack on airtime (DP, 0.05 s units)
+                return 0.0, [], []
+            # ---- joint admission-eviction (Eq. bundle_knapsack) ----
+            # h(s): 0/1 knapsack on airtime (DP, 0.05 s units)
             cap = int(T / 0.05)
-            wts = [max(int(np.ceil(t / 0.05)), 1) for (_, t, _, _) in items]
+            wts = [max(int(np.ceil(t / 0.05)), 1) for (_, t, _, _, _) in items]
             dp = np.zeros(cap + 1)
             keep = np.zeros((len(items), cap + 1), dtype=bool)
-            for a, (val, _, _, _) in enumerate(items):
+            for a, it in enumerate(items):
                 w = wts[a]
                 if w > cap:
                     continue
-                cand = dp[:cap + 1 - w] + val
+                cand = dp[:cap + 1 - w] + it[0]
                 upd = cand > dp[w:]
                 keep[a, w:][upd] = True
                 dp[w:][upd] = cand[upd]
-            sel, c = [], int(np.argmax(dp))
-            for a in range(len(items) - 1, -1, -1):
-                if keep[a, c]:
-                    sel.append(items[a])
-                    c -= wts[a]
-            # receiver relay-cache feasibility (bytes)
-            sel.sort(key=lambda it: -it[0] / it[2])
-            out, used = [], 0.0
-            for it in sel:
-                if used + it[2] <= cfree + 1e-9:    # receiver relay-cache slack
-                    out.append(it)
-                    used += it[2]
-            return sum(it[0] for it in out), out
 
-        # ---------- greedy contact scheduling (locally maximal bundles) ----
-        # A directed contact (i -> j) is committed when its bundle value is
-        # the current maximum; one T-second airtime budget per direction, and
-        # a vehicle may serve several contacts sequentially within a decision
-        # round (same per-contact physics as the baseline engine).
+            def recon(c0):
+                sel, cc = [], c0
+                for a in range(len(items) - 1, -1, -1):
+                    if keep[a, cc]:
+                        sel.append(a)
+                        cc -= wts[a]
+                return sel
+
+            # g(f): min retention loss freeing >= f MB from the receiver's
+            # evictable relay copies (pending-evaluation copies are kept)
+            evs = [(keep_value(j, y), self.versions[y].S, y)
+                   for y, my in self.tickets[j].items()
+                   if my > 0 and y in self.versions
+                   and not self._is_own_pub(j, y)]
+            evs = [e for e in evs if np.isfinite(e[0])]
+            if self.flags["refresh"] == "lru":
+                evs.sort(key=lambda e: self.lru[j].get(e[2], -1))  # oldest first
+            capf = int(np.ceil(cfg.cache_capacity_mb)) + 1
+            nev = len(evs)
+            EV = np.full((nev + 1, capf), np.inf)
+            EV[0, 0] = 0.0
+            for a in range(1, nev + 1):
+                kv, Sy, _ = evs[a - 1]
+                w = max(int(np.ceil(Sy)), 1)
+                for f in range(capf):
+                    take = EV[a - 1, max(f - w, 0)] + kv
+                    EV[a, f] = min(EV[a - 1, f], take)
+
+            def evict_set(f):
+                out, a, ff = [], nev, f
+                while a > 0 and ff > 0:
+                    kv, Sy, y = evs[a - 1]
+                    w = max(int(np.ceil(Sy)), 1)
+                    if EV[a, ff] == EV[a - 1, ff]:
+                        a -= 1
+                    else:
+                        out.append(y)
+                        ff = max(ff - w, 0)
+                        a -= 1
+                return out
+
+            # Phi_ij = max_s [ h(s) - g((s - cfree)^+) ] (Eq. bundle_knapsack)
+            best_phi, best_sel, best_ev = 0.0, [], []
+            for c0 in range(cap + 1):
+                if dp[c0] <= best_phi:
+                    continue                 # eviction loss only shrinks value
+                idxs = recon(c0)
+                if not idxs:
+                    continue
+                byt = sum(items[a][2] for a in idxs)
+                needf = int(np.ceil(max(byt - cfree, 0.0) - 1e-9))
+                if needf >= capf or not np.isfinite(EV[nev, needf]):
+                    continue
+                phi = dp[c0] - EV[nev, needf]
+                if phi > best_phi:
+                    best_phi = phi
+                    best_sel = [items[a] for a in idxs]
+                    best_ev = evict_set(needf)
+            return best_phi, best_sel, best_ev
+
+        # ---------- distributed link contention = greedy matching ----------
+        # Bundle weights are frozen at their round-start values (A3); when a
+        # directed contact commits, BOTH endpoints leave contention
+        # (half-duplex single-peer, Eq. matching_constraint), so the committed
+        # exchanges form a matching on the contact graph and the greedy
+        # 1/2-approximation guarantee of Prop. 2 applies.
         pairs = {}
         for i in range(mfl.N):
             for j in mob.neighbors(A, i):
-                j = int(j)
-                pairs[(i, j)] = None
+                pairs[(i, int(j))] = None
         committed = []
-        dirty = set(self.versions)          # all packs fresh -> compute lazily
-        dirty_veh = set()
         while True:
             best, bkey = 0.0, None
-            for (i, j) in list(pairs):
-                if pairs[(i, j)] is None:
-                    pairs[(i, j)] = bundle(i, j, count=True)
-                elif i in dirty_veh or j in dirty_veh or \
-                        any(it[3] in dirty for it in pairs[(i, j)][1]):
-                    pairs[(i, j)] = bundle(i, j)
-                if pairs[(i, j)][0] > best:
-                    best, bkey = pairs[(i, j)][0], (i, j)
-            dirty = set()
-            dirty_veh = set()
+            for key in pairs:
+                if pairs[key] is None:
+                    pairs[key] = bundle(*key, count=True)
+                if pairs[key][0] > best:
+                    best, bkey = pairs[key][0], key
             if bkey is None or best <= 1e-12:
                 break
             i, j = bkey
-            sel = pairs.pop(bkey)[1]
-            # round-frozen valuation: values/copy vectors stay at their
-            # round-start state; only ticket/cache FEASIBILITY is updated,
-            # so re-computed bundles keep identical weights (Prop. 2)
+            _, sel, evicts = pairs[bkey]
             sel_g = []
-            t_used = 0.0
-            for (_, t_tx, S, x) in sel:
-                m_avail = tent_m[i].get(x, 0)
+            for (_, t_tx, S, x, vhat) in sel:
+                m_avail = self.tickets[i].get(x, 0)
                 pk = pack(x)
                 Fi = self._F(zn[i], pk, P, nvec[x])
                 Fj = self._F(zn[j], pk, P, nvec[x])
                 g = self._split_tickets(m_avail, Fi, Fj)
-                sel_g.append((x, S, g))
-                got.add((j, x))
-                tent_cfree[j] -= S
-                tent_m[i][x] = m_avail - g
-                dirty.add(x)
-                t_used += t_tx
-            committed.append((i, j, sel_g))
-            dirty_veh.update((i, j))
+                sel_g.append((x, S, g, vhat))
+            committed.append((i, j, sel_g, evicts))
+            # matching: both endpoints leave contention this round
+            for key in [p for p in pairs if i in p or j in p]:
+                pairs.pop(key)
 
         # ---------- execute transfers (Bernoulli link success) ----------
         self._n_tx = self._n_deliv = self._n_relay = self._n_beyond = 0
         self.last_tx_mb = 0.0
         sched, recv = [], {}
-        for (i, j, sel_g) in committed:
+        for (i, j, sel_g, evicts) in committed:
             ptx = mob.link_quality(i, j)
             T_budget = cfg.contact_time_per_round
-            for (x, S, g) in sel_g:
+            evq = list(evicts)
+            for (x, S, g, vhat) in sel_g:
                 v = self.versions[x]
                 sched.append((i, j, v))
                 self._n_tx += 1
@@ -667,6 +760,13 @@ class FACE:
                     continue                # link-blind overrun: airtime lost
                 if self.rng.random() > ptx:
                     continue                # terminated transfer: airtime lost
+                # lazy eviction on acknowledged arrival (Eq. bundle_knapsack):
+                # displaced relay copies burn their tickets (Eq. ticket_update)
+                while evq and self._cache_used(j) + S \
+                        > cfg.cache_capacity_mb + 1e-9:
+                    y = evq.pop(0)
+                    self.tickets[j].pop(y, None)
+                    self.lru[j].pop(y, None)
                 self.tickets[i][x] -= g     # value-weighted split (Eq. 7)
                 if self.tickets[i][x] <= 0:      # custody transferred away
                     del self.tickets[i][x]
@@ -674,11 +774,19 @@ class FACE:
                 self.lru[j][x] = k
                 self._n_deliv += 1
                 recv.setdefault((j, v.r), []).append(v.s_meta)
+                # delivery reputation (Eq. rep_delivery): relayed versions
+                # (1 - ell = 1) earn credit, resolved at the receiver's
+                # evaluation once the adoption outcome u_{j,x} is known
+                if not self._is_own_pub(i, x):
+                    self._deliv_credit[(j, x)] = (i, vhat)
                 if v.src != i:
                     self._n_relay += 1
                 if (v.src, j) not in self._evermet and v.src != j:
                     self._n_beyond += 1
         self._score_round(sched, recv, need, gamma_eval, zn)
+        # ---------- evaluate + adopt (step S3: after the contact phase, so
+        # newly received encoders are evaluated in the same round) ----------
+        self._adopt(k, need, zn)
 
         # ---------- coverage-aware cache refresh (Eq. 19) ----------
         for i in range(mfl.N):
@@ -715,6 +823,14 @@ class FACE:
                     self.tickets[i].pop(x, None)
                     self.lru[i].pop(x, None)
 
+        # ---------- reputation update (Sec. III-E) ----------
+        # storage contribution (Eq. rep_storage): caching others' versions is
+        # rewarded in proportion to the occupied relay storage
+        for i in range(mfl.N):
+            self._dPsi[i] += cfg.face_mu_s * self._cache_used(i)
+        self.Psi = cfg.face_gamma_psi * self.Psi + self._dPsi   # Eq. rep_update
+        self._dPsi = np.zeros(mfl.N)
+
         # ---------- publication (real backend; no-op with static encoders) ---
         if hasattr(self.mfl, "snapshot_encoder") and \
                 cfg.face_Qpub > 0 and (k + 1) % cfg.face_Qpub == 0:
@@ -726,10 +842,13 @@ class FACE:
             alive.update(x for x, m in self.tickets[i].items() if m > 0)
         for x in [x for x in self.versions if x not in alive]:
             self.versions.pop(x)
+        # drop pending delivery credits of retired versions
+        self._deliv_credit = {kx: cr for kx, cr in self._deliv_credit.items()
+                              if kx[1] in self.versions}
 
         self.last_selected = [(i, j, self.versions[x].src, self.versions[x].r)
-                              for (i, j, sel_g) in committed
-                              for (x, _, _) in sel_g
+                              for (i, j, sel_g, _) in committed
+                              for (x, _, _, _) in sel_g
                               if x in self.versions]
         return self.last_selected
 

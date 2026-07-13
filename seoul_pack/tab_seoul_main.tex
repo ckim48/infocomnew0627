@@ -1,6 +1,6 @@
 \begin{table*}[t]
     \centering
-    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 51.8\%, nuScenes: 66.3\%); \textsc{Loss} = final validation loss $(1-Q^{\mathrm{eff}})^2$; \textsc{U} = mean achieved per-round utility (learning term and $\nu$-weighted forwarding term of $R(\mathbf{a}(k))$), scored with the true $\Gamma$ for all schemes; raw total utility scales with transmission volume, so \textsc{U/Tx} reports utility per encoder transmission; \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
+    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau$ = 95\% of the best final accuracy (KITTI: 52.4\%, nuScenes: 67.2\%); \textsc{Loss} = final validation loss $(1-Q^{\mathrm{eff}})^2$; \textsc{U} = mean achieved per-round utility (learning term and $\nu$-weighted forwarding term of $R(\mathbf{a}(k))$), scored with the true $\Gamma$ for all schemes; raw total utility scales with transmission volume, so \textsc{U/Tx} reports utility per encoder transmission; \textsc{n/r} = did not reach $\tau$, with total transmissions spent as a lower bound).}
     \label{tab:seoul_results}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{5pt}
@@ -9,24 +9,24 @@
         \textsc{Dataset} & \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Loss} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} & \textsc{U$^{\mathrm{learn}}$} & \textsc{U$^{\mathrm{fwd}}$} & \textsc{U/Tx} \\
         \hline
         \multirow{6}{*}{\textsc{KITTI}}
-        & \textsc{Caching} & 51.3 $\pm$ 0.9 & 45.1 $\pm$ 0.8 & 0.268 & 6.2 & \textsc{n/r} & $>9528$ & 3.1 $\pm$ 0.7 & \textbf{12.2 $\pm$ 0.2} & 0.40 $\pm$ 0.02 \\
-        & \textsc{V2V} & 52.7 $\pm$ 1.5 & 46.8 $\pm$ 0.8 & 0.258 & 5.9 & 215 & 3040 & 3.0 $\pm$ 0.5 & 5.1 $\pm$ 0.2 & 0.58 $\pm$ 0.05 \\
-        & \textsc{Learning} & 53.8 $\pm$ 1.6 & 48.2 $\pm$ 0.8 & 0.251 & \textbf{5.6} & 197 & \textbf{2697} & \textbf{5.8 $\pm$ 0.8} & 7.6 $\pm$ 0.4 & \textbf{0.98 $\pm$ 0.09} \\
+        & \textsc{Caching} & 51.2 $\pm$ 0.9 & 45.0 $\pm$ 0.7 & 0.271 & 6.2 & \textsc{n/r} & $>7655$ & 2.4 $\pm$ 1.0 & 10.6 $\pm$ 0.2 & 0.43 $\pm$ 0.04 \\
+        & \textsc{V2V} & 54.2 $\pm$ 1.6 & 48.7 $\pm$ 1.2 & 0.247 & 5.5 & 197 & 5239 & 6.8 $\pm$ 1.2 & 11.4 $\pm$ 0.4 & 0.67 $\pm$ 0.06 \\
+        & \textsc{Learning} & 52.5 $\pm$ 1.5 & 46.7 $\pm$ 0.7 & 0.260 & 5.8 & 239 & \textbf{4543} & 7.8 $\pm$ 1.4 & 10.4 $\pm$ 0.5 & \textbf{0.95 $\pm$ 0.10} \\
         \cline{2-11}
-        & \textsc{mmFedMC} & 51.2 $\pm$ 1.1 & 45.0 $\pm$ 0.2 & 0.269 & 6.2 & \textsc{n/r} & $>3575$ & 3.1 $\pm$ 0.5 & 5.0 $\pm$ 0.3 & 0.56 $\pm$ 0.05 \\
-        & \textsc{AutoFed} & 51.5 $\pm$ 1.3 & 45.3 $\pm$ 0.9 & 0.268 & 6.2 & 246 & 5176 & 2.6 $\pm$ 0.4 & 6.3 $\pm$ 0.0 & 0.42 $\pm$ 0.02 \\
+        & \textsc{mmFedMC} & 51.1 $\pm$ 1.3 & 44.9 $\pm$ 0.6 & 0.270 & 6.1 & \textsc{n/r} & $>6709$ & 6.8 $\pm$ 1.4 & 11.1 $\pm$ 0.5 & 0.67 $\pm$ 0.07 \\
+        & \textsc{AutoFed} & 51.3 $\pm$ 1.2 & 45.2 $\pm$ 0.6 & 0.269 & 6.1 & \textsc{n/r} & $>7489$ & 5.8 $\pm$ 1.1 & 12.0 $\pm$ 0.3 & 0.59 $\pm$ 0.05 \\
         \cline{2-11}
-        & \textsc{FACE} & \textbf{54.1 $\pm$ 1.2} & \textbf{48.5 $\pm$ 0.8} & \textbf{0.249} & 5.6 & \textbf{189} & 4876 & 5.6 $\pm$ 0.8 & 9.6 $\pm$ 0.2 & 0.59 $\pm$ 0.04 \\
+        & \textsc{FACE} & \textbf{54.9 $\pm$ 1.4} & \textbf{49.5 $\pm$ 1.0} & \textbf{0.243} & \textbf{5.4} & \textbf{181} & 5137 & \textbf{9.5 $\pm$ 1.4} & \textbf{12.4 $\pm$ 0.3} & 0.76 $\pm$ 0.06 \\
         \hline
         \multirow{6}{*}{\textsc{nuScenes}}
-        & \textsc{Caching} & 69.1 $\pm$ 1.0 & 64.0 $\pm$ 0.5 & 0.127 & 5.1 & 187 & 12478 & 3.3 $\pm$ 0.8 & \textbf{22.5 $\pm$ 0.5} & 0.39 $\pm$ 0.02 \\
-        & \textsc{V2V} & 69.4 $\pm$ 0.6 & \textbf{64.3 $\pm$ 0.6} & 0.127 & \textbf{5.1} & 195 & 4858 & 3.0 $\pm$ 0.6 & 9.5 $\pm$ 0.6 & 0.50 $\pm$ 0.05 \\
-        & \textsc{Learning} & \textbf{69.4 $\pm$ 0.5} & 64.3 $\pm$ 0.5 & \textbf{0.126} & 5.1 & \textbf{176} & \textbf{4704} & 4.3 $\pm$ 0.7 & 11.4 $\pm$ 0.7 & \textbf{0.58 $\pm$ 0.05} \\
+        & \textsc{Caching} & 68.9 $\pm$ 0.6 & 63.8 $\pm$ 1.0 & 0.128 & 5.1 & 212 & 9876 & 2.3 $\pm$ 0.9 & 18.0 $\pm$ 0.6 & 0.43 $\pm$ 0.03 \\
+        & \textsc{V2V} & \textbf{70.1 $\pm$ 0.6} & \textbf{65.1 $\pm$ 0.4} & \textbf{0.123} & \textbf{4.9} & \textbf{182} & 5540 & 6.0 $\pm$ 1.7 & 15.1 $\pm$ 1.5 & 0.66 $\pm$ 0.10 \\
+        & \textsc{Learning} & 69.0 $\pm$ 0.1 & 63.9 $\pm$ 1.2 & 0.127 & 5.2 & 199 & 6080 & 7.4 $\pm$ 1.9 & 16.2 $\pm$ 2.0 & \textbf{0.74 $\pm$ 0.12} \\
         \cline{2-11}
-        & \textsc{mmFedMC} & 68.5 $\pm$ 0.6 & 63.2 $\pm$ 1.6 & 0.129 & 5.3 & 200 & 4828 & 2.7 $\pm$ 0.5 & 8.6 $\pm$ 0.4 & 0.47 $\pm$ 0.04 \\
-        & \textsc{AutoFed} & 68.3 $\pm$ 0.4 & 63.1 $\pm$ 1.1 & 0.131 & 5.3 & 196 & 6765 & 2.7 $\pm$ 0.5 & 11.8 $\pm$ 0.2 & 0.42 $\pm$ 0.02 \\
+        & \textsc{mmFedMC} & 68.8 $\pm$ 0.3 & 63.6 $\pm$ 0.9 & 0.127 & 5.2 & 213 & \textbf{4634} & 3.8 $\pm$ 0.8 & 9.9 $\pm$ 0.5 & 0.61 $\pm$ 0.06 \\
+        & \textsc{AutoFed} & 68.6 $\pm$ 0.3 & 63.4 $\pm$ 1.1 & 0.128 & 5.2 & 214 & 8701 & 5.0 $\pm$ 1.2 & \textbf{19.1 $\pm$ 0.5} & 0.59 $\pm$ 0.04 \\
         \cline{2-11}
-        & \textsc{FACE} & 69.2 $\pm$ 0.8 & 64.1 $\pm$ 0.6 & 0.127 & 5.1 & 187 & 9490 & \textbf{5.7 $\pm$ 0.8} & 17.2 $\pm$ 0.5 & 0.45 $\pm$ 0.03 \\
+        & \textsc{FACE} & 69.4 $\pm$ 0.8 & 64.3 $\pm$ 1.7 & 0.127 & 5.1 & 191 & 7466 & \textbf{8.3 $\pm$ 1.9} & 17.5 $\pm$ 1.1 & 0.64 $\pm$ 0.07 \\
         \hline
     \end{tabular}
 \end{table*}

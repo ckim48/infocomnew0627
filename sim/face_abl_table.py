@@ -32,13 +32,16 @@ LABELS = {
                           r"mean bandit for \eqref{eq:predicted_gain}"),
     "w/o cache refresh": (r"w/o coverage-aware refresh",
                           r"LRU replaces \eqref{eq:cache_refresh}"),
+    "w/o reciprocity":   (r"w/o reciprocal priority",
+                          r"$\gamma_{\mathrm r}\!=\!0$ in \eqref{eq:transfer_advantage}"),
 }
 ORDER = list(LABELS)
 # key variants for the paper table (INFOCOM space budget): the components
 # with material end-to-end contribution; the near-zero rows (residual
 # coverage, value-weighted split, gain prediction) are text-only mentions
 KEY = ["FACE (full)", "w/o relay ferrying", "w/o tickets",
-       "w/o cache refresh", "w/o demand", "w/o future value"]
+       "w/o cache refresh", "w/o demand", "w/o future value",
+       "w/o reciprocity"]
 
 
 def _parse(path):

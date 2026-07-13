@@ -1,6 +1,6 @@
 \begin{table}[t]
     \centering
-    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL on KITTI, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau=51.8\%$; \textsc{n/r} = did not reach $\tau$).}
+    \caption{Performance on the real Seoul-Gangnam V2X trace (real multimodal FL on KITTI, $N{=}180$, 250 rounds; mean $\pm$ std over 3 seeds; \%, averaged over the final 20 rounds; $\tau=52.4\%$; \textsc{n/r} = did not reach $\tau$).}
     \label{tab:seoul_results}
     \renewcommand{\arraystretch}{1.15}
     \setlength{\tabcolsep}{4.5pt}
@@ -8,14 +8,14 @@
         \hline
         \textsc{Method} & \textsc{Acc} & \textsc{Poor Acc} & \textsc{Gap} & \textsc{Rounds@$\tau$} & \textsc{Tx@$\tau$} \\
         \hline
-        \textsc{Caching} & 51.3 $\pm$ 0.9 & 45.1 $\pm$ 0.8 & 6.2 & \textsc{n/r} & $>9528$ \\
-        \textsc{V2V} & 52.7 $\pm$ 1.5 & 46.8 $\pm$ 0.8 & 5.9 & 215 & 3040 \\
-        \textsc{Learning} & 53.8 $\pm$ 1.6 & 48.2 $\pm$ 0.8 & \textbf{5.6} & 197 & \textbf{2697} \\
+        \textsc{Caching} & 51.2 $\pm$ 0.9 & 45.0 $\pm$ 0.7 & 6.2 & \textsc{n/r} & $>7655$ \\
+        \textsc{V2V} & 54.2 $\pm$ 1.6 & 48.7 $\pm$ 1.2 & 5.5 & 197 & 5239 \\
+        \textsc{Learning} & 52.5 $\pm$ 1.5 & 46.7 $\pm$ 0.7 & 5.8 & 239 & \textbf{4543} \\
         \hline
-        \textsc{mmFedMC} & 51.2 $\pm$ 1.1 & 45.0 $\pm$ 0.2 & 6.2 & \textsc{n/r} & $>3575$ \\
-        \textsc{AutoFed} & 51.5 $\pm$ 1.3 & 45.3 $\pm$ 0.9 & 6.2 & 246 & 5176 \\
+        \textsc{mmFedMC} & 51.1 $\pm$ 1.3 & 44.9 $\pm$ 0.6 & 6.1 & \textsc{n/r} & $>6709$ \\
+        \textsc{AutoFed} & 51.3 $\pm$ 1.2 & 45.2 $\pm$ 0.6 & 6.1 & \textsc{n/r} & $>7489$ \\
         \hline
-        \textsc{FACE} & \textbf{54.1 $\pm$ 1.2} & \textbf{48.5 $\pm$ 0.8} & 5.6 & \textbf{189} & 4876 \\
+        \textsc{FACE} & \textbf{54.9 $\pm$ 1.4} & \textbf{49.5 $\pm$ 1.0} & \textbf{5.4} & \textbf{181} & 5137 \\
         \hline
     \end{tabular}
 \end{table}

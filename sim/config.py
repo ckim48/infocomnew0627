@@ -89,6 +89,13 @@ class Config:
     face_beta_C: float = 3.0          # Beta prior beta_C in kappa-hat (Eq. 12)
     face_mu: float = 0.85             # forecast blend mu_q = mu_v (Eq. 13)
     face_Nev: int = 6                 # per-round candidate evaluation budget N_ev
+    face_delta_d: float = 0.05        # ESV demand threshold delta_d (Eq. esv_indicator)
+    # ----- reputation / reciprocal cooperation (Sec. III-E) -----
+    face_mu_f: float = 0.5            # discounted delivery reward mu_f (Eq. rep_delivery)
+    face_mu_s: float = 0.001          # storage reputation weight mu_s per MB-round (Eq. rep_storage)
+    face_gamma_psi: float = 0.9       # reputation decay gamma_Psi (Eq. rep_update)
+    face_gamma_r: float = 0.5         # reciprocal priority weight gamma_r (Eq. transfer_advantage)
+    face_pi_cap: float = 2.0          # priority cap pi-bar (Eq. rep_priority)
 
     # ----- hierarchical GAT mobility prediction -----
     gat_hidden: int = 32
