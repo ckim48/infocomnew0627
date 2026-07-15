@@ -106,6 +106,31 @@ class MultimodalFL:
         for (m, s_m) in received:
             self.acquired[(i, r)].add(m)
 
+    # ---- v4 aggregation with acceptance test + LOO attribution (abstract) ----
+    def aggregate_test(self, i, r, cands):
+        """cands: list of (src, payload). Abstract analog of the FedAvg
+        aggregation: achieved quality is the best acquired encoder, so the
+        aggregate never hurts and the acceptance test always passes; the LOO
+        attribution of a candidate is the loss reduction it provides beyond
+        the other candidates."""
+        if not cands or r not in self.avail[i]:
+            return False, {}, 0.0, 0.0
+        strengths = [float(pl) if not isinstance(pl, dict) else 0.0
+                     for (m, pl) in cands]
+        q0 = self.q_eff(i, r)
+        l0 = (1.0 - q0) ** 2
+        q_full = max([q0] + strengths)
+        l_full = (1.0 - q_full) ** 2
+        attr = {}
+        denom = l0 + self.cfg.eps0
+        for a in range(len(cands)):
+            q_wo = max([q0] + [strengths[b] for b in range(len(strengths))
+                               if b != a])
+            attr[a] = max((1.0 - q_wo) ** 2 - l_full, 0.0) / denom
+        for (m, _) in cands:
+            self.acquired[(i, r)].add(m)
+        return True, attr, q0, q_full
+
     # ---- global metrics ----
     def mean_val_loss(self):
         return float(np.mean([self.local_val_loss(i, r) for (i, r) in self.pairs]))

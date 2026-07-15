@@ -119,21 +119,29 @@ class RealMFL:
         self.y_t = torch.tensor(y, device=self.device, dtype=torch.long)
         self.acc = np.zeros(self.N)
         self._corrupt = {i: (self.Q[(i, self.avail[i][0])] < 0.5) for i in range(self.N)}
+        # sensor-spec tiers: even data-rich vehicles may carry low-spec
+        # sensors for individual modalities (e.g., few-beam LiDAR, low-res
+        # camera), degrading that modality's training data only
+        self.spec_low = {(i, r) for i in range(self.N) for r in self.avail[i]
+                         if rng.random() < getattr(cfg, "spec_low_prob", 0.0)}
 
-    # ---- data access with per-vehicle quality corruption ----
+    # ---- data access with per-(vehicle, modality) quality corruption ----
     def _batch(self, idx, vehicle):
         x = {m: t[idx].clone() for m, t in self.t.items()}
-        if self._corrupt.get(vehicle, False):        # degraded sensing
-            if "camera" in x:
-                img = x["camera"] + 0.25 * torch.randn_like(x["camera"])
-                x["camera"] = torch.clamp(img * 0.6, 0, 1)     # noise + low light
-            if "lidar" in x:
-                mask = (torch.rand_like(x["lidar"][..., :1]) < 0.6).float()
-                x["lidar"] = x["lidar"] * mask                 # sparse LiDAR
-            if "radar" in x:
-                x["radar"] = x["radar"] + 0.25 * torch.randn_like(x["radar"])
-            if "gps" in x:
-                x["gps"] = x["gps"] + 0.1 * torch.randn_like(x["gps"])
+        allc = self._corrupt.get(vehicle, False)     # degraded sensing (poor)
+
+        def bad(r):
+            return allc or (vehicle, r) in self.spec_low
+        if "camera" in x and bad("camera"):
+            img = x["camera"] + 0.25 * torch.randn_like(x["camera"])
+            x["camera"] = torch.clamp(img * 0.6, 0, 1)     # noise + low light
+        if "lidar" in x and bad("lidar"):
+            mask = (torch.rand_like(x["lidar"][..., :1]) < 0.6).float()
+            x["lidar"] = x["lidar"] * mask                 # sparse LiDAR
+        if "radar" in x and bad("radar"):
+            x["radar"] = x["radar"] + 0.25 * torch.randn_like(x["radar"])
+        if "gps" in x and bad("gps"):
+            x["gps"] = x["gps"] + 0.1 * torch.randn_like(x["gps"])
         return x, self.y_t[idx]
 
     def Dmr(self, m, r):
@@ -277,6 +285,43 @@ class RealMFL:
         self.enc[i][r].load_state_dict(backup)
         g = max(after - base, 0.0) / max(1.0 - base, 1e-6)
         return g, base, after
+
+    # ---- v4 aggregation: FedAvg over the aggregation set + acceptance test
+    # + leave-one-out attribution (Sec. III-E / eq:loo_attribution) ----
+    @torch.no_grad()
+    def aggregate_test(self, i, r, cands):
+        """cands: list of (src, snapshot_dict). Averages the local encoder
+        with all candidates weighted by training data volumes, accepts the
+        tentative encoder only if validation accuracy does not drop, and
+        returns (accepted, {idx: v_x}, base_acc, full_acc) with normalized
+        LOO attributions v_x for each candidate."""
+        if not cands or r not in self.avail[i]:
+            return False, {}, 0.0, 0.0
+        base = self._val_acc_single(i)
+        backup = {k: v.detach().clone()
+                  for k, v in self.enc[i][r].state_dict().items()}
+        sds = [backup] + [{k: v.to(self.device) for k, v in sd.items()}
+                          for (_, sd) in cands]
+        ws = [self._enc_weight(i, r)] + [self.Dmr(m, r) for (m, _) in cands]
+        self.enc[i][r].load_state_dict(_fedavg(sds, ws))
+        full = self._val_acc_single(i)
+        if full + 1e-9 < base:                       # acceptance test: reject
+            self.enc[i][r].load_state_dict(backup)
+            return False, {a: 0.0 for a in range(len(cands))}, base, full
+        # leave-one-out attribution on the accepted aggregate
+        attr = {}
+        denom = max(1.0 - base, 1e-6)
+        for a in range(len(cands)):
+            if len(cands) == 1:
+                wo = base
+            else:
+                sds_wo = [sds[b] for b in range(len(sds)) if b != a + 1]
+                ws_wo = [ws[b] for b in range(len(ws)) if b != a + 1]
+                self.enc[i][r].load_state_dict(_fedavg(sds_wo, ws_wo))
+                wo = self._val_acc_single(i)
+            attr[a] = max(full - wo, 0.0) / denom
+        self.enc[i][r].load_state_dict(_fedavg(sds, ws))   # keep the aggregate
+        return True, attr, base, full
 
     # ---- real FedAvg aggregation of received encoders (Eq. 2) ----
     def commit(self, i, r, received):

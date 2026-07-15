@@ -22,7 +22,7 @@ import torch
 from .config import Config
 from .mobility import RoadNetwork, MobilitySim
 from .mfl import MultimodalFL
-from .simulator import make_modality_availability
+from .simulator import make_modality_availability, make_arch_assignment
 from .v2x_trace import build_v2x_trace
 from .face import FACE
 
@@ -33,10 +33,9 @@ VARIANTS = {
     "w/o future value":   dict(use_future=False),
     "w/o coverage":       dict(use_coverage=False),
     "w/o tickets":        dict(use_tickets=False),
-    "w/o ticket split":   dict(use_split=False),
+    "w/o consume mode":   dict(use_consume=False),
     "w/o ridge gain":     dict(use_ridge=False),
     "w/o cache refresh":  dict(refresh="lru"),
-    "w/o reciprocity":    dict(use_recip=False),
 }
 
 METRICS = ["acc", "poor", "tx", "txmb", "beyond", "adopt"]
@@ -83,9 +82,11 @@ def run(seeds=(2026, 2027, 2028), num_vehicles=180, rounds=None,
     stacks = {v: {m: [] for m in METRICS} for v in todo}
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
+        arch = make_arch_assignment(cfg, np.random.default_rng(sd + 11), avail)
         for name, flags in todo.items():
             rng = np.random.default_rng(sd)        # paired conditions
             mfl = MultimodalFL(cfg, rng, avail)
+            mfl.arch = arch                        # architecture families chi
             if partitioned:
                 _partition_strengths(cfg, mfl, mob, sd)
             alg = FACE(cfg, mfl, mob, seed=sd, flags=flags)

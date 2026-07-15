@@ -19,13 +19,41 @@ from .algorithm import CachingForwarding
 
 
 def make_modality_availability(cfg, rng):
+    """Per-vehicle sensing-modality sets. With cfg.vehicle_types set, vehicles
+    are drawn from a typed sensor-suite mixture reflecting real fleets (e.g.,
+    vision-only vehicles without LiDAR, camera+radar ADAS suites, and full
+    robotaxi suites); otherwise falls back to independent per-modality draws."""
+    types = getattr(cfg, "vehicle_types", None)
     avail = []
+    if types:
+        w = np.array([t[0] for t in types], dtype=float)
+        w = w / w.sum()
+        for i in range(cfg.num_vehicles):
+            kind = rng.choice(len(types), p=w)
+            s = set(types[kind][1]) & set(cfg.modalities)
+            avail.append(s or {cfg.modalities[0]})
+        return avail
     for i in range(cfg.num_vehicles):
         s = [r for r in cfg.modalities if rng.random() < cfg.modality_prob[r]]
         if not s:
             s = [rng.choice(cfg.modalities)]
         avail.append(set(s))
     return avail
+
+
+def make_arch_assignment(cfg, rng, avail):
+    """Architecture-family label per (vehicle, modality). Vehicles with
+    high computational capability run the large encoder family (1), others
+    the lightweight family (0); parameter-level aggregation is possible only
+    within the same family (compatibility chi in the system model)."""
+    if not getattr(cfg, "use_arch_families", True):
+        return None
+    arch = {}
+    for i in range(cfg.num_vehicles):
+        fam = 1 if rng.random() < cfg.arch_high_frac else 0
+        for r in avail[i]:
+            arch[(i, r)] = fam
+    return arch
 
 
 def prepare(cfg, device):

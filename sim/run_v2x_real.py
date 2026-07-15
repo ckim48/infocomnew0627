@@ -18,7 +18,7 @@ from .mobility import RoadNetwork, MobilitySim
 from .hgat import train_hgat, future_contact_scores
 from .algorithm import CachingForwarding
 from .face import FACE
-from .simulator import make_modality_availability
+from .simulator import make_modality_availability, make_arch_assignment
 from .real_fl import RealMFL, _prep_data, _device
 from .v2x_trace import build_v2x_trace
 from .plotting import STYLE as STY, disp
@@ -40,7 +40,7 @@ def _prepare_v2x(cfg, device):
 
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         rounds=250, min_class_count=None, schemes=None, merge=False,
-        out_name=None, partitioned=False):
+        out_name=None, partitioned=False, ttl=15, kx=6, lam=0.001):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus.
@@ -50,9 +50,10 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     so strong encoders must be ferried east to reach the demand there."""
     cfg = cfg or Config()
     cfg.num_vehicles = num_vehicles
-    cfg.face_ttl = 15           # real backend: versions expire, sources
+    cfg.face_ttl = ttl          # real backend: versions expire, sources
+    cfg.face_K_tickets = kx     # tighter replication: stale spread hurts here
     cfg.face_Qpub = 1           # republish updated encoders every round
-    cfg.face_lam = 0.001        # communication price per MB
+    cfg.face_lam = lam          # communication price per MB
     if dataset == "deepsense":
         import sim.multimodal_model as _MM
         _MM.ENCODER_OVERRIDES.update({"radar": _MM.RadarMapEncoder,
@@ -64,9 +65,18 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     elif dataset == "nuscenes":       # camera + LiDAR + sparse radar returns
         cfg.modalities = ["camera", "lidar", "radar"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85, "radar": 0.7}
+        # typed sensor suites (Sec. I): vision-only fleets (no LiDAR),
+        # camera+radar ADAS, camera+LiDAR, and full robotaxi suites
+        cfg.vehicle_types = [(0.20, ("camera",)),
+                             (0.25, ("camera", "radar")),
+                             (0.20, ("camera", "lidar")),
+                             (0.35, ("camera", "lidar", "radar"))]
     else:                             # KITTI: camera + LiDAR
         cfg.modalities = ["camera", "lidar"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
+        # typed sensor suites: vision-only vs camera+LiDAR vehicles
+        cfg.vehicle_types = [(0.35, ("camera",)),
+                             (0.65, ("camera", "lidar"))]
     device = device or _device()
     seeds = seeds or [cfg.seed]
     os.makedirs(cfg.results_dir, exist_ok=True)
@@ -96,10 +106,12 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     print(f"[3/3] REAL FL over seeds {seeds} ...")
     for sd in seeds:
         avail = make_modality_availability(cfg, np.random.default_rng(sd + 7))
+        arch = make_arch_assignment(cfg, np.random.default_rng(sd + 11), avail)
         for scheme in todo:
             torch.manual_seed(sd)          # paired: same init/noise per seed
             rng = np.random.default_rng(sd)
             mfl = RealMFL(cfg, rng, avail, data, device=device)
+            mfl.arch = arch                # architecture families (chi)
             # ALL schemes run under the same system-model protocol (encoder
             # versions, copy tickets, evaluation-gated adoption, Sec. III);
             # they differ only in the forwarding policy (SCHEME_FACE_FLAGS)

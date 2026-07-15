@@ -75,7 +75,12 @@ class Config:
     face_beta: float = 0.85           # discount beta in the first-contact value
     face_lam: float = 0.004           # lambda: communication price per MB in P1
     face_delta: float = 0.005         # adoption threshold delta_i on the validation gain
-    face_K_tickets: int = 6           # K_x: max distributed copies per encoder version
+    face_K_tickets: int = 16          # K_x: max distributed copies per encoder version
+                                      # (abstract backend; under the matching constraint
+                                      # K=16 recovers K=inf accuracy at bounded replication,
+                                      # see results/kx_sweep.log. The real backend overrides
+                                      # to K=6 in run_v2x_real: stale-version spread there
+                                      # makes tighter replication strictly better.)
     face_ttl: int = 1_000_000         # version lifetime t_exp - t_gen (rounds)
     face_Qpub: int = 10               # publication period Q_pub (real backend)
     face_alpha_g: float = 0.6         # optimism bonus alpha_g in the ridge gain predictor
@@ -89,13 +94,12 @@ class Config:
     face_beta_C: float = 3.0          # Beta prior beta_C in kappa-hat (Eq. 12)
     face_mu: float = 0.85             # forecast blend mu_q = mu_v (Eq. 13)
     face_Nev: int = 6                 # per-round candidate evaluation budget N_ev
-    face_delta_d: float = 0.05        # ESV demand threshold delta_d (Eq. esv_indicator)
-    # ----- reputation / reciprocal cooperation (Sec. III-E) -----
-    face_mu_f: float = 0.5            # discounted delivery reward mu_f (Eq. rep_delivery)
-    face_mu_s: float = 0.001          # storage reputation weight mu_s per MB-round (Eq. rep_storage)
-    face_gamma_psi: float = 0.9       # reputation decay gamma_Psi (Eq. rep_update)
-    face_gamma_r: float = 0.5         # reciprocal priority weight gamma_r (Eq. transfer_advantage)
-    face_pi_cap: float = 2.0          # priority cap pi-bar (Eq. rep_priority)
+    face_delta_d: float = 0.05        # requester demand threshold delta_mu (Sec. III-C)
+    # ----- heterogeneous sensor scenario (Sec. I / II) -----
+    vehicle_types: object = None      # typed sensor-suite mixture [(weight, mods), ...]
+    use_arch_families: bool = True    # architecture-family compatibility chi
+    arch_high_frac: float = 0.5       # fraction of high-compute (large-family) vehicles
+    spec_low_prob: float = 0.3        # P(low-spec sensor) per (vehicle, modality)
 
     # ----- hierarchical GAT mobility prediction -----
     gat_hidden: int = 32
