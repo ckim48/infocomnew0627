@@ -99,23 +99,25 @@ def make(out_path="new_result/tab_seoul_combined.tex"):
           f"{{\\textsc{{{label}}}}}")
         for s in schemes:
             d = st[s]
+            # manuscript Table I shape: Acc / Poor with +-std, Loss (3 dec)
+            # and Gap (1 dec) as plain numbers, integer Rounds@tau / Tx@tau
             cells = [
                 f"\\textsc{{{DISPLAY.get(s, s)}}}",
                 _pm(d["acc"], d["acc_sd"], abs(d["acc"] - best["acc"]) < 1e-9),
                 _pm(d["poor"], d["poor_sd"],
                     abs(d["poor"] - best["poor"]) < 1e-9),
-                _num(f"{d['loss']:.3f} $\\pm$ {d['loss_sd']:.3f}",
+                _num(f"{d['loss']:.3f}",
                      abs(d["loss"] - best["loss"]) < 1e-9),
-                _num(f"{100*d['gap']:.1f} $\\pm$ {100*d['gap_sd']:.1f}",
+                _num(f"{100*d['gap']:.1f}",
                      abs(d["gap"] - best["gap"]) < 1e-9),
             ]
             if d["rounds"] is None:
                 cells += [NR, f"$>{d['totaltx']}$"]
             else:
                 cells += [
-                    _num(f"{d['rounds'][0]:.0f} $\\pm$ {d['rounds'][1]:.0f}",
+                    _num(f"{d['rounds'][0]:.0f}",
                          d["rounds"][0] == best["rounds"]),
-                    _num(f"{d['cumtx'][0]:.0f} $\\pm$ {d['cumtx'][1]:.0f}",
+                    _num(f"{d['cumtx'][0]:.0f}",
                          d["cumtx"][0] == best["cumtx"])]
             a("        & " + " & ".join(cells) + r" \\")
             if s in (FRAMEWORK[-1], PUBLISHED[-1]):
