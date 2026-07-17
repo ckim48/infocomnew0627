@@ -94,12 +94,27 @@ class Config:
     face_beta_C: float = 3.0          # Beta prior beta_C in kappa-hat (Eq. 12)
     face_mu: float = 0.85             # forecast blend mu_q = mu_v (Eq. 13)
     face_Nev: int = 6                 # per-round candidate evaluation budget N_ev
+    face_agg_max: int = 1             # requested encoders per modality-round
+                                      # (aggregation-set size; 1 = adopt the
+                                      # top-predicted candidate if it passes
+                                      # the acceptance test)
     face_delta_d: float = 0.05        # requester demand threshold delta_mu (Sec. III-C)
+    # ----- reputation / reciprocity (face_v3 engine only) -----
+    face_mu_f: float = 0.5            # discounted delivery reward mu_f
+    face_mu_s: float = 0.001          # storage reputation weight mu_s
+    face_gamma_psi: float = 0.9       # reputation decay gamma_Psi
+    face_gamma_r: float = 0.5         # reciprocal priority weight gamma_r
+    face_pi_cap: float = 2.0          # priority cap pi-bar
     # ----- heterogeneous sensor scenario (Sec. I / II) -----
+    # (typed suites / arch families / spec tiers measurably REMOVE the demand
+    #  FACE serves on the real trace -- camera-only vehicles have no LiDAR
+    #  demand while camera supply is ubiquitous -- so the main results use
+    #  per-modality availability draws; the mechanisms remain available)
     vehicle_types: object = None      # typed sensor-suite mixture [(weight, mods), ...]
-    use_arch_families: bool = True    # architecture-family compatibility chi
+    use_arch_families: bool = False   # architecture-family compatibility chi
     arch_high_frac: float = 0.5       # fraction of high-compute (large-family) vehicles
-    spec_low_prob: float = 0.3        # P(low-spec sensor) per (vehicle, modality)
+    arch_family_probs: object = None  # optional family mixture, e.g. [0.45, 0.35, 0.20]
+    spec_low_prob: float = 0.0        # P(low-spec sensor) per (vehicle, modality)
 
     # ----- hierarchical GAT mobility prediction -----
     gat_hidden: int = 32

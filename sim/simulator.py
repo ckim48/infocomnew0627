@@ -42,15 +42,20 @@ def make_modality_availability(cfg, rng):
 
 
 def make_arch_assignment(cfg, rng, avail):
-    """Architecture-family label per (vehicle, modality). Vehicles with
-    high computational capability run the large encoder family (1), others
-    the lightweight family (0); parameter-level aggregation is possible only
-    within the same family (compatibility chi in the system model)."""
+    """Architecture-family label per (vehicle, modality). Each vehicle runs
+    one encoder family determined by its compute platform (e.g., distinct
+    OEM/chipset stacks); parameter-level aggregation is possible only within
+    the same family (compatibility chi in the system model)."""
     if not getattr(cfg, "use_arch_families", True):
         return None
+    probs = getattr(cfg, "arch_family_probs", None)
+    if probs is None:
+        probs = [1.0 - cfg.arch_high_frac, cfg.arch_high_frac]
+    p = np.array(probs, dtype=float)
+    p = p / p.sum()
     arch = {}
     for i in range(cfg.num_vehicles):
-        fam = 1 if rng.random() < cfg.arch_high_frac else 0
+        fam = int(rng.choice(len(p), p=p))
         for r in avail[i]:
             arch[(i, r)] = fam
     return arch

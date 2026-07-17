@@ -26,6 +26,14 @@ from .plotting import STYLE as STY, disp
 
 def _prepare_v2x(cfg, device):
     trace = build_v2x_trace(cfg)
+    n_tr = trace["veh_xy"].shape[1]
+    if cfg.num_vehicles < n_tr:
+        # density scenario: deterministic vehicle subset of the cached trace
+        sel = np.random.default_rng(4242).choice(n_tr, cfg.num_vehicles,
+                                                 replace=False)
+        sel.sort()
+        for kk in ("veh_seg", "veh_xy", "veh_speed"):
+            trace[kk] = trace[kk][:, sel]
     road = RoadNetwork(trace)
     mob = MobilitySim(cfg, road, trace)
     cfg.K = mob.Krounds
@@ -65,18 +73,12 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     elif dataset == "nuscenes":       # camera + LiDAR + sparse radar returns
         cfg.modalities = ["camera", "lidar", "radar"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85, "radar": 0.7}
-        # typed sensor suites (Sec. I): vision-only fleets (no LiDAR),
-        # camera+radar ADAS, camera+LiDAR, and full robotaxi suites
-        cfg.vehicle_types = [(0.20, ("camera",)),
-                             (0.25, ("camera", "radar")),
-                             (0.20, ("camera", "lidar")),
-                             (0.35, ("camera", "lidar", "radar"))]
     else:                             # KITTI: camera + LiDAR
         cfg.modalities = ["camera", "lidar"]
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
-        # typed sensor suites: vision-only vs camera+LiDAR vehicles
-        cfg.vehicle_types = [(0.35, ("camera",)),
-                             (0.65, ("camera", "lidar"))]
+    # per-modality availability draws realize missing-modality vehicles
+    # (e.g., P(lidar)=0.85 -> 15% vision-only); typed sensor-suite mixtures
+    # are available via cfg.vehicle_types (see config.py note)
     device = device or _device()
     seeds = seeds or [cfg.seed]
     os.makedirs(cfg.results_dir, exist_ok=True)

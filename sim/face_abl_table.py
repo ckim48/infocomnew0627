@@ -24,10 +24,10 @@ LABELS = {
                           r"$F_{a,x}\!\equiv\!0$ in \eqref{eq:forwarding_potential}"),
     "w/o coverage":      (r"w/o residual coverage",
                           r"$\Omega_{z,x}^{(h)}\!\equiv\!1$ in \eqref{eq:residual_coverage}"),
-    "w/o tickets":       (r"w/o replication tokens",
+    "w/o tickets":       (r"w/o copy tickets",
                           r"$K_x\!=\!\infty$ in \eqref{eq:copy_cap}"),
-    "w/o consume mode":  (r"w/o consume-only transfers",
-                          r"$a^{\mathrm{con}}\!\equiv\!0$ in \eqref{eq:bundle_knapsack}"),
+    "w/o ticket split":  (r"w/o value-weighted split",
+                          r"$g_{ijx}\!=\!1$ per transfer"),
     "w/o ridge gain":    (r"w/o reward prediction",
                           r"mean bandit for \eqref{eq:predicted_gain}"),
     "w/o cache refresh": (r"w/o coverage-aware refresh",
@@ -38,8 +38,7 @@ ORDER = list(LABELS)
 # with material end-to-end contribution; the near-zero rows (residual
 # coverage, value-weighted split, gain prediction) are text-only mentions
 KEY = ["FACE (full)", "w/o relay ferrying", "w/o tickets",
-       "w/o consume mode", "w/o cache refresh", "w/o demand",
-       "w/o future value"]
+       "w/o cache refresh", "w/o demand", "w/o future value"]
 
 
 def _parse(path):

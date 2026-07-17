@@ -300,28 +300,31 @@ class RealMFL:
         base = self._val_acc_single(i)
         backup = {k: v.detach().clone()
                   for k, v in self.enc[i][r].state_dict().items()}
-        sds = [backup] + [{k: v.to(self.device) for k, v in sd.items()}
-                          for (_, sd) in cands]
-        ws = [self._enc_weight(i, r)] + [self.Dmr(m, r) for (m, _) in cands]
-        self.enc[i][r].load_state_dict(_fedavg(sds, ws))
-        full = self._val_acc_single(i)
-        if full + 1e-9 < base:                       # acceptance test: reject
-            self.enc[i][r].load_state_dict(backup)
-            return False, {a: 0.0 for a in range(len(cands))}, base, full
-        # leave-one-out attribution on the accepted aggregate
-        attr = {}
+        snaps = [{k: v.to(self.device) for k, v in sd.items()}
+                 for (_, sd) in cands]
+        w_loc = self._enc_weight(i, r)
+        # sequential (greedy) acceptance in the caller's examination order
+        # (decreasing predicted reward): a candidate joins the aggregation
+        # set only if the tentative aggregate does not decrease validation
+        # accuracy -- a stale or harmful encoder is rejected instead of
+        # dragging the whole average down, and every accepted step keeps
+        # the loss non-increasing (Prop. stability)
+        attr = {a: 0.0 for a in range(len(cands))}
         denom = max(1.0 - base, 1e-6)
+        kept, cur_sd, cur_acc = [], backup, base
         for a in range(len(cands)):
-            if len(cands) == 1:
-                wo = base
-            else:
-                sds_wo = [sds[b] for b in range(len(sds)) if b != a + 1]
-                ws_wo = [ws[b] for b in range(len(ws)) if b != a + 1]
-                self.enc[i][r].load_state_dict(_fedavg(sds_wo, ws_wo))
-                wo = self._val_acc_single(i)
-            attr[a] = max(full - wo, 0.0) / denom
-        self.enc[i][r].load_state_dict(_fedavg(sds, ws))   # keep the aggregate
-        return True, attr, base, full
+            sds = [backup] + [snaps[b] for b in kept] + [snaps[a]]
+            ws = [w_loc] + [self.Dmr(cands[b][0], r) for b in kept] \
+                + [self.Dmr(cands[a][0], r)]
+            trial = _fedavg(sds, ws)
+            self.enc[i][r].load_state_dict(trial)
+            acc_t = self._val_acc_single(i)
+            if acc_t + 1e-9 >= cur_acc:              # acceptance test
+                attr[a] = max(acc_t - cur_acc, 0.0) / denom
+                kept.append(a)
+                cur_sd, cur_acc = trial, acc_t
+        self.enc[i][r].load_state_dict(cur_sd if kept else backup)
+        return bool(kept), attr, base, cur_acc
 
     # ---- real FedAvg aggregation of received encoders (Eq. 2) ----
     def commit(self, i, r, received):
