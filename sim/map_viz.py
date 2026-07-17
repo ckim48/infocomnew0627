@@ -207,13 +207,14 @@ def _run_one(cfg, mob, gammas, scheme, snap_k):
     modality_avail = make_modality_availability(cfg, avail_rng)
     rng = np.random.default_rng(cfg.seed)
     mfl = MultimodalFL(cfg, rng, modality_avail)
-    alg = CachingForwarding(cfg, mfl, mob, scheme, seed=cfg.seed)
+    from .face import FACE
+    alg = FACE(cfg, mfl, mob, scheme, seed=cfg.seed)
     per_veh = None
     for k in range(mob.Krounds):
         mob.k = k
         mfl.local_train()
-        g = gammas[k] if alg.flags["use_dis"] or alg.flags["cache_policy"] == "psi" \
-            else np.zeros(mob.N)
+        g = gammas[k] if alg.flags.get("use_dis") \
+            or alg.flags.get("cache_policy") == "psi" else np.zeros(mob.N)
         alg.run_round(k, g)
         if k == snap_k:
             per_veh = _per_vehicle_acc(mfl)

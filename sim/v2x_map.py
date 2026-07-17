@@ -1,12 +1,14 @@
 """
-Meaningful 1x4 map subfigure on the real Seoul map: the SAME vehicle cohort,
-coloured by the model accuracy each vehicle achieves under the Proposed
-road/traffic-aware scheme (FACE) vs the three baselines. Greener = higher
+Paper map subfigure (2x2) on the real Seoul-Gangnam basemap: the SAME vehicle
+cohort, drawn as heading-oriented car glyphs coloured by the model accuracy
+each vehicle achieves under FACE vs three baselines. Greener = higher
 accuracy; the broader green coverage under FACE shows strong encoders reach
-more vehicles across the real Seoul road network.
+more vehicles across the real road network.
 
-Reuses the V2X trace (sim/v2x_trace) + the per-vehicle accuracy tracking from
-sim/map_viz, and georeferences vehicles onto a contextily basemap.
+Styling: clean CartoDB Positron tiles, top-view car silhouettes rotated to
+each vehicle's instantaneous heading (conformal Mercator preserves angles),
+soft accuracy-coloured halos, rounded chip labels, and an accent border on
+the FACE panel.
 """
 
 import os
@@ -15,6 +17,10 @@ import torch
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.path import Path
+from matplotlib.collections import PathCollection
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 
 from .config import Config
 from .mobility import RoadNetwork, MobilitySim
@@ -25,9 +31,28 @@ from .plotting import disp
 
 MAP_SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
 
+# top-view car silhouette pointing +x (unit length, ~0.45 width)
+_CAR_BODY = np.array([
+    (-0.50, -0.16), (-0.44, -0.225), (0.28, -0.225), (0.50, -0.12),
+    (0.50, 0.12), (0.28, 0.225), (-0.44, 0.225), (-0.50, 0.16)])
+_CAR_CABIN = np.array([
+    (-0.20, -0.15), (0.10, -0.15), (0.16, 0.0), (0.10, 0.15), (-0.20, 0.15)])
+
+
+def _glyphs(base, pos, ang, size):
+    """Closed Paths of `base` rotated to `ang`, scaled, translated to `pos`."""
+    out = []
+    for (x, y), a in zip(pos, ang):
+        c, s = np.cos(a), np.sin(a)
+        R = np.array([[c, -s], [s, c]])
+        v = base @ R.T * size + (x, y)
+        out.append(Path(v, closed=True))
+    return out
+
 
 def _compute(cfg, device, snap_k, cache):
-    """Heavy step: trace + GAT + per-vehicle accuracy + geo positions. Cached."""
+    """Heavy step: trace + GAT + per-vehicle accuracy + geo positions +
+    headings. Cached."""
     import sumolib
     from pyproj import Transformer
     torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
@@ -60,14 +85,22 @@ def _compute(cfg, device, snap_k, cache):
     for i, (x, y) in enumerate(net_xy):
         lon, lat = net.convertXY2LonLat(float(x), float(y))
         vm[i] = tf.transform(lon, lat)
+    # instantaneous heading from the trace step (Mercator is conformal, so
+    # the local-XY angle carries over to the map)
+    prev = trace["veh_xy"][max(snap_k - 1, 0)]
+    step = trace["veh_xy"][snap_k] - prev
+    ang = np.arctan2(step[:, 1], step[:, 0])
+    rng = np.random.default_rng(7)
+    still = np.hypot(step[:, 0], step[:, 1]) < 1e-6
+    ang[still] = rng.uniform(0, 2 * np.pi, int(still.sum()))
 
-    np.savez(cache, vm=vm, snap_k=snap_k,
+    np.savez(cache, vm=vm, ang=ang, snap_k=snap_k,
              **{f"acc_{s}": accs[s] for s in MAP_SCHEMES})
-    return vm, accs, snap_k
+    return vm, ang, accs, snap_k
 
 
 def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
-                        basemap="voyager", use_cache=True):
+                        basemap="positron", use_cache=True):
     import contextily as cx
 
     cfg = cfg or Config()
@@ -77,12 +110,13 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     cache = os.path.join(cfg.results_dir, "v2x_map_cache.npz")
 
     d = np.load(cache) if (use_cache and os.path.exists(cache)) else None
-    if d is not None and all(f"acc_{s}" in d.files for s in MAP_SCHEMES):
-        vm = d["vm"]; snap_k = int(d["snap_k"])
+    if d is not None and "ang" in getattr(d, "files", []) \
+            and all(f"acc_{s}" in d.files for s in MAP_SCHEMES):
+        vm = d["vm"]; ang = d["ang"]; snap_k = int(d["snap_k"])
         accs = {s: d[f"acc_{s}"] for s in MAP_SCHEMES}
         print(f"  [v2x-map] re-plotting from cache {cache}")
     else:
-        vm, accs, snap_k = _compute(cfg, device, snap_k, cache)
+        vm, ang, accs, snap_k = _compute(cfg, device, snap_k, cache)
 
     providers = {
         "osm": cx.providers.OpenStreetMap.Mapnik,
@@ -90,44 +124,76 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         "positron": cx.providers.CartoDB.Positron,
         "voyager": cx.providers.CartoDB.Voyager,
     }
-    src = providers.get(basemap, providers["voyager"])
+    src = providers.get(basemap, providers["positron"])
 
-    # match the seoul_pack analysis figures' width (~6.6in) so both render at a
-    # consistent font scale when placed at the same column width in the paper
+    cmap = plt.get_cmap("RdYlGn")
+    norm = Normalize(vmin=0.2, vmax=1.0)
+
     fig, axgrid = plt.subplots(2, 2, figsize=(6.6, 6.3),
                                sharex=True, sharey=True)
     axes = axgrid.ravel()
     pad = 400
     xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
     ylim = (vm[:, 1].min() - pad, vm[:, 1].max() + pad)
-    sc = None
+    car_len = (xlim[1] - xlim[0]) / 42.0          # car glyph length (m)
+
     for ax, s in zip(axes, MAP_SCHEMES):
-        acc = accs[s]
-        sc = ax.scatter(vm[:, 0], vm[:, 1], c=acc, cmap="RdYlGn", vmin=0.2,
-                        vmax=1.0, s=30, edgecolors="k", linewidths=0.3,
-                        alpha=0.95, zorder=4)
+        acc = np.asarray(accs[s])
+        colors = cmap(norm(acc))
         ax.set_xlim(*xlim); ax.set_ylim(*ylim)
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
-        cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=14,
+        cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=15,
                        attribution_size=4)
-        # method label BELOW the panel (xlabel), so it never overlaps the dots
-        ax.set_xlabel(f"{disp(s)}\nmean acc = {acc.mean():.3f}", fontsize=12)
+        # soft accuracy halo under each car
+        ax.scatter(vm[:, 0], vm[:, 1], c=acc, cmap=cmap, norm=norm,
+                   s=80, lw=0, alpha=0.20, zorder=3)
+        # car bodies, heading-oriented, coloured by accuracy
+        bodies = PathCollection(_glyphs(_CAR_BODY, vm, ang, car_len),
+                                facecolors=colors, edgecolors="black",
+                                linewidths=0.4, zorder=4)
+        ax.add_collection(bodies)
+        # cabin / glasshouse overlay for the car look
+        cabins = PathCollection(_glyphs(_CAR_CABIN, vm, ang, car_len),
+                                facecolors="black", alpha=0.35,
+                                edgecolors="none", zorder=5)
+        ax.add_collection(cabins)
+        # rounded chip label with the scheme name + cohort mean accuracy
+        name = disp(s)
+        ax.text(0.03, 0.97, f"{name}", transform=ax.transAxes,
+                ha="left", va="top", fontsize=11, fontweight="bold",
+                zorder=6, bbox=dict(boxstyle="round,pad=0.35",
+                                    fc="white", ec="0.25", lw=0.9,
+                                    alpha=0.95))
+        ax.text(0.03, 0.865, f"mean acc {acc.mean():.3f}",
+                transform=ax.transAxes, ha="left", va="top", fontsize=9.5,
+                zorder=6, bbox=dict(boxstyle="round,pad=0.28",
+                                    fc="white", ec="0.6", lw=0.6,
+                                    alpha=0.9))
+        # accent border on the proposed scheme's panel
+        if s == "Proposed":
+            for sp in ax.spines.values():
+                sp.set_edgecolor("#1f77b4"); sp.set_linewidth(2.2)
+        else:
+            for sp in ax.spines.values():
+                sp.set_edgecolor("0.45"); sp.set_linewidth(0.8)
 
-    # horizontal colorbar UNDER the 2x2 grid so the maps stay left-right
-    # centered (a right-side colorbar shifts the map block visibly left)
-    fig.subplots_adjust(wspace=0.04, hspace=0.35)   # keep top-row 'mean acc' off the bottom maps
-    cbar = fig.colorbar(sc, ax=axes.tolist(), orientation="horizontal",
-                        fraction=0.045, pad=0.10, aspect=45)
+    fig.subplots_adjust(wspace=0.04, hspace=0.06)
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
+                        fraction=0.045, pad=0.04, aspect=45)
     cbar.set_label("Vehicle model accuracy")
 
     out = os.path.join(fig_dir, "fig_infocom_v2x_map.png")
     for ext in ("png", "pdf"):
-        fig.savefig(out.replace(".png", "." + ext), dpi=200, bbox_inches="tight")
+        fig.savefig(out.replace(".png", "." + ext), dpi=220,
+                    bbox_inches="tight")
     plt.close(fig)
-    print("  saved", out, " ".join(f"{disp(s)}={accs[s].mean():.3f}"
+    print("  saved", out, " ".join(f"{disp(s)}={np.asarray(accs[s]).mean():.3f}"
                                    for s in MAP_SCHEMES))
     return out
 
 
 if __name__ == "__main__":
-    make_v2x_map_subfig()
+    import sys
+    make_v2x_map_subfig(basemap=sys.argv[1] if len(sys.argv) > 1 else "positron",
+                        use_cache="fresh" not in sys.argv)

@@ -138,10 +138,11 @@ FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
 # they differ only in the forwarding POLICY, exactly as in the paper.
 SCHEME_FACE_FLAGS = {
     "Proposed":         {},
-    # direct V2V exchange of own encoders, demand + link aware, no carrying
+    # pure V2V opportunism: picks link-quality-favorable neighbors and hands
+    # over own encoders RANDOMLY (demand-blind), no carrying
     "V2V-aware":        dict(use_relay=False, use_future=False,
                              use_coverage=False, refresh="lru",
-                             use_recip=False),
+                             use_demand=False, use_recip=False),
     # like V2V-aware but blind to the V2V link condition when scheduling
     "Learning-aware":   dict(use_relay=False, use_future=False,
                              use_coverage=False, refresh="lru",
@@ -599,7 +600,10 @@ class FACE:
                     vhat = (0.05 + 0.5 * v.s_meta) \
                         if (v.compat[j] and not v.resolved[j]) else 0.0
                 elif not self.flags["use_demand"]:
-                    vhat = 0.05 if (v.compat[j] and not v.resolved[j]) else 0.0
+                    # demand-blind: uniform value with random jitter, so the
+                    # bundle hands over an arbitrary subset of own encoders
+                    vhat = 0.05 + 0.01 * self.rng.random() \
+                        if (v.compat[j] and not v.resolved[j]) else 0.0
                 elif v.compat[j] and not v.resolved[j] \
                         and self._need_ok[v.r][j]:
                     s_own = float(mfl.strength.get((j, v.r), 0.0))
