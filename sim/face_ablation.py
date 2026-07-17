@@ -36,6 +36,7 @@ VARIANTS = {
     "w/o ticket split":   dict(use_split=False),
     "w/o ridge gain":     dict(use_ridge=False),
     "w/o cache refresh":  dict(refresh="lru"),
+    "w/o reciprocity":    dict(use_recip=False),
 }
 
 METRICS = ["acc", "poor", "tx", "txmb", "beyond", "adopt"]

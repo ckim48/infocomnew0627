@@ -125,8 +125,10 @@ FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
                   use_ridge=True,      # ridge gain prediction (else mean bandit)
                   use_relay=True,      # forward cached copies of OTHERS' versions
                   use_demand=True,     # receiver-demand-aware immediate value
-                  use_recip=False,     # reciprocal priority (dormant: the
-                                       # reputation mechanism left the paper)
+                  use_recip=True,      # reciprocal priority (Sec. III-E):
+                                       # measured +0.7pp on real KITTI --
+                                       # keep the reputation section in the
+                                       # paper (v3 draft has the full text)
                   link_blind=False,    # schedule ignoring the V2V link quality
                   select=None,         # candidate rule: None|'mmfedmc'|'autofed'
                   refresh="knapsack")  # cache refresh: 'knapsack' | 'lru'
