@@ -123,6 +123,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             sat_h, usat_h, mb_h = [], [], []
             utl_h, utf_h, mh_h, av_h = [], [], [], []
             ud_h = []                      # per-round useful-delivery receivers
+            cls_h, clsp_h = [], []         # per-class (service-level) accuracy
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -150,6 +151,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 urow = np.zeros(mob.N, dtype=bool)
                 urow[getattr(alg, "last_useful_receivers", [])] = True
                 ud_h.append(urow)
+                ac = mfl.evaluate_class("test")        # N x C
+                cls_h.append(ac.mean(0))
+                clsp_h.append(ac[pm].mean(0) if pm.any() else ac.mean(0))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
@@ -170,6 +174,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme].setdefault("pmask", []).append(np.asarray(pm))
             stacks[scheme].setdefault("calib", []).append(
                 np.array(alg.calib, dtype=np.float32))
+            stacks[scheme].setdefault("accclass", []).append(np.array(cls_h))
+            stacks[scheme].setdefault("accclass_hd", []).append(
+                np.array(clsp_h))
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
@@ -192,6 +199,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                    for si, c in enumerate(stacks[s]["calib"]) if len(c)]
             if cal:                      # columns: seed, round, pred, realized
                 results[s]["calib_all"] = np.concatenate(cal)
+        if stacks[s].get("accclass"):    # seeds x K x C (service classes)
+            results[s]["accclass_all"] = np.stack(stacks[s]["accclass"])
+            results[s]["accclass_hd_all"] = np.stack(stacks[s]["accclass_hd"])
     path = os.path.join(cfg.results_dir,
                         out_name or f"metrics_v2x_real_{dataset}.npz")
     out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}

@@ -189,6 +189,24 @@ class RealMFL:
                 losses[i] = float(nn.functional.cross_entropy(logits, y_t))
         return (accs, losses) if return_loss else accs
 
+    def evaluate_class(self, which="test"):
+        """Per-vehicle per-class accuracy [N, C]: the service-level view
+        (Car / Pedestrian / Cyclist recognition) of the same classifier."""
+        idx, yv = (self.val if which == "val" else self.test)
+        idx_t = torch.tensor(idx, device=self.device)
+        y_t = torch.tensor(yv, device=self.device, dtype=torch.long)
+        x = {m: t[idx_t] for m, t in self.t.items()}
+        out = np.zeros((self.N, self.ncls))
+        masks = [y_t == c for c in range(self.ncls)]
+        with torch.no_grad():
+            for i in range(self.N):
+                self._set_train(i, False)
+                feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
+                pred = self.head[i](feats).argmax(1)
+                for c, mc in enumerate(masks):
+                    out[i, c] = float((pred[mc] == c).float().mean())
+        return out
+
     def refresh_strengths(self):
         if getattr(self.cfg, "per_modality_strength", False):
             self._refresh_permod()
