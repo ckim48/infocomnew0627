@@ -122,6 +122,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             acc_h, poor_h, tx_h, u_h, vl_h = [], [], [], [], []
             sat_h, usat_h, mb_h = [], [], []
             utl_h, utf_h, mh_h, av_h = [], [], [], []
+            ud_h = []                      # per-round useful-delivery receivers
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -146,6 +147,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 mh_h.append(alg._n_beyond / max(alg._n_deliv, 1))
                 av_h.append(getattr(alg, "last_avail", 0.0))
                 mb_h.append(sum(cfg.encoder_size[e[3]] for e in selected))
+                urow = np.zeros(mob.N, dtype=bool)
+                urow[getattr(alg, "last_useful_receivers", [])] = True
+                ud_h.append(urow)
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
@@ -160,6 +164,12 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme]["txmb"].append(mb_h)
             stacks[scheme].setdefault("accveh", []).append(
                 mfl.evaluate("test"))          # per-vehicle final accuracies
+            # event-level extras: useful-delivery matrix [K,N], high-demand
+            # mask, and (round, predicted, realized) gain-calibration pairs
+            stacks[scheme].setdefault("udeliv", []).append(np.array(ud_h))
+            stacks[scheme].setdefault("pmask", []).append(np.asarray(pm))
+            stacks[scheme].setdefault("calib", []).append(
+                np.array(alg.calib, dtype=np.float32))
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
@@ -174,6 +184,14 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
             results[s][m + "_all"] = arr            # per-seed (exact +- stats)
         results[s]["accveh_all"] = np.stack(stacks[s]["accveh"])  # seeds x N
+        if stacks[s].get("udeliv"):
+            results[s]["udeliv_all"] = np.stack(stacks[s]["udeliv"])
+            results[s]["pmask_all"] = np.stack(stacks[s]["pmask"])
+            cal = [np.concatenate([np.full((len(c), 1), si, dtype=np.float32),
+                                   c], axis=1)
+                   for si, c in enumerate(stacks[s]["calib"]) if len(c)]
+            if cal:                      # columns: seed, round, pred, realized
+                results[s]["calib_all"] = np.concatenate(cal)
     path = os.path.join(cfg.results_dir,
                         out_name or f"metrics_v2x_real_{dataset}.npz")
     out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}

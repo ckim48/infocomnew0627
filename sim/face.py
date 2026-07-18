@@ -197,6 +197,7 @@ class FACE:
         self._dPsi = np.zeros(mfl.N)        # this-round increment dPsi_i
         self._pi = np.zeros(mfl.N)          # reciprocal priority pi_i (Eq. rep_priority)
         self._deliv_credit = {}             # (receiver, vid) -> (sender, vhat at delivery)
+        self.calib = []                     # (k, predicted gain, realized gain)
         self._need_ok = {}                  # r -> [N] bool, d_{i,r} >= delta_d
         self._publish_all(t=0)
 
@@ -417,6 +418,14 @@ class FACE:
                     delta = float(np.clip(delta, 0.0, 1.0))
                     v.resolved[i] = True                     # rho update
                     psi = self._psi(x, s_own, need.get((i, r), 0.0), logD, k)
+                    # calibration pair: out-of-sample prediction vs realized
+                    # gain, logged before the ridge sees this sample
+                    if self.flags["use_ridge"]:
+                        g_pred = float(self.ridge.predict(r, psi[None])[0])
+                    else:
+                        n0, mu0 = self.gstat.get((v.src, r), (0, 1.0))
+                        g_pred = mu0 if n0 else 1.0
+                    self.calib.append((k, g_pred, delta))
                     self.ridge.update(r, psi, delta)
                     n, mu = self.gstat.get((v.src, r), (0, 0.0))
                     self.gstat[(v.src, r)] = (n + 1, mu + (delta - mu) / (n + 1))
@@ -918,6 +927,16 @@ class FACE:
                   if any(s > float(mfl.strength.get(jr, 0.0)) + 0.02
                          for s in lst)]
         self.last_useful_sat = sum(need.get(jr, 0.0) for jr in useful) / tot_need
+        # per-vehicle useful-delivery events (deadline-delivery figure) and
+        # delivery-level useful/redundant split (ablation communication panel)
+        self.last_useful_receivers = sorted({j for (j, _r) in useful})
+        n_del = n_use = 0
+        for jr, lst in recv.items():
+            own = float(mfl.strength.get(jr, 0.0)) + 0.02
+            n_del += len(lst)
+            n_use += sum(1 for s in lst if s > own)
+        self.last_deliv = int(n_del)
+        self.last_deliv_useful = int(n_use)
         # high-demand road-segment availability (same metric as the old engine)
         seg_need, seg_have = {}, {}
         segs = mob.seg

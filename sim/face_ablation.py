@@ -39,7 +39,7 @@ VARIANTS = {
     "w/o reciprocity":    dict(use_recip=False),
 }
 
-METRICS = ["acc", "poor", "tx", "txmb", "beyond", "adopt"]
+METRICS = ["acc", "poor", "tx", "txmb", "beyond", "adopt", "usat", "redund"]
 
 
 def _partition_strengths(cfg, mfl, mob, sd):
@@ -102,6 +102,10 @@ def run(seeds=(2026, 2027, 2028), num_vehicles=180, rounds=None,
                 hist["txmb"].append(alg.last_tx_mb)
                 hist["beyond"].append(alg._n_beyond_adopt)
                 hist["adopt"].append(alg._n_adopt)
+                hist["usat"].append(getattr(alg, "last_useful_sat", 0.0))
+                nd = getattr(alg, "last_deliv", 0)
+                nu_ = getattr(alg, "last_deliv_useful", 0)
+                hist["redund"].append((nd - nu_) / nd if nd else 0.0)
             for m in METRICS:
                 stacks[name][m].append(hist[m])
             print(f"  [seed {sd}] {name:18s} acc {hist['acc'][-1]:.3f} "
