@@ -176,5 +176,93 @@ def make(cfg=None, rate=2.0):
     print("  saved fig_motivation (2x2)")
 
 
+def fig_seoul_encounter(hmax=20, out="fig_motiv_encounter"):
+    """Sec. II motivation on the real Seoul-Gangnam trace: (a) probability
+    that a high-demand vehicle encounters any vehicle / any encoder-carrier
+    vehicle / one specific carrier within h rounds (windowed); (b) CDF of the
+    first direct DV-CV meeting time over all pairs -- most pairs never meet
+    during the whole trace, so encoders must be ferried via relays."""
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 11,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.7,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    cfg = Config()
+    tr = np.load(os.path.join(cfg.results_dir, "v2x_seoul_trace.npz"))
+    ev = np.load(os.path.join(cfg.results_dir,
+                              "metrics_v2x_real_kitti_events.npz"))
+    xy = tr["veh_xy"]                       # (K, N, 2), metres
+    pm = ev["Proposed__pmask_all"][0]       # high-demand (DV) mask
+    cv = ~pm                                # encoder carriers (ECVs)
+    K, N, _ = xy.shape
+    C = np.zeros((K, N, N), bool)
+    for k in range(K):
+        d = np.linalg.norm(xy[k][:, None, :] - xy[k][None, :, :], axis=2)
+        C[k] = d <= cfg.comm_range
+        np.fill_diagonal(C[k], False)
+    dvi, cvi = np.where(pm)[0], np.where(cv)[0]
+    anyc = C.any(2)[:, dvi]                 # (K, nDV) any-vehicle contact
+    anycv = C[:, dvi][:, :, cvi].any(2)     # any-carrier contact
+    pair = C[:, dvi][:, :, cvi]             # (K, nDV, nCV) specific pairs
+    hs = np.arange(1, hmax + 1)
+    p_any, p_cv, p_one = [], [], []
+    for h in hs:
+        w = K - h + 1
+        p_any.append(np.mean([anyc[t:t + h].any(0) for t in range(w)]))
+        p_cv.append(np.mean([anycv[t:t + h].any(0) for t in range(w)]))
+        p_one.append(np.mean([pair[t:t + h].any(0) for t in range(w)]))
+    # first DV-CV meeting time CDF over pairs
+    met = np.zeros((len(dvi), len(cvi)), bool)
+    first = np.full((len(dvi), len(cvi)), K + 1)
+    for k in range(K):
+        new = pair[k] & ~met
+        first[new] = k + 1
+        met |= pair[k]
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.7))
+    ax = axes[0]
+    ax.semilogy(hs, p_any, marker="o", ms=4, color="#4C72B0",
+                markerfacecolor="white", label="Any vehicle")
+    ax.semilogy(hs, p_cv, marker="s", ms=4, color="#DD8452",
+                markerfacecolor="white", label="Any carrier (CV)")
+    ax.semilogy(hs, p_one, marker="^", ms=4, color="#C44E52",
+                markerfacecolor="white", label="One specific CV")
+    ax.set_xlabel("Window $h$ (rounds)")
+    ax.set_ylabel("Encounter probability")
+    ax.set_xticks([1, 5, 10, 15, 20])
+    ax.set_ylim(1e-3, 1.5)
+    ax = axes[1]
+    xs = np.arange(0, K + 1)
+    cdf = [(first <= x).mean() for x in xs]
+    ax.plot(xs, cdf, color="#C44E52", lw=1.8)
+    ax.axhline(met.mean(), color="0.4", ls=":", lw=1.0)
+    ax.text(2, met.mean() + 0.06,
+            f"{100 * (1 - met.mean()):.0f}% of DV–CV pairs never\n"
+            f"meet during the whole trace", fontsize=8.5, va="bottom")
+    ax.set_xlabel("First direct DV–CV meeting (round)")
+    ax.set_ylabel("CDF over pairs")
+    ax.set_xlim(0, K)
+    ax.set_ylim(0, 1)
+    for i, ax in enumerate(axes):
+        ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        ax.text(0.5, -0.42, f"({'ab'[i]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=11)
+    h_, l_ = axes[0].get_legend_handles_labels()
+    fig.legend(h_, l_, loc="upper center", ncol=3,
+               bbox_to_anchor=(0.5, 1.06), columnspacing=1.2,
+               handlelength=1.9, fontsize=9)
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    for ext in ("pdf", "png"):
+        for d in ("Figures", "new_result"):
+            os.makedirs(d, exist_ok=True)
+            fig.savefig(os.path.join(d, f"{out}.{ext}"), dpi=300,
+                        bbox_inches="tight")
+    plt.close(fig)
+    print("  saved", out,
+          f"(P_any(1)={p_any[0]:.2f}, P_cv(1)={p_cv[0]:.2f}, "
+          f"never-meet={100 * (1 - met.mean()):.1f}%)")
+
+
 if __name__ == "__main__":
     make()
