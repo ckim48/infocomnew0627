@@ -101,63 +101,58 @@ def fig_curves(key, ylabel, fname, cumulative_x=None):
 ABL_NPZ = "results/metrics_face_ablation_v2x.npz"
 EVENTS_NPZ = "results/metrics_v2x_real_kitti_events.npz"
 ABL_ORDER = [
-    ("FACE (full)", "FACE (full)"),
-    ("w/o relay ferrying", "w/o ferrying"),
-    ("w/o future value", "w/o future-contact value"),
-    ("w/o demand", "w/o demand awareness"),
-    ("w/o coverage", "w/o coverage awareness"),
-    ("w/o tickets", "w/o copy limit"),
+    # x labels use the manuscript's own terms/notation (Secs. III-D, IV)
+    ("FACE (full)", "FACE\n(full)"),
+    ("w/o relay ferrying", "w/o caching\n($c_{i,x}{\\equiv}0$)"),
+    ("w/o demand", "w/o demand\n($\\widehat{v}_{i,x}{\\equiv}$ const)"),
+    ("w/o future value",
+     "w/o future-contact\nutility ($F_{a,x}{\\equiv}0$)"),
 ]
 
 
 def fig_abl_2panel():
-    """Component ablation as a two-panel grouped bar chart (uniform-ECV
-    scenario of the commented Table): (a) learning performance, (b)
-    communication behavior with useful/redundant delivery split."""
+    """Component ablation, simplified to the three core mechanisms:
+    (a) final accuracy (all vs high-demand vehicles), (b) communication
+    volume split into useful and redundant deliveries."""
     d = np.load(ABL_NPZ)
     keys = [k for k, _ in ABL_ORDER if f"{k}__acc_all" in d.files]
     labs = [l for k, l in ABL_ORDER if f"{k}__acc_all" in d.files]
     xs = np.arange(len(keys))
 
-    def stat(key, metric, red):            # per-seed reduction -> mean, std
-        a = np.asarray(d[f"{key}__{metric}_all"])
-        v = red(a)
-        return v.mean(), v.std()
-
-    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.3))
-    ax = axes[0]                                       # (a) learning
-    for off, met, lab, col in ((-0.2, "acc", "Accuracy", "#4C72B0"),
-                               (0.2, "poor", "High-demand acc", "#DD8452")):
-        mu, sd = zip(*(stat(k, met, lambda a: 100 * a[:, -1]) for k in keys))
-        ax.bar(xs + off, mu, width=0.38, yerr=sd, capsize=2.5, label=lab,
-               color=col, edgecolor="black", lw=0.4)
+    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.0))
+    ax = axes[0]                                       # (a) accuracy
+    for off, met, lab, col in (
+            (-0.19, "acc", "All vehicles", "#4C72B0"),
+            (0.19, "poor", "High-demand vehicles", "#DD8452")):
+        a = np.stack([100 * d[f"{k}__{met}_all"][:, -1] for k in keys])
+        ax.bar(xs + off, a.mean(1), width=0.36, yerr=a.std(1), capsize=2.5,
+               label=lab, color=col, edgecolor="black", lw=0.4)
     ax.set_ylabel("Final accuracy (%)")
     ax.set_ylim(0, 100)
-    ax.legend(fontsize=8, loc="upper right")
+    ax.legend(fontsize=7.5, loc="upper right")
 
     ax = axes[1]                                       # (b) communication
-    for off, met, lab, col in (
-            (-0.22, "usat", "Useful-delivery ratio", "#55A868"),
-            (0.0, "redund", "Redundant-delivery ratio", "#C44E52")):
-        mu, sd = zip(*(stat(k, met, lambda a: 100 * a.mean(1)) for k in keys))
-        ax.bar(xs + off, mu, width=0.20, yerr=sd, capsize=2.5, label=lab,
-               color=col, edgecolor="black", lw=0.4)
-    ax.set_ylabel("Delivery ratio (%)")
-    ax.set_ylim(0, 55)
-    ax2 = ax.twinx()                                   # total transmissions
-    mu, sd = zip(*(stat(k, "tx", lambda a: a.sum(1) / 1e3) for k in keys))
-    ax2.bar(xs + 0.22, mu, width=0.20, yerr=sd, capsize=2.5,
-            label="Total Tx", color="#8172B2", edgecolor="black", lw=0.4)
-    ax2.set_ylabel(r"Total transmissions ($\times 10^3$)")
-    ax2.set_ylim(0, 22)
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax.legend(h1 + h2, l1 + l2, fontsize=7.5, loc="upper left")
+    gb, red_gb = [], []
+    for k in keys:
+        mb = d[f"{k}__txmb_all"]                       # seeds x rounds
+        rr = d[f"{k}__redund_all"]
+        gb.append(mb.sum(1) / 1024)
+        red_gb.append((mb * rr).sum(1) / 1024)
+    gb, red_gb = np.array(gb), np.array(red_gb)
+    use_gb = gb - red_gb
+    ax.bar(xs, use_gb.mean(1), width=0.5, label="Useful deliveries",
+           color="#55A868", edgecolor="black", lw=0.4)
+    ax.bar(xs, red_gb.mean(1), width=0.5, bottom=use_gb.mean(1),
+           yerr=gb.std(1), capsize=2.5, label="Redundant deliveries",
+           color="#C44E52", edgecolor="black", lw=0.4)
+    ax.set_ylabel("Communication volume (GB)")
+    ax.set_ylim(0, 62)
+    ax.legend(fontsize=7.5, loc="upper right")
     for i, ax_ in enumerate(axes):
         ax_.set_xticks(xs)
-        ax_.set_xticklabels(labs, fontsize=7.5, rotation=22, ha="right")
+        ax_.set_xticklabels(labs, fontsize=7.2)
         ax_.grid(True, axis="y", ls=":", alpha=0.5)
-        ax_.text(0.5, -0.40, f"({'ab'[i]})", transform=ax_.transAxes,
+        ax_.text(0.5, -0.30, f"({'ab'[i]})", transform=ax_.transAxes,
                  ha="center", va="top", fontsize=11)
     fig.tight_layout()
     _save(fig, "fig_face_abl_2panel")
