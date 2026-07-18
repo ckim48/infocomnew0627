@@ -163,9 +163,9 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         # scheme name + cohort mean accuracy above the panel, off the map,
         # so the labels never occlude vehicles or roads
         name = MAP_LABELS.get(s, disp(s))
-        ax.text(0.0, 1.02, f"{name}", transform=ax.transAxes,
+        ax.text(0.0, 1.045, f"{name}", transform=ax.transAxes,
                 ha="left", va="bottom", fontsize=10.5)
-        ax.text(1.0, 1.02, f"mean acc {acc.mean():.3f}",
+        ax.text(1.0, 1.045, f"mean acc {acc.mean():.3f}",
                 transform=ax.transAxes, ha="right", va="bottom",
                 fontsize=9.5)
         # accent border on the proposed scheme's panel
@@ -176,7 +176,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
             for sp in ax.spines.values():
                 sp.set_edgecolor("0.45"); sp.set_linewidth(0.8)
 
-    fig.subplots_adjust(wspace=0.04, hspace=0.12)
+    fig.subplots_adjust(wspace=0.04, hspace=0.20)
     sm = ScalarMappable(norm=norm, cmap=cmap)
     cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
                         fraction=0.045, pad=0.04, aspect=45)
