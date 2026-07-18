@@ -722,6 +722,115 @@ def fig_analysis_3x2():
     print("  saved fig_seoul_analysis_3x2")
 
 
+def fig_2x2_pair():
+    """Two 2x2 companions of the 3x2 (columns = datasets):
+    fig_seoul_learn_2x2  rows = test-accuracy convergence / per-vehicle CDF
+    fig_seoul_delivery_2x2  rows = high-demand accuracy / useful-delivery
+    Saved here and mirrored to Figures/ + new_result/ for the manuscript."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY, _smooth
+    from matplotlib.ticker import FormatStrFormatter
+    datasets = _avail("results/metrics_v2x_real_{}.npz")
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_*_2x2: need both Seoul runs")
+        return
+    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+    acc_axis = {"kitti": ((0.2, 0.6), [0.2, 0.3, 0.4, 0.5, 0.6]),
+                "nuscenes": ((0.4, 0.8), [0.4, 0.5, 0.6, 0.7, 0.8])}
+
+    def _finish(fig, axg, fname):
+        for i, ax in enumerate(axg.ravel()):
+            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+            ax.set_box_aspect(0.66)
+            ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+            if i % 2 == 1:                   # right column: y numbers outward
+                ax.yaxis.tick_right()
+            ax.text(0.5, -0.43, f"({'abcd'[i]})", transform=ax.transAxes,
+                    ha="center", va="top", fontsize=12)
+        h, l = axg[0, 0].get_legend_handles_labels()
+        fig.legend(h, l, loc="upper center", ncol=6,
+                   bbox_to_anchor=(0.5, 1.015), columnspacing=1.0,
+                   handlelength=1.8, fontsize=9.5)
+        fig.tight_layout(rect=[0, 0, 1, 0.96], h_pad=3.0, w_pad=0.5)
+        fig.subplots_adjust(wspace=0.05)
+        for ext in ("png", "pdf"):
+            f = f"{fname}.{ext}"
+            fig.savefig(os.path.join(HERE, f), dpi=300, bbox_inches="tight")
+            for mirror in ("Figures", "new_result"):
+                shutil.copy(os.path.join(HERE, f),
+                            os.path.join(ROOT, mirror, f))
+        plt.close(fig)
+        print("  saved", fname)
+
+    # ---- figure 1: learning quality (convergence + per-vehicle CDF) ----
+    fig, axg = plt.subplots(2, 2, figsize=(6.3, 5.3))
+    for col, (tag, label) in enumerate(datasets):
+        M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+        ax = axg[0, col]                                  # accuracy vs round
+        for sn in order:
+            y = M[f"{sn}__acc"]
+            K = len(y)
+            ax.plot(np.arange(1, K + 1), y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_title(label, fontsize=12)
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("Test accuracy" if col == 0 else "")
+        ax.set_ylim(*acc_axis[tag][0]); ax.set_yticks(acc_axis[tag][1])
+
+        ax = axg[1, col]                                  # per-vehicle CDF
+        for sn in order:
+            v = np.sort(M[f"{sn}__accveh_all"].ravel())
+            cdf = np.arange(1, len(v) + 1) / len(v)
+            st = {k: val for k, val in STY[sn].items() if k != "marker"}
+            ax.plot(v, cdf, label=DISPLAY.get(sn, sn), **st)
+        ax.set_xlabel("Per-vehicle final accuracy")
+        ax.set_ylabel("CDF" if col == 0 else "")
+        ax.set_ylim(0, 1); ax.set_yticks([0, 0.5, 1.0])
+    _finish(fig, axg, "fig_seoul_learn_2x2")
+
+    # ---- figure 2: high-demand accuracy + useful delivery ----
+    hd_axis = {"kitti": ((0.2, 0.5), [0.2, 0.3, 0.4, 0.5]),
+               "nuscenes": ((0.3, 0.7), [0.3, 0.4, 0.5, 0.6, 0.7])}
+    fig, axg = plt.subplots(2, 2, figsize=(6.3, 5.3))
+    for col, (tag, label) in enumerate(datasets):
+        M = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
+        ax = axg[0, col]                          # high-demand cohort accuracy
+        for sn in order:
+            y = M[f"{sn}__poor"]
+            K = len(y)
+            ax.plot(np.arange(1, K + 1), y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_title(label, fontsize=12)
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("High-demand accuracy" if col == 0 else "")
+        ax.set_ylim(*hd_axis[tag][0]); ax.set_yticks(hd_axis[tag][1])
+
+        ax = axg[1, col]                                  # useful delivery
+        for sn in order:
+            y = _smooth(M[f"{sn}__usat"], 15)
+            K = len(y)
+            ax.plot(np.arange(1, K + 1), y, label=DISPLAY.get(sn, sn),
+                    markevery=max(K // 8, 1), markersize=4.5,
+                    markerfacecolor="white", markeredgewidth=1.0, **STY[sn])
+        ax.set_xlim(0, K)
+        ax.set_xlabel("Global round $k$")
+        ax.set_ylabel("Useful-delivery ratio" if col == 0 else "")
+        ax.set_ylim(0, 0.2); ax.set_yticks([0, 0.1, 0.2])
+    _finish(fig, axg, "fig_seoul_delivery_2x2")
+
+
 def _has_vloss():
     for tag, _ in _avail("results/metrics_v2x_real_{}.npz"):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
@@ -948,6 +1057,7 @@ if __name__ == "__main__":
     fig_analysis("nuscenes", "nuScenes")
     fig_analysis_combined()
     fig_analysis_3x2()
+    fig_2x2_pair()
     if not _has_vloss():
         print("  [note] fig_seoul_loss_convergence uses (1-acc)^2 estimate"
               " until the vloss rerun lands")
