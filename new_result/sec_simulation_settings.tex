@@ -1,0 +1,75 @@
+% Simulation Settings (INFOCOM-style run-in paragraphs).
+% Numbers match sim/config.py + run_v2x_real.py overrides and the
+% Table-I runs (metrics_v2x_real_{kitti,nuscenes}.npz, 3 seeds).
+\subsection{Simulation Settings}
+\label{subsec:settings}
+
+\textbf{Mobility trace and V2V network.}
+We evaluate FACE on a real vehicular mobility trace of the
+Seoul--Gangnam district, the operating area of the robotaxi service in
+Sec.~II, reconstructed over the real road network (38{,}091 road
+segments) from open Seoul traffic data. The trace contains
+$|\mathcal I|=180$ vehicles sampled at $\Delta_{\mathrm{rd}}\approx10$\,s;
+training runs for $T=250$ rounds by replaying the trace window
+cyclically (steady-state traffic). Vehicles communicate within
+$r_{\mathrm{V2V}}=150$\,m, a transmission succeeds with probability
+$1-(d_{ij}/r_{\mathrm{V2V}})^2$, and each contact provides a budget
+$\widehat B_{ij}$ of $1.6$\,s at an effective sidelink rate of
+$12$\,MB/s, so a typical contact carries roughly one encoder. Road
+zones $\mathcal Z$ are $300$\,m grid cells over the district.
+
+\textbf{Datasets and models.}
+Following the multimodal perception task of Sec.~II, each vehicle
+trains a multimodal object classifier (Car / Pedestrian / Cyclist) on
+real sensor data: KITTI (camera $+$ LiDAR crops of labeled objects)
+and nuScenes (camera $+$ LiDAR $+$ radar). Modality availability is
+heterogeneous: $\Pr(\text{LiDAR})=0.85$ and, on nuScenes,
+$\Pr(\text{radar})=0.7$, so a share of vehicles is camera-only. Each
+vehicle holds $80$--$600$ local training objects with per-vehicle
+sensing-quality degradation; $15\%$ of the vehicles carry clean
+high-quality data and act as encoder carriers, while the remaining
+vehicles form the high-demand cohort reported in Table~I. Encoders
+are modality-specific networks with a local fusion head; encoder
+transmission sizes are $S_x=12/18/6$\,MB (camera/LiDAR/radar),
+representative of production perception encoders. Aggregation follows
+Sec.~III with data-size weights as in FedAvg~\cite{fedavg}.
+
+\textbf{FACE parameters.}
+Unless stated otherwise, the future-contact horizon is $H=6$ rounds
+with discount $\beta=0.85$, the communication price is
+$\lambda=10^{-3}$ per MB, the copy cap is $K_x=6$ with version
+lifetime $15$ rounds and republication every round, the adoption
+threshold is $\delta=5\times10^{-3}$, the evaluation budget is
+$N_{\mathrm{ev}}=6$, and the cache capacity is
+$\Lambda_i^{\max}=45$\,MB. The gain predictor uses a sliding-window
+ridge (regularization $1.0$, decay $0.98$); zone statistics decay with
+factor $0.97$ and forecast blend $\gamma_f=0.85$. All results average
+three independent runs (distinct seeds for data assignment, modality
+availability, and matching); experiments run on a single NVIDIA RTX
+3080 GPU.
+
+\textbf{Benchmarks.}
+All schemes run under the identical Sec.~III protocol (encoder types
+and versions, replication tokens, evaluation-gated adoption) and
+differ only in their forwarding and caching policy, so the comparison
+isolates the delivery decisions:
+(1)~\textbf{Caching}: store--carry--forward relaying that replicates
+encoders opportunistically without demand awareness, in the spirit of
+spray-and-wait~\cite{spyropoulos2005spray};
+(2)~\textbf{V2V}: link-opportunistic direct exchange that forwards own
+encoders to link-favorable neighbors, blind to demand;
+(3)~\textbf{Learning}: demand-aware direct exchange that targets
+requesters in the current contact but performs no relay caching;
+(4)~\textbf{mmFedMC}~\cite{multimodal_tmc}: communication-efficient
+modality/client selection, adapted to the decentralized setting;
+(5)~\textbf{AutoFed}~\cite{autofed}: heterogeneity-aware multimodal
+vehicular FL, adapted likewise.
+
+\textbf{Metrics.}
+We report the final test accuracy (mean of the last 20 rounds
+$\pm$ std over runs) for all vehicles and for the high-demand cohort,
+the validation loss, the useful-delivery ratio of Sec.~III, the
+deadline-delivery probability Delivery@$d$ (a useful encoder reaches a
+high-demand vehicle within $d$ rounds), and the rounds and encoder
+transmissions to reach the target accuracy $\tau$, set to $95\%$ of
+the best final accuracy on each dataset.
