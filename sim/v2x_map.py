@@ -31,7 +31,7 @@ from .plotting import disp
 
 MAP_SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
 # panel labels: full baseline names (paper style), regular weight
-MAP_LABELS = {"Proposed": "FACE", "Caching-assisted": "Caching DFL",
+MAP_LABELS = {"Proposed": "FACE", "Caching-assisted": "Cached-DFL",
               "V2V-aware": "V2V-aware", "Learning-aware": "Learning-aware"}
 
 # top-view car silhouette pointing +x (unit length, ~0.45 width)

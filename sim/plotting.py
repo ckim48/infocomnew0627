@@ -20,7 +20,7 @@ STYLE = {
 }
 
 # Display name for each scheme in legends/labels (the proposed scheme is FACE).
-DISPLAY = {"Proposed": "FACE", "Caching-assisted": "Caching",
+DISPLAY = {"Proposed": "FACE", "Caching-assisted": "Cached-DFL",
            "V2V-aware": "V2V", "Learning-aware": "Learning"}
 
 
