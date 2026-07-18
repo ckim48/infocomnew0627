@@ -157,18 +157,14 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
                                 facecolors="black", alpha=0.35,
                                 edgecolors="none", zorder=5)
         ax.add_collection(cabins)
-        # rounded chip label with the scheme name + cohort mean accuracy
+        # scheme name + cohort mean accuracy above the panel, off the map,
+        # so the labels never occlude vehicles or roads
         name = disp(s)
-        ax.text(0.03, 0.97, f"{name}", transform=ax.transAxes,
-                ha="left", va="top", fontsize=11, fontweight="bold",
-                zorder=6, bbox=dict(boxstyle="round,pad=0.35",
-                                    fc="white", ec="0.25", lw=0.9,
-                                    alpha=0.95))
-        ax.text(0.03, 0.865, f"mean acc {acc.mean():.3f}",
-                transform=ax.transAxes, ha="left", va="top", fontsize=9.5,
-                zorder=6, bbox=dict(boxstyle="round,pad=0.28",
-                                    fc="white", ec="0.6", lw=0.6,
-                                    alpha=0.9))
+        ax.text(0.0, 1.02, f"{name}", transform=ax.transAxes,
+                ha="left", va="bottom", fontsize=11, fontweight="bold")
+        ax.text(1.0, 1.02, f"mean acc {acc.mean():.3f}",
+                transform=ax.transAxes, ha="right", va="bottom",
+                fontsize=9.5)
         # accent border on the proposed scheme's panel
         if s == "Proposed":
             for sp in ax.spines.values():
@@ -177,7 +173,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
             for sp in ax.spines.values():
                 sp.set_edgecolor("0.45"); sp.set_linewidth(0.8)
 
-    fig.subplots_adjust(wspace=0.04, hspace=0.06)
+    fig.subplots_adjust(wspace=0.04, hspace=0.12)
     sm = ScalarMappable(norm=norm, cmap=cmap)
     cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
                         fraction=0.045, pad=0.04, aspect=45)
