@@ -20,9 +20,9 @@ zones $\mathcal Z$ are $300$\,m grid cells over the district.
 
 \textbf{Datasets and models.}
 Following the multimodal perception task of Sec.~II, each vehicle
-trains a multimodal object classifier (Car / Pedestrian / Cyclist) on
-real sensor data: KITTI (camera $+$ LiDAR crops of labeled objects)
-and nuScenes (camera $+$ LiDAR $+$ radar). Modality availability is
+trains a multimodal object classifier on real sensor data: KITTI
+(camera $+$ LiDAR crops of labeled objects; Car / Pedestrian /
+Cyclist) and nuScenes (camera $+$ LiDAR $+$ radar; Car / Pedestrian). Modality availability is
 heterogeneous: $\Pr(\text{LiDAR})=0.85$ and, on nuScenes,
 $\Pr(\text{radar})=0.7$, so a share of vehicles is camera-only. Each
 vehicle holds $80$--$600$ local training objects with per-vehicle

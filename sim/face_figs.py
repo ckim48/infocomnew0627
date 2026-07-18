@@ -161,6 +161,50 @@ def fig_abl_2panel():
     _save(fig, "fig_face_abl_2panel")
 
 
+SVC_NPZ = "results/metrics_v2x_real_kitti_svc.npz"
+
+
+def fig_class():
+    """Service-level per-class accuracy on KITTI (Car / Pedestrian /
+    Cyclist): (a) all vehicles, (b) the high-demand cohort. nuScenes is
+    omitted: after the min-class-count filter it is a two-class task
+    (no Cyclist objects in nuScenes-mini)."""
+    if not os.path.exists(SVC_NPZ):
+        print("  [skip] fig_face_class: no svc npz yet")
+        return
+    z = np.load(SVC_NPZ)
+    classes = ["Car", "Pedestrian", "Cyclist"]
+    xs = np.arange(len(classes))
+    schemes = [s for s in REAL_SCHEMES if f"{s}__accclass_all" in z.files]
+    nS = len(schemes)
+    width = 0.8 / nS
+    fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.0))
+    for ax, key, title in ((axes[0], "accclass_all", "All vehicles"),
+                           (axes[1], "accclass_hd_all",
+                            "High-demand vehicles")):
+        for si, s in enumerate(schemes):
+            a = 100 * z[f"{s}__{key}"][:, -20:, :].mean(1)   # seeds x C
+            off = (si - (nS - 1) / 2) * width
+            ax.bar(xs + off, a.mean(0), width=0.92 * width, yerr=a.std(0),
+                   capsize=1.8, label=disp(s),
+                   color=STYLE[s]["color"], edgecolor="black", lw=0.4)
+        ax.set_title(title, fontsize=10)
+        ax.set_xticks(xs)
+        ax.set_xticklabels(classes, fontsize=9)
+        ax.set_ylim(30, 70)
+        ax.set_yticks([30, 40, 50, 60, 70])
+        ax.grid(True, axis="y", ls=":", alpha=0.5)
+    axes[0].set_ylabel("Final accuracy (%)")
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=6, fontsize=8,
+               columnspacing=1.0, bbox_to_anchor=(0.5, 1.06))
+    for i, ax in enumerate(axes):
+        ax.text(0.5, -0.17, f"({'ab'[i]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=11)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    _save(fig, "fig_face_class")
+
+
 def fig_deadline(deadlines=(1, 2, 3, 5, 10, 20)):
     """Delivery-deadline success: probability that a high-demand vehicle
     receives a useful (compatible, stronger) encoder within d rounds,
