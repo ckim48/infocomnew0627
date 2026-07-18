@@ -65,10 +65,14 @@ link quality, without considering encoder demand;
 with the neighbors that currently demand them, prioritizing receivers
 by expected learning benefit regardless of link quality, and performs
 no encoder caching for subsequent relaying;
-(4)~\textbf{mmFedMC}~\cite{multimodal_tmc}: communication-efficient
-modality/client selection, adapted to the decentralized setting;
-(5)~\textbf{AutoFed}~\cite{autofed}: heterogeneity-aware multimodal
-vehicular FL, adapted likewise.
+(4)~\textbf{mmFedMC}~\cite{multimodal_tmc}: at each contact, the
+sender offers only its highest-value own-modality encoder, ranked by
+learning contribution per unit communication cost, following the
+modality selection of mmFedMC adapted to the decentralized setting;
+(5)~\textbf{AutoFed}~\cite{autofed}: encoders are offered to
+compatible receivers in order of the publisher's encoder quality, so
+clean, data-rich sources are disseminated first as in AutoFed,
+without considering receiver demand.
 
 \textbf{Metrics.}
 We report the final test accuracy (mean of the last 20 rounds
