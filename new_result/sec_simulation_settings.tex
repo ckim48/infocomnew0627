@@ -58,10 +58,13 @@ model caching on mobile agents -- each vehicle caches encoders
 received from encountered vehicles and re-shares its own and cached
 encoders at every contact with LRU replacement, without demand
 awareness;
-(2)~\textbf{V2V}: link-opportunistic direct exchange that forwards own
-encoders to link-favorable neighbors, blind to demand;
-(3)~\textbf{Learning}: demand-aware direct exchange that targets
-requesters in the current contact but performs no relay caching;
+(2)~\textbf{V2V}: each vehicle opportunistically shares its own
+encoders with the neighbors offering the highest instantaneous V2V
+link quality, without considering encoder demand;
+(3)~\textbf{Learning}: each vehicle shares its own encoders directly
+with the neighbors that currently demand them, prioritizing receivers
+by expected learning benefit regardless of link quality, and performs
+no encoder caching for subsequent relaying;
 (4)~\textbf{mmFedMC}~\cite{multimodal_tmc}: communication-efficient
 modality/client selection, adapted to the decentralized setting;
 (5)~\textbf{AutoFed}~\cite{autofed}: heterogeneity-aware multimodal
