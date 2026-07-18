@@ -757,7 +757,7 @@ def fig_2x2_pair():
                     ha="center", va="top", fontsize=12)
         h, l = axg[0, 0].get_legend_handles_labels()
         fig.legend(h, l, loc="upper center", ncol=6,
-                   bbox_to_anchor=(0.5, 1.015), columnspacing=1.0,
+                   bbox_to_anchor=(0.5, 1.045), columnspacing=1.0,
                    handlelength=1.8, fontsize=9.5)
         fig.tight_layout(rect=[0, 0, 1, 0.96], h_pad=3.0, w_pad=0.5)
         fig.subplots_adjust(wspace=0.05)
@@ -911,7 +911,8 @@ def fig_deadline_calib_2x2(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
         ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)"
                       if col == 0 else "")
         if col == 0:
-            ax.legend(fontsize=8, loc="lower right")
+            ax.legend(fontsize=7.5, loc="upper left",
+                      bbox_to_anchor=(0.0, 0.80))
     from matplotlib.ticker import FormatStrFormatter
     for i, ax in enumerate(axg.ravel()):
         ax.grid(True, ls="--", lw=0.6, alpha=0.5)
@@ -924,7 +925,7 @@ def fig_deadline_calib_2x2(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
                 ha="center", va="top", fontsize=12)
     h, l = axg[0, 0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6,
-               bbox_to_anchor=(0.5, 1.015), columnspacing=1.0,
+               bbox_to_anchor=(0.5, 1.045), columnspacing=1.0,
                handlelength=1.8, fontsize=9.5)
     fig.tight_layout(rect=[0, 0, 1, 0.96], h_pad=3.0, w_pad=0.5)
     fig.subplots_adjust(wspace=0.05)

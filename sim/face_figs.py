@@ -120,15 +120,24 @@ def fig_abl_2panel():
     xs = np.arange(len(keys))
 
     fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.0))
-    ax = axes[0]                                       # (a) accuracy
+    # (a) paired per-seed accuracy DROP vs full FACE: the removed-mechanism
+    # cost is the quantity of interest, and it is invisible on a 0-100 axis
+    ax = axes[0]
+    ks = keys[1:]
+    xs_a = np.arange(len(ks))
+    ref = {m: 100 * d[f"{keys[0]}__{m}_all"][:, -1] for m in ("acc", "poor")}
     for off, met, lab, col in (
             (-0.19, "acc", "All vehicles", "#4C72B0"),
             (0.19, "poor", "High-demand vehicles", "#DD8452")):
-        a = np.stack([100 * d[f"{k}__{met}_all"][:, -1] for k in keys])
-        ax.bar(xs + off, a.mean(1), width=0.36, yerr=a.std(1), capsize=2.5,
-               label=lab, color=col, edgecolor="black", lw=0.4)
-    ax.set_ylabel("Final accuracy (%)")
-    ax.set_ylim(0, 100)
+        drop = np.stack([ref[met] - 100 * d[f"{k}__{met}_all"][:, -1]
+                         for k in ks])
+        ax.bar(xs_a + off, drop.mean(1), width=0.36, yerr=drop.std(1),
+               capsize=2.5, label=lab, color=col, edgecolor="black", lw=0.4)
+    ax.set_ylabel("Accuracy drop vs. FACE (pp)")
+    ax.set_ylim(0, 36)
+    ax.text(0.97, 0.72, f"FACE (full): {ref['acc'].mean():.1f}% / "
+            f"{ref['poor'].mean():.1f}%", transform=ax.transAxes,
+            ha="right", va="top", fontsize=8)
     ax.legend(fontsize=7.5, loc="upper right")
 
     ax = axes[1]                                       # (b) communication
@@ -148,9 +157,10 @@ def fig_abl_2panel():
     ax.set_ylabel("Communication volume (GB)")
     ax.set_ylim(0, 62)
     ax.legend(fontsize=7.5, loc="upper right")
-    for i, ax_ in enumerate(axes):
-        ax_.set_xticks(xs)
-        ax_.set_xticklabels(labs, fontsize=7.2)
+    for i, (ax_, x_, l_) in enumerate(zip(axes, (xs_a, xs),
+                                          (labs[1:], labs))):
+        ax_.set_xticks(x_)
+        ax_.set_xticklabels(l_, fontsize=7.2)
         ax_.grid(True, axis="y", ls=":", alpha=0.5)
         ax_.text(0.5, -0.30, f"({'ab'[i]})", transform=ax_.transAxes,
                  ha="center", va="top", fontsize=11)
