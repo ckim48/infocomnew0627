@@ -97,7 +97,9 @@ def _num(v, bold, fmt="{}"):
 
 def make(out_path="new_result/tab_seoul_combined.tex",
          poor_header=r"\textsc{Poor Acc}", include_gap=True,
-         include_udel=False, deadlines=(), colsep="5pt", font=None):
+         include_udel=False, deadlines=(), colsep="5pt", font=None,
+         npz_fmt="results/metrics_v2x_real_{}.npz",
+         label="tab:seoul_results"):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     ncol = 7 + int(include_gap) + int(include_udel) + len(deadlines)
     lines = []
@@ -107,7 +109,7 @@ def make(out_path="new_result/tab_seoul_combined.tex",
     a(r"\begin{table*}[t]")
     a(r"    \centering")
     a(r"    \caption{Overall performance comparison on KITTI and nuScenes.}")
-    a(r"    \label{tab:seoul_results}")
+    a(r"    \label{%s}" % label)
     if font:
         a(r"    " + font)
     a(r"    \renewcommand{\arraystretch}{1.15}")
@@ -132,7 +134,7 @@ def make(out_path="new_result/tab_seoul_combined.tex",
     a(r"        & \textsc{Tx@$\tau$} \\")
     a(r"        \hline")
     for tag, label in (("kitti", "KITTI"), ("nuscenes", "nuScenes")):
-        res = _load(f"results/metrics_v2x_real_{tag}.npz")
+        res = _load(npz_fmt.format(tag))
         st = _stats(res)
         schemes = [x for x in SCHEMES if x in st]
         dl = _deadline_stats(tag, deadlines) if deadlines else {}
