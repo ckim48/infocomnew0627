@@ -30,6 +30,9 @@ from .map_viz import _run_one
 from .plotting import disp
 
 MAP_SCHEMES = ["Proposed", "Caching-assisted", "V2V-aware", "Learning-aware"]
+# panel labels: full baseline names (paper style), regular weight
+MAP_LABELS = {"Proposed": "FACE", "Caching-assisted": "Caching DFL",
+              "V2V-aware": "V2V-aware", "Learning-aware": "Learning-aware"}
 
 # top-view car silhouette pointing +x (unit length, ~0.45 width)
 _CAR_BODY = np.array([
@@ -159,9 +162,9 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         ax.add_collection(cabins)
         # scheme name + cohort mean accuracy above the panel, off the map,
         # so the labels never occlude vehicles or roads
-        name = disp(s)
+        name = MAP_LABELS.get(s, disp(s))
         ax.text(0.0, 1.02, f"{name}", transform=ax.transAxes,
-                ha="left", va="bottom", fontsize=11, fontweight="bold")
+                ha="left", va="bottom", fontsize=10.5)
         ax.text(1.0, 1.02, f"mean acc {acc.mean():.3f}",
                 transform=ax.transAxes, ha="right", va="bottom",
                 fontsize=9.5)
