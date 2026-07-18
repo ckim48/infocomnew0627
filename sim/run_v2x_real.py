@@ -48,7 +48,8 @@ def _prepare_v2x(cfg, device):
 
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         rounds=250, min_class_count=None, schemes=None, merge=False,
-        out_name=None, partitioned=False, ttl=15, kx=6, lam=0.001):
+        out_name=None, partitioned=False, ttl=15, kx=6, lam=0.001,
+        record_class=True):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus.
@@ -151,9 +152,11 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                 urow = np.zeros(mob.N, dtype=bool)
                 urow[getattr(alg, "last_useful_receivers", [])] = True
                 ud_h.append(urow)
-                ac = mfl.evaluate_class("test")        # N x C
-                cls_h.append(ac.mean(0))
-                clsp_h.append(ac[pm].mean(0) if pm.any() else ac.mean(0))
+                if record_class:
+                    ac = mfl.evaluate_class("test")    # N x C
+                    cls_h.append(ac.mean(0))
+                    clsp_h.append(ac[pm].mean(0) if pm.any()
+                                  else ac.mean(0))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
@@ -174,9 +177,11 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme].setdefault("pmask", []).append(np.asarray(pm))
             stacks[scheme].setdefault("calib", []).append(
                 np.array(alg.calib, dtype=np.float32))
-            stacks[scheme].setdefault("accclass", []).append(np.array(cls_h))
-            stacks[scheme].setdefault("accclass_hd", []).append(
-                np.array(clsp_h))
+            if record_class:
+                stacks[scheme].setdefault("accclass", []).append(
+                    np.array(cls_h))
+                stacks[scheme].setdefault("accclass_hd", []).append(
+                    np.array(clsp_h))
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
