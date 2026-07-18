@@ -53,9 +53,11 @@ All schemes run under the identical Sec.~III protocol (encoder types
 and versions, replication tokens, evaluation-gated adoption) and
 differ only in their forwarding and caching policy, so the comparison
 isolates the delivery decisions:
-(1)~\textbf{Caching}: store--carry--forward relaying that replicates
-encoders opportunistically without demand awareness, in the spirit of
-spray-and-wait~\cite{spyropoulos2005spray};
+(1)~\textbf{Caching} (Cached-DFL~\cite{cachedDFL}): delay-tolerant
+model caching on mobile agents -- each vehicle caches encoders
+received from encountered vehicles and re-shares its own and cached
+encoders at every contact with LRU replacement, without demand
+awareness;
 (2)~\textbf{V2V}: link-opportunistic direct exchange that forwards own
 encoders to link-favorable neighbors, blind to demand;
 (3)~\textbf{Learning}: demand-aware direct exchange that targets
