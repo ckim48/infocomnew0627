@@ -166,17 +166,18 @@ READY_FMT = "results/metrics_v2x_real_{}_ready.npz"
 ROUND_SEC = 10.2                       # Seoul trace step (s) per round
 
 
-def fig_readiness():
-    """Service-readiness curves: fraction of the fleet whose model meets the
-    service-grade accuracy tau (the Table-I target, 95% of the best final
-    accuracy) versus operation time. Columns = datasets; needs the
-    record_veh=True runs (metrics_v2x_real_{tag}_ready.npz)."""
+def fig_readiness(tag="kitti"):
+    """Service-readiness curves on one dataset: fraction of vehicles whose
+    model meets the service-grade accuracy tau (the Table-I target, 95% of
+    the best final accuracy) versus operation time; (a) all vehicles,
+    (b) the high-demand cohort. Needs a record_veh=True run."""
     import matplotlib.pyplot as plt2
-    tags = [(t, l) for t, l in (("kitti", "KITTI"), ("nuscenes", "nuScenes"))
-            if os.path.exists(READY_FMT.format(t))]
-    if len(tags) < 2:
-        print("  [skip] fig_face_readiness: need both ready npz")
+    if not os.path.exists(READY_FMT.format(tag)):
+        print("  [skip] fig_face_readiness: no ready npz")
         return
+    z = np.load(READY_FMT.format(tag))
+    schemes = [s for s in REAL_SCHEMES if f"{s}__accveht_all" in z.files]
+    tau = 0.95 * max(z[f"{s}__acc"][-1] for s in schemes)
     with plt2.rc_context({
             "font.family": "serif",
             "font.serif": ["Times New Roman", "DejaVu Serif"],
@@ -185,21 +186,23 @@ def fig_readiness():
             "xtick.direction": "in", "ytick.direction": "in",
             "legend.frameon": False}):
         fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.9))
-        for ax, (tag, label) in zip(axes, tags):
-            z = np.load(READY_FMT.format(tag))
-            schemes = [s for s in REAL_SCHEMES
-                       if f"{s}__accveht_all" in z.files]
-            tau = 0.95 * max(z[f"{s}__acc"][-1] for s in schemes)
+        for ax, hd, title in ((axes[0], False, "All vehicles"),
+                              (axes[1], True, "High-demand vehicles")):
             for s in schemes:
                 v = z[f"{s}__accveht_all"].astype(np.float32)  # seeds,K,N
-                frac = (v >= tau).mean(2)                      # seeds,K
-                K = frac.shape[1]
+                pm = z[f"{s}__pmask_all"]
+                per_seed = []
+                for si in range(v.shape[0]):
+                    vv = v[si][:, pm[si]] if hd else v[si]
+                    per_seed.append((vv >= tau).mean(1))
+                frac = np.array(per_seed).mean(0)
+                K = len(frac)
                 x = np.arange(1, K + 1) * ROUND_SEC / 60.0
-                ax.plot(x, frac.mean(0), label=disp(s),
+                ax.plot(x, frac, label=disp(s),
                         markevery=max(K // 8, 1), markersize=4,
                         markerfacecolor="white", markeredgewidth=1.0,
                         **STYLE[s])
-            ax.set_title(label, fontsize=11)
+            ax.set_title(title, fontsize=11)
             ax.set_xlabel("Operation time (min)")
             ax.set_xlim(0, x[-1])
             ax.set_ylim(0, None)
