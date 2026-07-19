@@ -198,6 +198,10 @@ class FACE:
         self._pi = np.zeros(mfl.N)          # reciprocal priority pi_i (Eq. rep_priority)
         self._deliv_credit = {}             # (receiver, vid) -> (sender, vhat at delivery)
         self.calib = []                     # (k, predicted gain, realized gain)
+        self.oracle_log = False             # committed-transfer / pair logging
+        self.deliv_log, self.pair_log = [], []
+        self.value_table_rounds = set()     # rounds to snapshot v-hat tables
+        self.value_tables, self.state_snapshots = {}, {}
         self._need_ok = {}                  # r -> [N] bool, d_{i,r} >= delta_d
         self._publish_all(t=0)
 
@@ -451,6 +455,7 @@ class FACE:
 
     # ------------------------------------------------------------ round entry
     def run_round(self, k, gamma=None, gamma_eval=None):
+        self._k = k
         cfg, mfl, mob = self.cfg, self.mfl, self.mob
         self._clock = k
         self._n_beyond_adopt = 0
@@ -783,10 +788,17 @@ class FACE:
         for (i, j, sel_g, evicts) in committed:
             ptx = mob.link_quality(i, j)
             T_budget = cfg.contact_time_per_round
+            if self.oracle_log:
+                self.pair_log.append(
+                    (self._k, i, j,
+                     rate * max(ptx, 0.05) * T_budget))
             evq = list(evicts)
             for (x, S, g, vhat) in sel_g:
                 v = self.versions[x]
                 sched.append((i, j, v))
+                if self.oracle_log:
+                    self.deliv_log.append(
+                        (self._k, i, j, x, float(vhat), float(S)))
                 self._n_tx += 1
                 self.last_tx_mb += S
                 if S / (rate * max(ptx, 0.05)) > T_budget:
@@ -816,6 +828,8 @@ class FACE:
                     self._n_relay += 1
                 if (v.src, j) not in self._evermet and v.src != j:
                     self._n_beyond += 1
+        if self.oracle_log and k in self.value_table_rounds:
+            self._snapshot_oracle_state(k, need)
         self._score_round(sched, recv, need, gamma_eval, zn)
         # ---------- evaluate + adopt (step S3: after the contact phase, so
         # newly received encoders are evaluated in the same round) ----------
@@ -895,6 +909,60 @@ class FACE:
             return 1
         frac = Fj / (Fi + Fj + 1e-12)
         return int(np.clip(np.ceil(m * frac), 1, m - 1))
+
+    def _vhat_full(self, j, v, need, k):
+        """The FACE-full immediate reward of delivering version v to j,
+        replicating the candidate-loop formula (demand path + gain prior +
+        reciprocal priority)."""
+        cfg, mfl = self.cfg, self.mfl
+        if not (v.compat[j] and not v.resolved[j]
+                and self._need_ok[v.r][j]):
+            return 0.0
+        s_own = float(mfl.strength.get((j, v.r), 0.0))
+        psi = self._psi(v.vid, s_own, need.get((j, v.r), 0.0),
+                        np.log1p(mfl.Dmr(j, v.r))
+                        / np.log1p(cfg.data_max), k)
+        if self.flags["use_ridge"]:
+            g = float(self.ridge.predict(v.r, psi[None])[0])
+        else:
+            n, mu = self.gstat.get((v.src, v.r), (0, 1.0))
+            g = mu if n else 1.0
+        if cfg.face_gain_prior:
+            prior = max(v.s_meta - s_own, 0.0) / max(1.0 - s_own, 1e-6)
+            age = min((k - v.t_gen) / max(cfg.face_ttl, 1), 1.0)
+            g = max(g, min(prior * (1.0 - age), 1.0))
+        else:
+            g = max(g, cfg.face_g_floor)
+        vhat = need.get((j, v.r), 0.0) * g
+        if self.flags["use_recip"] and vhat > 0.0:
+            vhat *= 1.0 + cfg.face_gamma_r * max(self._pi[j] - 1.0, 0.0)
+        return float(vhat)
+
+    def _snapshot_oracle_state(self, k, need):
+        """Frozen v-hat table + holdings for the offline-oracle probe."""
+        mfl = self.mfl
+        cand = set()
+        for i in range(mfl.N):
+            cand.update(x for x, m in self.tickets[i].items() if m > 0)
+        cand.update(self.own_pub.values())
+        table = {}
+        for x in cand:
+            v = self.versions.get(x)
+            if v is None:
+                continue
+            for j in range(mfl.N):
+                w = self._vhat_full(j, v, need, k)
+                if w > 0.0:
+                    table[(j, x)] = w
+        held = {i: sorted(x for x, m in self.tickets[i].items() if m > 0)
+                for i in range(mfl.N)}
+        own = {i: sorted(x for (ii, r), x in self.own_pub.items()
+                         if ii == i) for i in range(mfl.N)}
+        sizes = {x: float(v.S) for x, v in self.versions.items()}
+        moda = {x: v.r for x, v in self.versions.items()}
+        self.value_tables[k] = table
+        self.state_snapshots[k] = dict(held=held, own=own, sizes=sizes,
+                                       moda=moda)
 
     # ---------- scheme-independent round scoring (same formulas the old
     # engine reports, so Table I utilities are comparable across schemes) ----
