@@ -49,7 +49,7 @@ def _prepare_v2x(cfg, device):
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         rounds=250, min_class_count=None, schemes=None, merge=False,
         out_name=None, partitioned=False, ttl=15, kx=6, lam=0.001,
-        record_class=True):
+        record_class=True, record_veh=False):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus.
@@ -125,6 +125,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             utl_h, utf_h, mh_h, av_h = [], [], [], []
             ud_h = []                      # per-round useful-delivery receivers
             cls_h, clsp_h = [], []         # per-class (service-level) accuracy
+            veh_h = []                     # per-round per-vehicle accuracy
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -157,6 +158,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                     cls_h.append(ac.mean(0))
                     clsp_h.append(ac[pm].mean(0) if pm.any()
                                   else ac.mean(0))
+                if record_veh:                # readiness curves; reuses the
+                    veh_h.append(accs.astype(np.float16))   # existing eval
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
@@ -182,6 +185,9 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                     np.array(cls_h))
                 stacks[scheme].setdefault("accclass_hd", []).append(
                     np.array(clsp_h))
+            if record_veh:
+                stacks[scheme].setdefault("accveht", []).append(
+                    np.array(veh_h))
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
@@ -207,6 +213,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         if stacks[s].get("accclass"):    # seeds x K x C (service classes)
             results[s]["accclass_all"] = np.stack(stacks[s]["accclass"])
             results[s]["accclass_hd_all"] = np.stack(stacks[s]["accclass_hd"])
+        if stacks[s].get("accveht"):     # seeds x K x N (readiness curves)
+            results[s]["accveht_all"] = np.stack(stacks[s]["accveht"])
     path = os.path.join(cfg.results_dir,
                         out_name or f"metrics_v2x_real_{dataset}.npz")
     out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}

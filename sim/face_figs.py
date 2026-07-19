@@ -162,6 +162,58 @@ def fig_abl_2panel():
 
 
 SVC_NPZ = "results/metrics_v2x_real_kitti_svc.npz"
+READY_FMT = "results/metrics_v2x_real_{}_ready.npz"
+ROUND_SEC = 10.2                       # Seoul trace step (s) per round
+
+
+def fig_readiness():
+    """Service-readiness curves: fraction of the fleet whose model meets the
+    service-grade accuracy tau (the Table-I target, 95% of the best final
+    accuracy) versus operation time. Columns = datasets; needs the
+    record_veh=True runs (metrics_v2x_real_{tag}_ready.npz)."""
+    import matplotlib.pyplot as plt2
+    tags = [(t, l) for t, l in (("kitti", "KITTI"), ("nuscenes", "nuScenes"))
+            if os.path.exists(READY_FMT.format(t))]
+    if len(tags) < 2:
+        print("  [skip] fig_face_readiness: need both ready npz")
+        return
+    with plt2.rc_context({
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif"],
+            "mathtext.fontset": "dejavuserif", "font.size": 12,
+            "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+            "xtick.direction": "in", "ytick.direction": "in",
+            "legend.frameon": False}):
+        fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.9))
+        for ax, (tag, label) in zip(axes, tags):
+            z = np.load(READY_FMT.format(tag))
+            schemes = [s for s in REAL_SCHEMES
+                       if f"{s}__accveht_all" in z.files]
+            tau = 0.95 * max(z[f"{s}__acc"][-1] for s in schemes)
+            for s in schemes:
+                v = z[f"{s}__accveht_all"].astype(np.float32)  # seeds,K,N
+                frac = (v >= tau).mean(2)                      # seeds,K
+                K = frac.shape[1]
+                x = np.arange(1, K + 1) * ROUND_SEC / 60.0
+                ax.plot(x, frac.mean(0), label=disp(s),
+                        markevery=max(K // 8, 1), markersize=4,
+                        markerfacecolor="white", markeredgewidth=1.0,
+                        **STYLE[s])
+            ax.set_title(label, fontsize=11)
+            ax.set_xlabel("Operation time (min)")
+            ax.set_xlim(0, x[-1])
+            ax.set_ylim(0, None)
+            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        axes[0].set_ylabel("Service-ready fraction")
+        h, l = axes[0].get_legend_handles_labels()
+        fig.legend(h, l, loc="upper center", ncol=6, fontsize=8.5,
+                   columnspacing=1.0, handlelength=1.8,
+                   bbox_to_anchor=(0.5, 1.07))
+        for i, ax in enumerate(axes):
+            ax.text(0.5, -0.34, f"({'ab'[i]})", transform=ax.transAxes,
+                    ha="center", va="top", fontsize=11)
+        fig.tight_layout(rect=[0, 0, 1, 0.94])
+        _save(fig, "fig_face_readiness")
 
 
 def fig_class():
