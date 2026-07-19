@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from .config import Config, SCHEMES
-from .multimodal_model import make_encoder, FusionHead, encoder_forward, FEAT, NCLS
+from .multimodal_model import make_encoder, FusionHead, LocFusionHead, encoder_forward, FEAT, NCLS
 from .kitti_dataset import build as build_kitti, CLASSES
 
 # schemes compared on the real FL backend: ours + framework baselines +
@@ -44,6 +44,7 @@ class RealMFL:
     """Real multimodal FL backend exposing the interface CachingForwarding needs."""
 
     def __init__(self, cfg, rng, modality_avail, data, device=None):
+        self.loc = "bb" in data
         self.cfg = cfg
         self.rng = rng
         self.R = cfg.modalities                       # ["camera", "lidar"]
@@ -104,7 +105,8 @@ class RealMFL:
                 self.pairs.append((i, r))
             # encoders: trainable for rich vehicles, frozen for poor vehicles
             self.enc[i] = {r: make_encoder(r).to(self.device) for r in self.avail[i]}
-            self.head[i] = FusionHead(self.avail[i], ncls=self.ncls).to(self.device)
+            Head = LocFusionHead if self.loc else FusionHead
+            self.head[i] = Head(self.avail[i], ncls=self.ncls).to(self.device)
             params = list(self.head[i].parameters())
             if riches[i]:
                 for r in self.avail[i]:
@@ -117,6 +119,8 @@ class RealMFL:
         # registry of current encoder weights (for forwarding/aggregation)
         self.t = {m: torch.tensor(a, device=self.device) for m, a in mods.items()}
         self.y_t = torch.tensor(y, device=self.device, dtype=torch.long)
+        if self.loc:
+            self.bb_t = torch.tensor(data["bb"], device=self.device)
         self.acc = np.zeros(self.N)
         self._corrupt = {i: (self.Q[(i, self.avail[i][0])] < 0.5) for i in range(self.N)}
         # sensor-spec tiers: even data-rich vehicles may carry low-spec
@@ -161,8 +165,13 @@ class RealMFL:
                 b = idx[self.rng.choice(len(idx), min(64, len(idx)), replace=False)]
                 x, y = self._batch(b, i)
                 feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
-                logits = self.head[i](feats)
-                loss = ce(logits, y)
+                if self.loc:
+                    logits, box = self.head[i].forward_box(feats)
+                    loss = ce(logits, y) + 5.0 * nn.functional.smooth_l1_loss(
+                        box, self.bb_t[torch.tensor(b, device=self.device)])
+                else:
+                    logits = self.head[i](feats)
+                    loss = ce(logits, y)
                 self.opt[i].zero_grad(); loss.backward(); self.opt[i].step()
                 tot += float(loss); cnt += 1
         return tot / max(cnt, 1)
@@ -205,6 +214,31 @@ class RealMFL:
                 pred = self.head[i](feats).argmax(1)
                 for c, mc in enumerate(masks):
                     out[i, c] = float((pred[mc] == c).float().mean())
+        return out
+
+    def evaluate_loc(self, which="test"):
+        """Per-vehicle mean IoU of the regressed box on the held-out split
+        (RoI localization task only)."""
+        idx, _ = (self.val if which == "val" else self.test)
+        idx_t = torch.tensor(idx, device=self.device)
+        x = {m: t[idx_t] for m, t in self.t.items()}
+        gt = self.bb_t[idx_t]
+        g1 = gt[:, :2] - gt[:, 2:] / 2
+        g2 = gt[:, :2] + gt[:, 2:] / 2
+        garea = (g2 - g1).clamp(min=0).prod(1)
+        out = np.zeros(self.N)
+        with torch.no_grad():
+            for i in range(self.N):
+                self._set_train(i, False)
+                feats = {r: self.enc[i][r](x[r]) for r in self.avail[i]}
+                _, box = self.head[i].forward_box(feats)
+                p1 = box[:, :2] - box[:, 2:] / 2
+                p2 = box[:, :2] + box[:, 2:] / 2
+                lt = torch.maximum(p1, g1)
+                rb = torch.minimum(p2, g2)
+                inter = (rb - lt).clamp(min=0).prod(1)
+                union = (p2 - p1).clamp(min=0).prod(1) + garea - inter
+                out[i] = float((inter / union.clamp(min=1e-9)).mean())
         return out
 
     def refresh_strengths(self):
@@ -379,7 +413,8 @@ class RealMFL:
         return np.array([self.Q[(i, self.avail[i][0])] < thr for i in range(self.N)])
 
 
-def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
+def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0,
+               loc=False):
     """Load a real multimodal dataset (KITTI or nuScenes) and class-balance it
     so the task is non-trivial. Classes with fewer than `min_class_count`
     samples are dropped (e.g. the very rare nuScenes Cyclist class), which lets
@@ -388,9 +423,13 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
     if dataset == "deepsense":
         return _prep_deepsense(seed, min_class_count or 250)
     rad = None
+    bb = None
     if dataset == "nuscenes":
         from .nuscenes_dataset import build as _bld
         img, lid, rad, y, frame, boxh = _bld(with_radar=True)
+    elif loc:
+        from .kitti_dataset import build_loc
+        img, lid, y, frame, bb = build_loc()
     else:
         img, lid, y, frame, boxh = build_kitti(cache="results/kitti_mm_all.npz")
     rng = np.random.default_rng(seed)
@@ -403,6 +442,8 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
         keep.append(rng.choice(ci, min(cap, len(ci)), replace=False))
     keep = rng.permutation(np.concatenate(keep))
     img, lid, y = img[keep], lid[keep], y[keep]
+    if bb is not None:
+        bb = bb[keep]
     mods = {"camera": img, "lidar": lid}
     if rad is not None:
         mods["radar"] = rad[keep]
@@ -412,9 +453,12 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0):
     train_idx = perm[n_test + n_val:]
     print(f"  [data] balanced classes {np.bincount(y)}  "
           f"train {len(train_idx)} val {len(val_idx)} test {len(test_idx)}")
-    return dict(mods=mods, y=y,
-                val=(val_idx, y[val_idx]), test=(test_idx, y[test_idx]),
-                train_idx=train_idx)
+    out = dict(mods=mods, y=y,
+               val=(val_idx, y[val_idx]), test=(test_idx, y[test_idx]),
+               train_idx=train_idx)
+    if bb is not None:
+        out["bb"] = bb
+    return out
 
 
 def _prep_deepsense(seed, min_class_count=250):

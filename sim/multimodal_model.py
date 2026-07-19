@@ -59,6 +59,32 @@ class FusionHead(nn.Module):
         return self.head(z)
 
 
+class LocFusionHead(nn.Module):
+    """Local fusion head for the RoI localization task: shared trunk with a
+    classifier and a box regressor (cx, cy, w, h in window coords). Calling
+    it like FusionHead returns logits only, so every classification-based
+    metric and the FL demand machinery work unchanged."""
+    def __init__(self, modalities, feat=FEAT, ncls=NCLS):
+        super().__init__()
+        self.modalities = list(modalities)
+        self.trunk = nn.Sequential(
+            nn.Linear(feat * len(self.modalities), 64), nn.ReLU(),
+        )
+        self.cls = nn.Linear(64, ncls)
+        self.box = nn.Linear(64, 4)
+
+    def _z(self, feats):
+        return self.trunk(torch.cat([feats[m] for m in self.modalities],
+                                    dim=1))
+
+    def forward(self, feats):
+        return self.cls(self._z(feats))
+
+    def forward_box(self, feats):
+        z = self._z(feats)
+        return self.cls(z), torch.sigmoid(self.box(z))
+
+
 class RadarEncoder(nn.Module):
     """PointNet-style encoder for sparse box radar returns
     (P x [x, y, vx, vy, rcs] -> FEAT). Radar returns per object are few

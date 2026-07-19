@@ -123,5 +123,91 @@ def build(cache="results/kitti_multimodal.npz", max_frames=4000, min_pts=8,
     return img, lid, y, frame, boxh
 
 
+def build_loc(cache="results/kitti_mm_loc.npz", max_frames=4000, min_pts=8,
+              min_box=20, seed=0, ctx=2.0, patch=48):
+    """RoI localization variant: each sample is a jittered CONTEXT window
+    (ctx x the GT box, centre shifted up to 25% of the box size) so the
+    object neither fills nor centres the crop; the model must classify AND
+    regress the object box (cx, cy, w, h in window coordinates in [0,1]).
+    LiDAR points come from the 3D box scaled by ctx (context frustum)."""
+    if os.path.exists(cache):
+        print(f"  [kitti-loc] loading cached dataset {cache}")
+        d = np.load(cache)
+        return d["img"], d["lid"], d["y"], d["frame"], d["bb"]
+    rng = np.random.default_rng(seed)
+    label_dir = os.path.join(KITTI, "label_2")
+    frames = sorted(f[:-4] for f in os.listdir(label_dir))[:max_frames]
+    imgs, lids, ys, frs, bbs = [], [], [], [], []
+    for n, fr in enumerate(frames):
+        lbls = []
+        with open(os.path.join(label_dir, fr + ".txt")) as f:
+            for line in f:
+                t = line.split()
+                if t[0] in CLS_IDX:
+                    lbls.append(t)
+        if not lbls:
+            continue
+        try:
+            image = np.asarray(Image.open(os.path.join(
+                KITTI, "image_2", fr + ".png")).convert("RGB"))
+            V2C = _read_calib(os.path.join(KITTI, "calib", fr + ".txt"))
+            velo = _read_velo(os.path.join(KITTI, "velodyne", fr + ".bin"))
+        except FileNotFoundError:
+            continue
+        H, Wd = image.shape[:2]
+        velo = velo[velo[:, 0] > 0]
+        pc = (V2C @ np.concatenate([velo, np.ones((len(velo), 1))],
+                                   axis=1).T).T[:, :3]
+        for t in lbls:
+            cls = CLS_IDX[t[0]]
+            x1, y1, x2, y2 = map(float, t[4:8])
+            bw, bh = x2 - x1, y2 - y1
+            if bw < min_box or bh < min_box:
+                continue
+            dims = list(map(float, t[8:11]))
+            loc = list(map(float, t[11:14]))
+            ry = float(t[14])
+            q = _points_in_box(pc, loc, [d * ctx for d in dims], ry)
+            if len(q) < min_pts:
+                continue
+            # jittered context window around the box
+            side = ctx * max(bw, bh)
+            jx = (rng.random() * 0.5 - 0.25) * bw
+            jy = (rng.random() * 0.5 - 0.25) * bh
+            cx0 = (x1 + x2) / 2 + jx
+            cy0 = (y1 + y2) / 2 + jy
+            wx1 = max(0.0, cx0 - side / 2)
+            wy1 = max(0.0, cy0 - side / 2)
+            wx2 = min(float(Wd), cx0 + side / 2)
+            wy2 = min(float(H), cy0 + side / 2)
+            if wx2 - wx1 < min_box or wy2 - wy1 < min_box:
+                continue
+            win = image[int(wy1):int(wy2), int(wx1):int(wx2)]
+            if win.size == 0:
+                continue
+            win = np.asarray(Image.fromarray(win).resize((patch, patch))) / 255.0
+            # box target in window coordinates, clipped to the window
+            gx1 = (max(x1, wx1) - wx1) / (wx2 - wx1)
+            gy1 = (max(y1, wy1) - wy1) / (wy2 - wy1)
+            gx2 = (min(x2, wx2) - wx1) / (wx2 - wx1)
+            gy2 = (min(y2, wy2) - wy1) / (wy2 - wy1)
+            if gx2 - gx1 < 0.02 or gy2 - gy1 < 0.02:
+                continue
+            bb = [(gx1 + gx2) / 2, (gy1 + gy2) / 2, gx2 - gx1, gy2 - gy1]
+            imgs.append(win.transpose(2, 0, 1).astype(np.float32))
+            lids.append(_sample_points(q))
+            ys.append(cls); frs.append(int(fr)); bbs.append(bb)
+        if n % 500 == 0:
+            print(f"    [kitti-loc] frame {n}/{len(frames)}  "
+                  f"objects so far {len(ys)}")
+    img = np.stack(imgs); lid = np.stack(lids); y = np.array(ys)
+    frame = np.array(frs); bb = np.array(bbs, dtype=np.float32)
+    os.makedirs(os.path.dirname(cache), exist_ok=True)
+    np.savez_compressed(cache, img=img, lid=lid, y=y, frame=frame, bb=bb)
+    print(f"  [kitti-loc] built {len(y)} objects, "
+          f"classes {np.bincount(y)} -> {cache}")
+    return img, lid, y, frame, bb
+
+
 if __name__ == "__main__":
     build()

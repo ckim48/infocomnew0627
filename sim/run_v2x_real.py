@@ -49,7 +49,7 @@ def _prepare_v2x(cfg, device):
 def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         rounds=250, min_class_count=None, schemes=None, merge=False,
         out_name=None, partitioned=False, ttl=15, kx=6, lam=0.001,
-        record_class=True, record_veh=False):
+        record_class=True, record_veh=False, loc=False):
     """Run REAL FL until convergence. `rounds` may exceed the mobility trace
     length: the Seoul V2X window is replayed cyclically (steady-state traffic),
     while FL keeps training/propagating so the accuracy curve plateaus.
@@ -94,7 +94,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
     if min_class_count is None:                # match the InTAS setup
         min_class_count = 800 if dataset == "nuscenes" else 0
     data = _prep_data(cfg, cfg.seed, dataset=dataset,
-                      min_class_count=min_class_count)
+                      min_class_count=min_class_count, loc=loc)
     if partitioned:
         # data-rich (ECV) candidates confined to the west half of the region,
         # by each vehicle's starting longitude in the Seoul trace
@@ -126,6 +126,7 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             ud_h = []                      # per-round useful-delivery receivers
             cls_h, clsp_h = [], []         # per-class (service-level) accuracy
             veh_h = []                     # per-round per-vehicle accuracy
+            iou_h, iouhd_h = [], []        # RoI localization quality
             for k in range(total):
                 kk = k % mob.Krounds                    # replay the trace window
                 mob.k = kk
@@ -160,6 +161,11 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
                                   else ac.mean(0))
                 if record_veh:                # readiness curves; reuses the
                     veh_h.append(accs.astype(np.float16))   # existing eval
+                if loc:
+                    iou = mfl.evaluate_loc("test")
+                    iou_h.append(float(iou.mean()))
+                    iouhd_h.append(float(iou[pm].mean()) if pm.any()
+                                   else float(iou.mean()))
             stacks[scheme]["acc"].append(acc_h)
             stacks[scheme]["poor"].append(poor_h)
             stacks[scheme]["tx"].append(tx_h)
@@ -188,6 +194,10 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             if record_veh:
                 stacks[scheme].setdefault("accveht", []).append(
                     np.array(veh_h))
+            if loc:
+                stacks[scheme].setdefault("iou", []).append(np.array(iou_h))
+                stacks[scheme].setdefault("iou_hd", []).append(
+                    np.array(iouhd_h))
             print(f"  [seed {sd}] {scheme:16s} acc {acc_h[-1]:.3f} "
                   f"poor {poor_h[-1]:.3f} tx/round {np.mean(tx_h):.1f}", flush=True)
             del mfl, alg
@@ -215,6 +225,12 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             results[s]["accclass_hd_all"] = np.stack(stacks[s]["accclass_hd"])
         if stacks[s].get("accveht"):     # seeds x K x N (readiness curves)
             results[s]["accveht_all"] = np.stack(stacks[s]["accveht"])
+        if stacks[s].get("iou"):         # RoI localization curves
+            for kk in ("iou", "iou_hd"):
+                arr = np.stack(stacks[s][kk])
+                results[s][kk] = arr.mean(0)
+                results[s][kk + "_std"] = arr.std(0)
+                results[s][kk + "_all"] = arr
     path = os.path.join(cfg.results_dir,
                         out_name or f"metrics_v2x_real_{dataset}.npz")
     out = dict(np.load(path)) if (merge and os.path.exists(path)) else {}
