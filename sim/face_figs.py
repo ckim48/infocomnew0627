@@ -166,6 +166,66 @@ READY_FMT = "results/metrics_v2x_real_{}_ready.npz"
 ROUND_SEC = 10.2                       # Seoul trace step (s) per round
 
 
+def fig_theory():
+    """Theory-validation figure: (a) FACE's realized P2 objective vs the
+    hindsight-optimal offline oracle on small instances (sim/face_oracle);
+    (b) delivered value vs the copy cap K_x -- diminishing increments,
+    the empirical counterpart of the submodular copy value of Prop. 2."""
+    import matplotlib.pyplot as plt2
+    o_path, k_path = "results/face_oracle.npz", "results/face_kx_probe.npz"
+    if not (os.path.exists(o_path) and os.path.exists(k_path)):
+        print("  [skip] fig_face_theory: missing probe npz")
+        return
+    rows = np.load(o_path)["rows"]         # n, N, contacts, pairs, face, opt, nc
+    kx = np.load(k_path)
+    with plt2.rc_context({
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif"],
+            "mathtext.fontset": "dejavuserif", "font.size": 12,
+            "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+            "xtick.direction": "in", "ytick.direction": "in",
+            "legend.frameon": False}):
+        fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.9))
+
+        ax = axes[0]                       # (a) FACE vs hindsight oracle
+        face, opt = rows[:, 4], rows[:, 5]
+        lim_lo = 0.8 * max(min(face.min(), opt.min()), 1e-2)
+        lim_hi = 1.3 * max(face.max(), opt.max())
+        ax.plot([lim_lo, lim_hi], [lim_lo, lim_hi], color="0.35", ls="--",
+                lw=1.0, label="Hindsight optimum")
+        ax.scatter(opt, np.maximum(face, lim_lo), s=26, color="#d62728",
+                   edgecolors="black", linewidths=0.4, zorder=3,
+                   label="Instance")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(lim_lo, lim_hi)
+        ax.set_ylim(lim_lo, lim_hi)
+        med = np.median(face / np.maximum(opt, 1e-9))
+        ax.text(0.04, 0.96, f"median ratio {med:.2f}",
+                transform=ax.transAxes, ha="left", va="top", fontsize=9)
+        ax.set_xlabel("Offline-oracle objective")
+        ax.set_ylabel("FACE objective")
+        ax.legend(fontsize=8, loc="lower right")
+
+        ax = axes[1]                       # (b) diminishing copy value
+        ks = kx["ks"].astype(float)
+        ad = kx["adopt"] / 1e3
+        ax.errorbar(ks, ad.mean(1), yerr=ad.std(1), color="#d62728",
+                    marker="o", ms=5, markerfacecolor="white", capsize=2.5)
+        ax.set_xscale("log", base=2)
+        ax.set_xticks(ks)
+        ax.set_xticklabels([str(int(k)) for k in ks])
+        ax.minorticks_off()
+        ax.set_xlabel("Copy cap $K_x$")
+        ax.set_ylabel(r"Adopted deliveries ($\times 10^3$)")
+        for i, ax_ in enumerate(axes):
+            ax_.grid(True, ls="--", lw=0.6, alpha=0.5)
+            ax_.text(0.5, -0.34, f"({'ab'[i]})", transform=ax_.transAxes,
+                     ha="center", va="top", fontsize=11)
+        fig.tight_layout()
+        _save(fig, "fig_face_theory")
+
+
 def fig_readiness(tag="kitti"):
     """Service-readiness curves on one dataset: fraction of vehicles whose
     model meets the service-grade accuracy tau (the Table-I target, 95% of
