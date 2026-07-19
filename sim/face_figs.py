@@ -226,6 +226,69 @@ def fig_theory():
         _save(fig, "fig_face_theory")
 
 
+def fig_sens():
+    """2x2 sensitivity of FACE (abstract Seoul backend, 3 seeds): vehicle
+    density N, cache capacity Lambda, copy cap K_x (doubles as the
+    empirical diminishing copy value of Prop. 2), and horizon H. Default
+    operating points are marked with filled symbols."""
+    import matplotlib.pyplot as plt2
+    s_path, k_path = "results/face_sens_probe.npz", "results/face_kx_probe.npz"
+    if not (os.path.exists(s_path) and os.path.exists(k_path)):
+        print("  [skip] fig_face_sens: missing probe npz")
+        return
+    sens = np.load(s_path)
+    kx = np.load(k_path)
+
+    def series(rows):
+        vals = sorted(set(rows[:, 0]))
+        mu = [100 * rows[rows[:, 0] == v, 2].mean() for v in vals]
+        sd = [100 * rows[rows[:, 0] == v, 2].std() for v in vals]
+        return np.array(vals), np.array(mu), np.array(sd)
+
+    panels = [
+        ("N", *series(sens["N"]), "Number of vehicles $|\\mathcal{I}|$",
+         180, None),
+        ("LAM", *series(sens["LAM"]),
+         r"Cache capacity $\Lambda_i^{\max}$ (MB)", 45, None),
+        ("K", kx["ks"].astype(float), 100 * kx["acc"].mean(1),
+         100 * kx["acc"].std(1), "Copy cap $K_x$", 16, 2),
+        ("H", *series(sens["H"]), "Horizon $H$ (rounds)", 6, "ticks"),
+    ]
+    with plt2.rc_context({
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif"],
+            "mathtext.fontset": "dejavuserif", "font.size": 11,
+            "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+            "xtick.direction": "in", "ytick.direction": "in",
+            "legend.frameon": False}):
+        fig, axg = plt.subplots(2, 2, figsize=(6.6, 4.6))
+        for ax, (name, xs, mu, sd, xlabel, default, logb) in zip(
+                axg.ravel(), panels):
+            ax.errorbar(xs, mu, yerr=sd, color="#d62728", marker="o",
+                        ms=4.5, markerfacecolor="white", capsize=2.5)
+            di = int(np.argmin(np.abs(np.asarray(xs) - default)))
+            ax.plot([xs[di]], [mu[di]], marker="o", ms=5.5,
+                    color="#d62728", zorder=4)
+            if logb == "ticks":
+                ax.set_xticks(xs)
+                ax.set_xticklabels([str(int(x)) for x in xs])
+                ax.set_ylim(65, 85)
+            elif logb:
+                ax.set_xscale("log", base=logb)
+                ax.set_xticks(xs)
+                ax.set_xticklabels([str(int(x)) for x in xs])
+                ax.minorticks_off()
+            ax.set_xlabel(xlabel)
+            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        for ax in axg[:, 0]:
+            ax.set_ylabel("Final accuracy (%)")
+        for i, ax in enumerate(axg.ravel()):
+            ax.text(0.5, -0.42, f"({'abcd'[i]})", transform=ax.transAxes,
+                    ha="center", va="top", fontsize=11)
+        fig.tight_layout(h_pad=2.6)
+        _save(fig, "fig_face_sens")
+
+
 def fig_readiness(tag="kitti"):
     """Service-readiness curves on one dataset: fraction of vehicles whose
     model meets the service-grade accuracy tau (the Table-I target, 95% of
