@@ -32,6 +32,7 @@ def _stats(res):
         poor_c = _seed_curves(res[s], "poor")
         loss_c = _seed_curves(res[s], "vloss")
         tx_c = _seed_curves(res[s], "tx")
+        mb_c = _seed_curves(res[s], "txmb")
         acc = acc_c[:, -TAIL:].mean(1)
         poor = poor_c[:, -TAIL:].mean(1)
         loss = loss_c[:, -TAIL:].mean(1)
@@ -40,13 +41,14 @@ def _stats(res):
         # encoder stronger than the receiver's own; whole-run mean (the
         # delivery mechanism matters during convergence, not at the tail)
         udel = _seed_curves(res[s], "usat").mean(1)
-        rounds, cumtx = [], []
-        for a, t in zip(acc_c, tx_c):
+        rounds, cumtx, cummb = [], [], []
+        for a, t, m in zip(acc_c, tx_c, mb_c):
             reach = a >= tau
             if reach.any():
                 r = int(np.argmax(reach)) + 1
                 rounds.append(r)
                 cumtx.append(float(t[:r].sum()))
+                cummb.append(float(m[:r].sum()) / 1024.0)
         reached_all = len(rounds) == acc_c.shape[0]
         out[s] = dict(
             acc=acc.mean(), acc_sd=acc.std(),
@@ -56,7 +58,9 @@ def _stats(res):
             udel=udel.mean(), udel_sd=udel.std(),
             rounds=(np.mean(rounds), np.std(rounds)) if reached_all else None,
             cumtx=(np.mean(cumtx), np.std(cumtx)) if reached_all else None,
-            totaltx=int(tx_c.sum(1).mean()))
+            cummb=(np.mean(cummb), np.std(cummb)) if reached_all else None,
+            totaltx=int(tx_c.sum(1).mean()),
+            totalmb=float(mb_c.sum(1).mean()) / 1024.0)
     return out
 
 
@@ -99,7 +103,7 @@ def make(out_path="new_result/tab_seoul_combined.tex",
          poor_header=r"\textsc{Poor Acc}", include_gap=True,
          include_udel=False, deadlines=(), colsep="5pt", font=None,
          npz_fmt="results/metrics_v2x_real_{}.npz",
-         label="tab:seoul_results"):
+         label="tab:seoul_results", comm_gb=False):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     ncol = 7 + int(include_gap) + int(include_udel) + len(deadlines)
     lines = []
@@ -131,7 +135,8 @@ def make(out_path="new_result/tab_seoul_combined.tex",
         mid.append(r"\shortstack{\textsc{Delivery}\\@$d{=}%d$}" % d)
     mid.append(r"\textsc{Rounds@$\tau$}")
     a(r"        & " + " & ".join(mid))
-    a(r"        & \textsc{Tx@$\tau$} \\")
+    a(r"        & \shortstack{\textsc{Comm@$\tau$}\\(GB)} \\" if comm_gb
+      else r"        & \textsc{Tx@$\tau$} \\")
     a(r"        \hline")
     for tag, label in (("kitti", "KITTI"), ("nuscenes", "nuScenes")):
         res = _load(npz_fmt.format(tag))
@@ -149,7 +154,9 @@ def make(out_path="new_result/tab_seoul_combined.tex",
             rounds=min((st[s]["rounds"][0] for s in schemes
                         if st[s]["rounds"]), default=None),
             cumtx=min((st[s]["cumtx"][0] for s in schemes
-                       if st[s]["cumtx"]), default=None))
+                       if st[s]["cumtx"]), default=None),
+            cummb=min((st[s]["cummb"][0] for s in schemes
+                       if st[s]["cummb"]), default=None))
         a(f"        \\multirow{{{len(schemes)}}}{{*}}"
           f"{{\\textsc{{{label}}}}}")
         for s in schemes:
@@ -174,7 +181,14 @@ def make(out_path="new_result/tab_seoul_combined.tex",
                 cells.append(_num(f"{100*dl[s][di]:.1f}",
                                   abs(dl[s][di] - dl_best[di]) < 1e-9))
             if d["rounds"] is None:
-                cells += [NR, f"$>{d['totaltx']}$"]
+                cells += [NR, (f"$>{d['totalmb']:.1f}$" if comm_gb
+                               else f"$>{d['totaltx']}$")]
+            elif comm_gb:
+                cells += [
+                    _num(f"{d['rounds'][0]:.0f}",
+                         d["rounds"][0] == best["rounds"]),
+                    _num(f"{d['cummb'][0]:.1f}",
+                         d["cummb"][0] == best["cummb"])]
             else:
                 cells += [
                     _num(f"{d['rounds'][0]:.0f}",
@@ -199,4 +213,10 @@ if __name__ == "__main__":
     make("new_result/tab_seoul_combined_highdemand_udel.tex",
          poor_header=r"\shortstack{\textsc{High-Demand}\\\textsc{Acc}}",
          include_gap=False, include_udel=True, deadlines=(5, 20),
-         colsep="4pt", font=r"\footnotesize")
+         colsep="4pt", font=r"\footnotesize", comm_gb=True)
+    make("new_more_seed/tab_seoul_combined_8seed.tex",
+         poor_header=r"\shortstack{\textsc{High-Demand}\\\textsc{Acc}}",
+         include_gap=False, include_udel=True, deadlines=(),
+         colsep="4.5pt", font=r"\footnotesize",
+         npz_fmt="new_more_seed/metrics_v2x_real_{}_8seed.npz",
+         label="tab:seoul_results_8seed", comm_gb=True)
