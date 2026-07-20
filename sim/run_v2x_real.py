@@ -180,6 +180,13 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             stacks[scheme]["txmb"].append(mb_h)
             stacks[scheme].setdefault("accveh", []).append(
                 mfl.evaluate("test"))          # per-vehicle final accuracies
+            # per-vehicle LOO encoder-contribution chi at the final round
+            # (mean of strength chi_{i,r} over the vehicle's modalities)
+            chi = np.array([np.mean([mfl.strength[(i, r)]
+                                     for r in mfl.avail[i]])
+                            if len(mfl.avail[i]) else np.nan
+                            for i in range(mob.N)])
+            stacks[scheme].setdefault("chiveh", []).append(chi)
             # event-level extras: useful-delivery matrix [K,N], high-demand
             # mask, and (round, predicted, realized) gain-calibration pairs
             stacks[scheme].setdefault("udeliv", []).append(np.array(ud_h))
@@ -212,6 +219,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
             results[s][m] = arr.mean(0); results[s][m + "_std"] = arr.std(0)
             results[s][m + "_all"] = arr            # per-seed (exact +- stats)
         results[s]["accveh_all"] = np.stack(stacks[s]["accveh"])  # seeds x N
+        if stacks[s].get("chiveh"):
+            results[s]["chiveh_all"] = np.stack(stacks[s]["chiveh"])
         if stacks[s].get("udeliv"):
             results[s]["udeliv_all"] = np.stack(stacks[s]["udeliv"])
             results[s]["pmask_all"] = np.stack(stacks[s]["pmask"])

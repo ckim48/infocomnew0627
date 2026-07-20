@@ -106,24 +106,13 @@ def _compute(cfg, device, snap_k, cache):
     return vm, ang, accs, snap_k
 
 
-def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
-                        basemap="positron", use_cache=True):
+def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
+              y_squeeze=1.0, vmin=0.2, vmax=1.0,
+              cbar_label="Vehicle model accuracy", mean_label="mean acc"):
+    """Render the 2x2 accuracy-map panels from per-vehicle values `accs`
+    (dict scheme -> array[N]); reused by the abstract-quality and the
+    real-metric (test accuracy / LOO chi) variants."""
     import contextily as cx
-
-    cfg = cfg or Config()
-    cfg.num_vehicles = num_vehicles
-    fig_dir = cfg.figures_dir
-    os.makedirs(fig_dir, exist_ok=True)
-    cache = os.path.join(cfg.results_dir, "v2x_map_cache.npz")
-
-    d = np.load(cache) if (use_cache and os.path.exists(cache)) else None
-    if d is not None and "ang" in getattr(d, "files", []) \
-            and all(f"acc_{s}" in d.files for s in MAP_SCHEMES):
-        vm = d["vm"]; ang = d["ang"]; snap_k = int(d["snap_k"])
-        accs = {s: d[f"acc_{s}"] for s in MAP_SCHEMES}
-        print(f"  [v2x-map] re-plotting from cache {cache}")
-    else:
-        vm, ang, accs, snap_k = _compute(cfg, device, snap_k, cache)
 
     providers = {
         "osm": cx.providers.OpenStreetMap.Mapnik,
@@ -134,9 +123,12 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     src = providers.get(basemap, providers["positron"])
 
     cmap = plt.get_cmap("RdYlGn")
-    norm = Normalize(vmin=0.2, vmax=1.0)
+    norm = Normalize(vmin=vmin, vmax=vmax)
 
-    fig, axgrid = plt.subplots(2, 2, figsize=(6.6, 6.3),
+    # two map rows are ~4.6 in of the 6.3 in height; shrink them by y_squeeze
+    # (+0.2 in slack so the width constraint binds and panels keep full width)
+    fig_h = 6.3 - 4.6 * (1.0 - y_squeeze) + (0.2 if y_squeeze < 1 else 0.0)
+    fig, axgrid = plt.subplots(2, 2, figsize=(6.6, fig_h),
                                sharex=True, sharey=True)
     axes = axgrid.ravel()
     pad = 400
@@ -148,7 +140,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         acc = np.asarray(accs[s])
         colors = cmap(norm(acc))
         ax.set_xlim(*xlim); ax.set_ylim(*ylim)
-        ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+        ax.set_aspect(y_squeeze); ax.set_xticks([]); ax.set_yticks([])
         cx.add_basemap(ax, crs="EPSG:3857", source=src, zoom=15,
                        attribution_size=4)
         # soft accuracy halo under each car
@@ -169,7 +161,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         name = MAP_LABELS.get(s, disp(s))
         ax.text(0.0, 1.045, f"{name}", transform=ax.transAxes,
                 ha="left", va="bottom", fontsize=10.5)
-        ax.text(1.0, 1.045, f"mean acc {acc.mean():.3f}",
+        ax.text(1.0, 1.045, f"{mean_label} {acc.mean():.3f}",
                 transform=ax.transAxes, ha="right", va="bottom",
                 fontsize=9.5)
         # accent border on the proposed scheme's panel
@@ -184,9 +176,9 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     sm = ScalarMappable(norm=norm, cmap=cmap)
     cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
                         fraction=0.045, pad=0.04, aspect=45)
-    cbar.set_label("Vehicle model accuracy")
+    cbar.set_label(cbar_label)
 
-    out = os.path.join(fig_dir, "fig_infocom_v2x_map.png")
+    out = os.path.join(fig_dir, out_name + ".png")
     for ext in ("png", "pdf"):
         fig.savefig(out.replace(".png", "." + ext), dpi=220,
                     bbox_inches="tight")
@@ -194,6 +186,62 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
     print("  saved", out, " ".join(f"{disp(s)}={np.asarray(accs[s]).mean():.3f}"
                                    for s in MAP_SCHEMES))
     return out
+
+
+def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
+                        basemap="positron", use_cache=True, y_squeeze=1.0,
+                        out_name="fig_infocom_v2x_map"):
+    """Abstract-quality map (q_eff of the Seoul backend). y_squeeze < 1 draws
+    map y-units compressed (shorter figure) under a separate out_name."""
+    cfg = cfg or Config()
+    cfg.num_vehicles = num_vehicles
+    fig_dir = cfg.figures_dir
+    os.makedirs(fig_dir, exist_ok=True)
+    cache = os.path.join(cfg.results_dir, "v2x_map_cache.npz")
+
+    d = np.load(cache) if (use_cache and os.path.exists(cache)) else None
+    if d is not None and "ang" in getattr(d, "files", []) \
+            and all(f"acc_{s}" in d.files for s in MAP_SCHEMES):
+        vm = d["vm"]; ang = d["ang"]; snap_k = int(d["snap_k"])
+        accs = {s: d[f"acc_{s}"] for s in MAP_SCHEMES}
+        print(f"  [v2x-map] re-plotting from cache {cache}")
+    else:
+        vm, ang, accs, snap_k = _compute(cfg, device, snap_k, cache)
+    return _draw_map(vm, ang, accs, out_name, fig_dir, basemap=basemap,
+                     y_squeeze=y_squeeze,
+                     cbar_label="Achieved encoder quality",
+                     mean_label="mean quality")
+
+
+def make_v2x_map_real(dataset="kitti", metric="accveh", out_name=None,
+                      basemap="positron", y_squeeze=1.0, npz=None):
+    """Map painted with MEASURED per-vehicle values from the real-FL run
+    (same protocol as the main table): metric='accveh' uses final test
+    accuracy; 'chiveh' uses the leave-one-out encoder-contribution chi.
+    Positions/headings come from the shared v2x_map_cache."""
+    cfg = Config()
+    fig_dir = cfg.figures_dir
+    cache = np.load(os.path.join(cfg.results_dir, "v2x_map_cache.npz"))
+    vm, ang = cache["vm"], cache["ang"]
+    path = npz or os.path.join(cfg.results_dir,
+                               f"metrics_v2x_real_{dataset}.npz")
+    d = np.load(path)
+    vals = {}
+    for s in MAP_SCHEMES:
+        a = d[f"{s}__{metric}_all"]          # seeds x N
+        vals[s] = np.asarray(a, dtype=float).mean(0)
+    allv = np.concatenate(list(vals.values()))
+    # colorbar spans the empirical range (rounded to 0.05) for contrast
+    vmin = np.floor(np.nanpercentile(allv, 2) * 20) / 20
+    vmax = np.ceil(np.nanpercentile(allv, 98) * 20) / 20
+    labels = {"accveh": "Per-vehicle test accuracy (real data)",
+              "chiveh": "LOO encoder contribution $\\chi$ (real data)"}
+    mean_labels = {"accveh": "mean acc", "chiveh": "mean $\\chi$"}
+    out_name = out_name or f"fig_seoul_map_real{'' if metric=='accveh' else '_chi'}"
+    return _draw_map(vm, ang, vals, out_name, fig_dir, basemap=basemap,
+                     y_squeeze=y_squeeze, vmin=float(vmin), vmax=float(vmax),
+                     cbar_label=labels[metric],
+                     mean_label=mean_labels[metric])
 
 
 if __name__ == "__main__":
