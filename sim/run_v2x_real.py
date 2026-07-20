@@ -76,7 +76,8 @@ def run(cfg=None, seeds=None, device=None, num_vehicles=180, dataset="kitti",
         cfg.modality_prob = {"camera": 1.0, "lidar": 0.85, "radar": 0.7}
     else:                             # KITTI: camera + LiDAR
         cfg.modalities = ["camera", "lidar"]
-        cfg.modality_prob = {"camera": 1.0, "lidar": 0.85}
+        cfg.modality_prob = getattr(cfg, "modality_prob_override", None) \
+            or {"camera": 1.0, "lidar": 0.85}
     # per-modality availability draws realize missing-modality vehicles
     # (e.g., P(lidar)=0.85 -> 15% vision-only); typed sensor-suite mixtures
     # are available via cfg.vehicle_types (see config.py note)

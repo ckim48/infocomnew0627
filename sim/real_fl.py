@@ -77,7 +77,9 @@ class RealMFL:
             riches = [rng.random() < cfg.frac_good for _ in range(self.N)]
         n_rich = max(sum(riches), 1)
         pool = rng.permutation(data["train_idx"])
-        poor_sizes = {i: int(rng.integers(4, 12)) for i in range(self.N) if not riches[i]}
+        ps_lo, ps_hi = getattr(cfg, "poor_size_range", (4, 12))
+        poor_sizes = {i: int(rng.integers(ps_lo, ps_hi))
+                      for i in range(self.N) if not riches[i]}
         overlap = bool(data.get("overlap", False))
         if overlap:
             # small dataset: vehicles draw (possibly overlapping) local sets --
@@ -99,7 +101,9 @@ class RealMFL:
             self.rich[i] = riches[i]
             for r in self.avail[i]:
                 self.D[(i, r)] = len(self.local[i])
-                self.Q[(i, r)] = rng.uniform(0.8, 1.0) if riches[i] else rng.uniform(0.1, 0.3)
+                pq_lo, pq_hi = getattr(cfg, "poor_q_range", (0.1, 0.3))
+                self.Q[(i, r)] = rng.uniform(0.8, 1.0) if riches[i] \
+                    else rng.uniform(pq_lo, pq_hi)
                 self.strength[(i, r)] = self.Q[(i, r)]
                 self.theta[(i, r)] = self.Q[(i, r)]
                 self.pairs.append((i, r))
@@ -133,9 +137,17 @@ class RealMFL:
     def _batch(self, idx, vehicle):
         x = {m: t[idx].clone() for m, t in self.t.items()}
         allc = self._corrupt.get(vehicle, False)     # degraded sensing (poor)
+        # dynamic sensing environment: env_profile[i] set per round by the
+        # runner from the vehicle's CURRENT map region (0 clean, 1 low-light,
+        # 2 rain/noise, 3 sparse-LiDAR) -- sensing quality follows mobility
+        env = getattr(self, "env_profile", None)
+        ep = int(env[vehicle]) if env is not None else 0
 
         def bad(r):
-            return allc or (vehicle, r) in self.spec_low
+            return allc or (vehicle, r) in self.spec_low \
+                or (ep == 1 and r == "camera") \
+                or (ep == 2 and r in ("camera", "radar")) \
+                or (ep == 3 and r == "lidar")
         if "camera" in x and bad("camera"):
             img = x["camera"] + 0.25 * torch.randn_like(x["camera"])
             x["camera"] = torch.clamp(img * 0.6, 0, 1)     # noise + low light
@@ -363,6 +375,17 @@ class RealMFL:
         # the loss non-increasing (Prop. stability)
         attr = {a: 0.0 for a in range(len(cands))}
         denom = max(1.0 - base, 1e-6)
+        # empirical eps_int probe: solo marginal gain of each candidate
+        # (aggregated alone with the local encoder), to compare
+        # sum_x v({x}) against the joint gain v(A) of the accepted set
+        solo = {}
+        if getattr(self.cfg, "record_eint", False):
+            for a in range(len(cands)):
+                trial = _fedavg([backup, snaps[a]],
+                                [w_loc, self.Dmr(cands[a][0], r)])
+                self.enc[i][r].load_state_dict(trial)
+                solo[a] = max(self._val_acc_single(i) - base, 0.0) / denom
+            self.enc[i][r].load_state_dict(backup)
         kept, cur_sd, cur_acc = [], backup, base
         for a in range(len(cands)):
             sds = [backup] + [snaps[b] for b in kept] + [snaps[a]]
@@ -376,6 +399,13 @@ class RealMFL:
                 kept.append(a)
                 cur_sd, cur_acc = trial, acc_t
         self.enc[i][r].load_state_dict(cur_sd if kept else backup)
+        if solo and kept:
+            joint = max(cur_acc - base, 0.0) / denom
+            if not hasattr(self, "eint"):
+                self.eint = []
+            self.eint.append((len(kept),
+                              float(sum(solo[a] for a in kept)),
+                              float(joint)))
         return bool(kept), attr, base, cur_acc
 
     # ---- real FedAvg aggregation of received encoders (Eq. 2) ----
