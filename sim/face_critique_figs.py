@@ -116,33 +116,47 @@ def fig_eps_int(npz="results/face_eint_probe.npz"):
         return
     d = np.load(npz)
     joint, solo, nsets = d["joint"], d["solo_sum"], d["nset"]
-    multi = nsets >= 2                       # singletons have eps_int = 0
-    eint = np.abs(solo - joint)
+    multi = nsets >= 2
+    if not multi.any():
+        print("  [skip] fig_face_eps_int: no |A|>=2 events in", npz)
+        return
+    eint = np.abs(solo - joint)[multi]
     with plt.rc_context(RC):
         fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.0, 2.7))
-        lim = max(joint.max(), solo.max()) * 1.1
-        a1.plot([0, lim], [0, lim], ls="--", lw=0.9, color="0.55")
-        a1.scatter(solo[~multi], joint[~multi], s=10, color="0.6",
-                   alpha=0.4, lw=0, label=r"$|A|=1$")
-        a1.scatter(solo[multi], joint[multi], s=12, color=C_FACE,
-                   alpha=0.55, lw=0, label=r"$|A|\geq 2$")
+        # (a) offline probe: naive set-averaging is strongly sub-additive --
+        # the reason the deployed protocol aggregates sequentially with an
+        # acceptance test (all online aggregation events are singletons)
+        lim = max(joint.max(), solo.max()) * 1.08
+        a1.plot([0, lim], [0, lim], ls="--", lw=0.9, color="0.55",
+                label="additive ($\\epsilon_{\\mathrm{int}}=0$)")
+        for ks, mk, col in ((2, "o", C_FACE), (3, "^", "#ff9896")):
+            sel = nsets == ks
+            a1.scatter(solo[sel], joint[sel], s=14, marker=mk, color=col,
+                       alpha=0.55, lw=0, label=f"$|A|={ks}$")
         a1.set_xlabel(r"$\sum_{x \in A} v(\{x\})$  (sum of solo gains)")
         a1.set_ylabel(r"$v(A)$  (joint gain)")
-        a1.legend(loc="upper left", fontsize=9)
-        xs = np.sort(eint[multi]); ys = np.arange(1, len(xs) + 1) / len(xs)
+        a1.legend(loc="upper right", fontsize=8.5)
+        # (b) CDF of the interaction error over sampled sets
+        xs = np.sort(eint); ys = np.arange(1, len(xs) + 1) / len(xs)
         a2.plot(xs, ys, color=C_FACE)
-        for k, ls in ((50, ":"), (90, "--"), (95, "-.")):
-            v = float(np.percentile(eint[multi], k))
+        z = float((eint < 1e-9).mean())
+        a2.annotate(f"{100 * z:.0f}% of sets:\n"
+                    r"$\epsilon_{\mathrm{int}} = 0$",
+                    xy=(0.0, z), xytext=(0.10, 0.55), fontsize=9,
+                    color="0.25",
+                    arrowprops=dict(arrowstyle="->", lw=0.8, color="0.4"))
+        for k, ls in ((90, "--"), (95, "-.")):
+            v = float(np.percentile(eint, k))
             a2.axvline(v, ls=ls, lw=0.9, color="0.4")
-            a2.text(v, 0.04, f" p{k}={v:.3f}", rotation=90, fontsize=8,
-                    ha="left", va="bottom", color="0.25")
-        a2.set_xscale("symlog", linthresh=1e-3)
+            a2.text(v - 0.008, 0.08, f"p{k}={v:.2f}", rotation=90,
+                    fontsize=8, ha="right", va="bottom", color="0.25")
+        a2.set_xlim(0, max(0.45, float(np.percentile(eint, 97))))
         a2.set_xlabel(r"$|\sum_x v(\{x\}) - v(A)|$  "
-                      r"(empirical $\epsilon_{\mathrm{int}}$, $|A|\geq 2$)")
+                      r"(empirical $\epsilon_{\mathrm{int}}$)")
         a2.set_ylabel("CDF"); a2.set_ylim(0, 1.02)
-        a2.text(0.97, 0.30,
-                f"mean = {eint[multi].mean():.4f}\n"
-                f"n = {int(multi.sum())} sets",
+        a2.text(0.36, 0.08,
+                f"mean = {eint.mean():.3f}\nn = {int(multi.sum())} sets\n"
+                "online: 100% $|A|{=}1$",
                 transform=a2.transAxes, ha="right", va="bottom", fontsize=9)
         for ax, lab in ((a1, "(a)"), (a2, "(b)")):
             ax.grid(True, ls="--", lw=0.6, alpha=0.5)
@@ -204,9 +218,11 @@ def fig_setup_sens(tail=20):
 
 
 def fig_dynamic(npz="results/face_dynamic_probe.npz", smooth=9):
-    """Dynamic sensing environments: (a) accuracy under zone-conditioned
-    corruption, (b) share of useful deliveries reaching vehicles whose
-    current zone degrades one of their modalities."""
+    """Dynamic sensing environments (single column): accuracy when each
+    vehicle's local training stream is corrupted by the region it currently
+    drives through (clean / low-light / rain / sparse-LiDAR quadrants).
+    The delivery-targeting stat (useful deliveries reaching currently-
+    degraded vehicles) is printed for the caption."""
     if not os.path.exists(npz):
         print("  [skip] fig_face_dynamic: run sim.face_dynamic_probe first")
         return
@@ -221,32 +237,23 @@ def fig_dynamic(npz="results/face_dynamic_probe.npz", smooth=9):
         ker = np.ones(smooth) / smooth
         return np.convolve(a, ker, mode="valid")
 
+    for s in schemes:                          # caption statistics
+        dd = float(np.nanmean(d[f"{s}__deg_deliv"]))
+        print(f"    [caption] {disp(s):14s} deliveries->degraded "
+              f"{100 * dd:.1f}% (degraded fraction "
+              f"{100 * float(d['deg_frac'].mean()):.1f}%)")
     with plt.rc_context(RC):
-        fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.0, 2.8))
+        fig, a1 = plt.subplots(figsize=(3.5, 2.6))
         for s in schemes:
             a = d[f"{s}__acc"]
             x = np.arange(1, len(a) + 1)
             a1.plot(x[:len(sm(a))], 100 * sm(a), label=disp(s),
                     markevery=max(len(a) // 8, 1), markersize=5,
                     markerfacecolor="white", **STY[s])
-            db = d[f"{s}__deg_deliv"]         # deliveries to degraded veh.
-            a2.plot(x[:len(sm(db))], 100 * sm(db), label=disp(s),
-                    markevery=max(len(db) // 8, 1), markersize=5,
-                    markerfacecolor="white", **STY[s])
-        frac = float(d["deg_frac"].mean())
-        a2.axhline(100 * frac, ls="--", lw=0.9, color="0.45")
-        a2.text(0.03, 100 * frac + 1.5, "fraction of degraded vehicles",
-                fontsize=8, color="0.3",
-                transform=a2.get_yaxis_transform())
         a1.set_xlabel("Global round $k$")
         a1.set_ylabel("Test accuracy (%)")
-        a2.set_xlabel("Global round $k$")
-        a2.set_ylabel("Useful deliveries to\ndegraded vehicles (%)")
-        a1.legend(fontsize=8.5, loc="lower right")
-        for ax, lab in ((a1, "(a)"), (a2, "(b)")):
-            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
-            ax.text(0.5, -0.34, lab, transform=ax.transAxes, ha="center",
-                    va="top", fontsize=11)
+        a1.legend(fontsize=8, loc="lower right", handlelength=2.2)
+        a1.grid(True, ls="--", lw=0.6, alpha=0.5)
         fig.tight_layout()
         _save(fig, "fig_face_dynamic")
 

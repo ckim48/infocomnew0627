@@ -350,6 +350,24 @@ class RealMFL:
         g = max(after - base, 0.0) / max(1.0 - base, 1e-6)
         return g, base, after
 
+    @torch.no_grad()
+    def gain_joint(self, i, r, cands):
+        """Normalized validation gain of aggregating ALL candidate snapshots
+        at once (empirical eps_int probe: v(A) vs sum of solo gains)."""
+        cands = [(m, sd) for (m, sd) in cands if isinstance(sd, dict)]
+        if not cands or r not in self.avail[i]:
+            return 0.0
+        base = self._val_acc_single(i)
+        backup = {k: v.detach().clone()
+                  for k, v in self.enc[i][r].state_dict().items()}
+        sds = [backup] + [{k: v.to(self.device) for k, v in sd.items()}
+                          for (_, sd) in cands]
+        ws = [self._enc_weight(i, r)] + [self.Dmr(m, r) for (m, _) in cands]
+        self.enc[i][r].load_state_dict(_fedavg(sds, ws))
+        after = self._val_acc_single(i)
+        self.enc[i][r].load_state_dict(backup)
+        return max(after - base, 0.0) / max(1.0 - base, 1e-6)
+
     # ---- v4 aggregation: FedAvg over the aggregation set + acceptance test
     # + leave-one-out attribution (Sec. III-E / eq:loo_attribution) ----
     @torch.no_grad()
@@ -379,13 +397,22 @@ class RealMFL:
         # (aggregated alone with the local encoder), to compare
         # sum_x v({x}) against the joint gain v(A) of the accepted set
         solo = {}
-        if getattr(self.cfg, "record_eint", False):
+        if getattr(self.cfg, "record_eint", False) and len(cands) >= 2:
             for a in range(len(cands)):
                 trial = _fedavg([backup, snaps[a]],
                                 [w_loc, self.Dmr(cands[a][0], r)])
                 self.enc[i][r].load_state_dict(trial)
                 solo[a] = max(self._val_acc_single(i) - base, 0.0) / denom
+            # joint gain of aggregating the FULL offered set A at once
+            allsd = _fedavg([backup] + snaps,
+                            [w_loc] + [self.Dmr(m, r) for (m, _) in cands])
+            self.enc[i][r].load_state_dict(allsd)
+            joint_all = max(self._val_acc_single(i) - base, 0.0) / denom
             self.enc[i][r].load_state_dict(backup)
+            if not hasattr(self, "eint"):
+                self.eint = []
+            self.eint.append((len(cands), float(sum(solo.values())),
+                              float(joint_all)))
         kept, cur_sd, cur_acc = [], backup, base
         for a in range(len(cands)):
             sds = [backup] + [snaps[b] for b in kept] + [snaps[a]]
@@ -399,13 +426,6 @@ class RealMFL:
                 kept.append(a)
                 cur_sd, cur_acc = trial, acc_t
         self.enc[i][r].load_state_dict(cur_sd if kept else backup)
-        if solo and kept:
-            joint = max(cur_acc - base, 0.0) / denom
-            if not hasattr(self, "eint"):
-                self.eint = []
-            self.eint.append((len(kept),
-                              float(sum(solo[a] for a in kept)),
-                              float(joint)))
         return bool(kept), attr, base, cur_acc
 
     # ---- real FedAvg aggregation of received encoders (Eq. 2) ----
