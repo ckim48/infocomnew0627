@@ -201,8 +201,10 @@ def _edge_polylines(ctr):
     return segs, raw_mid0
 
 
-def _run_one(cfg, mob, gammas, scheme, snap_k):
-    """Run a scheme; return per-vehicle achieved accuracy at round snap_k."""
+def _run_one(cfg, mob, gammas, scheme, snap_k, rounds=None):
+    """Run a scheme; return per-vehicle achieved accuracy at round snap_k.
+    rounds > Krounds wraps the trace (k % Krounds), matching the 250-round
+    protocol of the main experiments."""
     avail_rng = np.random.default_rng(cfg.seed + 7)
     modality_avail = make_modality_availability(cfg, avail_rng)
     rng = np.random.default_rng(cfg.seed)
@@ -210,10 +212,12 @@ def _run_one(cfg, mob, gammas, scheme, snap_k):
     from .face import FACE
     alg = FACE(cfg, mfl, mob, scheme, seed=cfg.seed)
     per_veh = None
-    for k in range(mob.Krounds):
-        mob.k = k
+    rounds = mob.Krounds if rounds is None else rounds
+    for k in range(rounds):
+        kk = k % mob.Krounds
+        mob.k = kk
         mfl.local_train()
-        g = gammas[k] if alg.flags.get("use_dis") \
+        g = gammas[kk] if alg.flags.get("use_dis") \
             or alg.flags.get("cache_policy") == "psi" else np.zeros(mob.N)
         alg.run_round(k, g)
         if k == snap_k:

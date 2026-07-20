@@ -64,7 +64,11 @@ def _compute(cfg, device, snap_k, cache):
     mob = MobilitySim(cfg, road, trace)
     cfg.K = mob.Krounds
     ctr = np.asarray(trace["ctr"], dtype=np.float64)
-    snap_k = snap_k if snap_k is not None else mob.Krounds - 1
+    # accuracy snapshot: end of the 250-round wrapped run (same protocol as
+    # the main experiments); vehicle positions: last round of the raw trace
+    rounds = 250
+    snap_k = snap_k if snap_k is not None else rounds - 1
+    pos_k = min(snap_k, mob.Krounds - 1)
 
     print("  [v2x-map] training GAT + Gamma ...")
     model, road_ei = train_hgat(cfg, road, mob, device=device, warmup_rounds=30)
@@ -78,9 +82,9 @@ def _compute(cfg, device, snap_k, cache):
     accs = {}
     for s in MAP_SCHEMES:
         print(f"  [v2x-map] running {s} ...")
-        accs[s], _ = _run_one(cfg, mob, gammas, s, snap_k)
+        accs[s], _ = _run_one(cfg, mob, gammas, s, snap_k, rounds=rounds)
 
-    mob.k = snap_k
+    mob.k = pos_k
     net = sumolib.net.readNet(SEOUL_NET)
     tf = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
     net_xy = mob.vehicle_xy() + ctr
@@ -90,8 +94,8 @@ def _compute(cfg, device, snap_k, cache):
         vm[i] = tf.transform(lon, lat)
     # instantaneous heading from the trace step (Mercator is conformal, so
     # the local-XY angle carries over to the map)
-    prev = trace["veh_xy"][max(snap_k - 1, 0)]
-    step = trace["veh_xy"][snap_k] - prev
+    prev = trace["veh_xy"][max(pos_k - 1, 0)]
+    step = trace["veh_xy"][pos_k] - prev
     ang = np.arctan2(step[:, 1], step[:, 0])
     rng = np.random.default_rng(7)
     still = np.hypot(step[:, 0], step[:, 1]) < 1e-6
