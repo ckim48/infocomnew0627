@@ -227,7 +227,7 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
 
 def make_v2x_map_real(dataset="kitti", metric="accveh", out_name=None,
                       basemap="positron", y_squeeze=1.0, npz=None,
-                      cmap_name="RdYlGn"):
+                      cmap_name="RdYlGn", vmin=None, vmax=None):
     """Map painted with MEASURED per-vehicle values from the real-FL run
     (same protocol as the main table): metric='accveh' uses final test
     accuracy; 'chiveh' uses the leave-one-out encoder-contribution chi.
@@ -245,8 +245,10 @@ def make_v2x_map_real(dataset="kitti", metric="accveh", out_name=None,
         vals[s] = np.asarray(a, dtype=float).mean(0)
     allv = np.concatenate(list(vals.values()))
     # colorbar spans the empirical range (rounded to 0.05) for contrast
-    vmin = np.floor(np.nanpercentile(allv, 2) * 20) / 20
-    vmax = np.ceil(np.nanpercentile(allv, 98) * 20) / 20
+    if vmin is None:
+        vmin = np.floor(np.nanpercentile(allv, 2) * 20) / 20
+    if vmax is None:
+        vmax = np.ceil(np.nanpercentile(allv, 98) * 20) / 20
     labels = {"accveh": "Per-vehicle test accuracy (real data)",
               "chiveh": "LOO encoder contribution $\\chi$ (real data)"}
     mean_labels = {"accveh": "mean acc", "chiveh": "mean $\\chi$"}
