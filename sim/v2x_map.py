@@ -108,7 +108,8 @@ def _compute(cfg, device, snap_k, cache):
 
 def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
               y_squeeze=1.0, vmin=0.2, vmax=1.0,
-              cbar_label="Vehicle model accuracy", mean_label="mean acc"):
+              cbar_label="Vehicle model accuracy", mean_label="mean acc",
+              cmap_name="RdYlGn"):
     """Render the 2x2 accuracy-map panels from per-vehicle values `accs`
     (dict scheme -> array[N]); reused by the abstract-quality and the
     real-metric (test accuracy / LOO chi) variants."""
@@ -122,12 +123,13 @@ def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
     }
     src = providers.get(basemap, providers["positron"])
 
-    cmap = plt.get_cmap("RdYlGn")
+    cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=vmin, vmax=vmax)
 
     # two map rows are ~4.6 in of the 6.3 in height; shrink them by y_squeeze
-    # (+0.2 in slack so the width constraint binds and panels keep full width)
-    fig_h = 6.3 - 4.6 * (1.0 - y_squeeze) + (0.2 if y_squeeze < 1 else 0.0)
+    # (slack grows with the squeeze so the width constraint keeps binding
+    # and panels retain full width -- otherwise titles overlap)
+    fig_h = 6.3 - 4.6 * (1.0 - y_squeeze) + 1.5 * (1.0 - y_squeeze)
     fig, axgrid = plt.subplots(2, 2, figsize=(6.6, fig_h),
                                sharex=True, sharey=True)
     axes = axgrid.ravel()
@@ -159,11 +161,14 @@ def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
         # scheme name + cohort mean accuracy above the panel, off the map,
         # so the labels never occlude vehicles or roads
         name = MAP_LABELS.get(s, disp(s))
+        # strong squeezes narrow the panels; drop label sizes a step so
+        # the longest title never collides with the mean-acc text
+        tf, af = (10.5, 9.5) if y_squeeze >= 0.8 else (9.5, 8.5)
         ax.text(0.0, 1.045, f"{name}", transform=ax.transAxes,
-                ha="left", va="bottom", fontsize=10.5)
+                ha="left", va="bottom", fontsize=tf)
         ax.text(1.0, 1.045, f"{mean_label} {acc.mean():.3f}",
                 transform=ax.transAxes, ha="right", va="bottom",
-                fontsize=9.5)
+                fontsize=af)
         # accent border on the proposed scheme's panel
         if s == "Proposed":
             for sp in ax.spines.values():
@@ -214,7 +219,8 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
 
 
 def make_v2x_map_real(dataset="kitti", metric="accveh", out_name=None,
-                      basemap="positron", y_squeeze=1.0, npz=None):
+                      basemap="positron", y_squeeze=1.0, npz=None,
+                      cmap_name="RdYlGn"):
     """Map painted with MEASURED per-vehicle values from the real-FL run
     (same protocol as the main table): metric='accveh' uses final test
     accuracy; 'chiveh' uses the leave-one-out encoder-contribution chi.
@@ -241,7 +247,7 @@ def make_v2x_map_real(dataset="kitti", metric="accveh", out_name=None,
     return _draw_map(vm, ang, vals, out_name, fig_dir, basemap=basemap,
                      y_squeeze=y_squeeze, vmin=float(vmin), vmax=float(vmax),
                      cbar_label=labels[metric],
-                     mean_label=mean_labels[metric])
+                     mean_label=mean_labels[metric], cmap_name=cmap_name)
 
 
 if __name__ == "__main__":
