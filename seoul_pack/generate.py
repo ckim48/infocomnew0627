@@ -938,6 +938,125 @@ def fig_deadline_calib_2x2(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
     print("  saved fig_seoul_deadline_calib_2x2")
 
 
+def fig_deadline_calib_split(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
+                             nbins=10):
+    """The two rows of fig_seoul_deadline_calib_2x2 as STANDALONE figures:
+    fig_seoul_deadline (delivery success vs deadline, both datasets) and
+    fig_seoul_calib (FACE gain-prediction reliability, both datasets)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from matplotlib.ticker import FormatStrFormatter
+    from sim.paper_figs import STY
+    datasets = _avail("results/metrics_v2x_real_{}_events.npz")
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_deadline/calib split: need both event runs")
+        return
+    order = ["Proposed"] + [x for x in SCHEMES if x != "Proposed"]
+
+    def _finish(fig, axs, name, fmt, legend=None):
+        for i, ax in enumerate(axs):
+            ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+            ax.set_box_aspect(0.66)
+            ax.yaxis.set_major_formatter(FormatStrFormatter(fmt))
+            if i == 1:                      # right column: y numbers outward
+                ax.yaxis.tick_right()
+            ax.text(0.5, -0.43, f"({'ab'[i]})", transform=ax.transAxes,
+                    ha="center", va="top", fontsize=12)
+        if legend:
+            h, l = legend
+            fig.legend(h, l, loc="upper center", ncol=6,
+                       bbox_to_anchor=(0.5, 1.09), columnspacing=1.0,
+                       handlelength=1.8, fontsize=9.5)
+        fig.tight_layout(rect=[0, 0, 1, 0.93 if legend else 1.0], w_pad=0.5)
+        fig.subplots_adjust(wspace=0.05)
+        for ext in ("png", "pdf"):
+            f = f"{name}.{ext}"
+            fig.savefig(os.path.join(HERE, f), dpi=300, bbox_inches="tight")
+            for mirror in ("Figures", "new_result"):
+                shutil.copy(os.path.join(HERE, f),
+                            os.path.join(ROOT, mirror, f))
+        plt.close(fig)
+        print(f"  saved {name}")
+
+    # ---- figure 1: deadline-delivery success ----
+    fig, axs = plt.subplots(1, 2, figsize=(6.3, 3.0))
+    for col, (tag, label) in enumerate(datasets):
+        z = np.load(os.path.join(ROOT,
+                                 f"results/metrics_v2x_real_{tag}_events.npz"))
+        ax = axs[col]
+        for sn in order:
+            if f"{sn}__udeliv_all" not in z.files:
+                continue
+            ys = []
+            for U, pm in zip(z[f"{sn}__udeliv_all"], z[f"{sn}__pmask_all"]):
+                Up = U[:, pm]
+                K = Up.shape[0]
+                ys.append([np.array([Up[t:t + dl].any(0)
+                                     for t in range(K - dl + 1)]).mean()
+                           for dl in deadlines])
+            ys = np.array(ys)
+            ax.errorbar(deadlines, ys.mean(0), yerr=ys.std(0),
+                        label=DISPLAY.get(sn, sn), markersize=4.5,
+                        markerfacecolor="white", markeredgewidth=1.0,
+                        capsize=2.0, **STY[sn])
+        ax.set_title(label, fontsize=12)
+        ax.set_xscale("log")
+        ax.set_xticks(deadlines)
+        ax.set_xticklabels([str(x) for x in deadlines])
+        ax.minorticks_off()
+        ax.set_xlabel("Delivery deadline $d$ (rounds)")
+        ax.set_ylabel("Delivery success" if col == 0 else "")
+        ax.set_ylim(0, 0.8)
+        ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
+    _finish(fig, axs, "fig_seoul_deadline", "%.1f",
+            legend=axs[0].get_legend_handles_labels())
+
+    # ---- figure 2: FACE gain-prediction reliability ----
+    fig, axs = plt.subplots(1, 2, figsize=(6.3, 3.0))
+    for col, (tag, label) in enumerate(datasets):
+        z = np.load(os.path.join(ROOT,
+                                 f"results/metrics_v2x_real_{tag}_events.npz"))
+        ax = axs[col]
+        c = z["Proposed__calib_all"]        # seed, round, pred, realized
+        m = c[:, 1] >= warmup
+        pred, real = c[m, 2], c[m, 3]
+        q = np.quantile(pred, np.linspace(0, 1, nbins + 1))
+        px, mu, sd = [], [], []
+        for i in range(nbins):
+            mm = (pred >= q[i]) & ((pred < q[i + 1]) if i < nbins - 1
+                                   else (pred <= q[i + 1]))
+            px.append(1e3 * pred[mm].mean())
+            mu.append(1e3 * real[mm].mean())
+            sd.append(1e3 * real[mm].std() / np.sqrt(mm.sum()))
+        px, mu = np.array(px), np.array(mu)
+        lim = 1.08 * max(px.max(), mu.max())
+        ax.plot([0, lim], [0, lim], color="0.35", ls="--", lw=1.0,
+                label="Perfect calibration")
+        ax.errorbar(px, mu, yerr=sd, color=STY["Proposed"]["color"],
+                    marker="o", markersize=4.5, markerfacecolor="white",
+                    markeredgewidth=1.0, capsize=2.0, lw=1.6,
+                    label="Realized (decile mean)")
+        ax.text(0.05, 0.94, f"{mu[-1] / max(mu[0], 1e-9):.1f}$\\times$ lift",
+                transform=ax.transAxes, ha="left", va="top", fontsize=9)
+        ax.set_title(label, fontsize=12)
+        ax.set_xlim(0, lim)
+        ax.set_ylim(0, lim)
+        ax.set_xlabel(r"Predicted gain $\widehat{v}_{i,x}$ ($\times 10^{-3}$)")
+        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)"
+                      if col == 0 else "")
+        if col == 0:
+            ax.legend(fontsize=7.5, loc="upper left",
+                      bbox_to_anchor=(0.0, 0.80))
+    _finish(fig, axs, "fig_seoul_calib", "%.0f")
+
+
 def _has_vloss():
     for tag, _ in _avail("results/metrics_v2x_real_{}.npz"):
         d = np.load(os.path.join(ROOT, f"results/metrics_v2x_real_{tag}.npz"))
