@@ -161,6 +161,56 @@ def fig_abl_2panel():
     _save(fig, "fig_face_abl_2panel")
 
 
+def fig_abl_2panel_sep():
+    """fig_face_abl_2panel variant: panel (b) draws useful and redundant
+    delivery volumes as SIDE-BY-SIDE grouped bars (each with its own error
+    bar) instead of one stacked bar."""
+    d = np.load(ABL_NPZ)
+    keys = [k for k, _ in ABL_ORDER if f"{k}__acc_all" in d.files]
+    labs = [l for k, l in ABL_ORDER if f"{k}__acc_all" in d.files]
+    xs = np.arange(len(keys))
+
+    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.0))
+    ax = axes[0]                                       # (a) unchanged
+    for off, met, lab, col in (
+            (-0.19, "acc", "All vehicles", "#4C72B0"),
+            (0.19, "poor", "High-demand vehicles", "#DD8452")):
+        a = np.stack([100 * d[f"{k}__{met}_all"][:, -1] for k in keys])
+        ax.bar(xs + off, a.mean(1), width=0.36, yerr=a.std(1), capsize=2.5,
+               label=lab, color=col, edgecolor="black", lw=0.4)
+    ax.set_ylabel("Final accuracy (%)")
+    ax.set_ylim(35, 90)
+    ax.set_yticks([40, 50, 60, 70, 80, 90])
+    ax.legend(fontsize=7.5, loc="upper right")
+
+    ax = axes[1]                       # (b) grouped useful vs redundant
+    gb, red_gb = [], []
+    for k in keys:
+        mb = d[f"{k}__txmb_all"]                       # seeds x rounds
+        rr = d[f"{k}__redund_all"]
+        gb.append(mb.sum(1) / 1024)
+        red_gb.append((mb * rr).sum(1) / 1024)
+    gb, red_gb = np.array(gb), np.array(red_gb)
+    use_gb = gb - red_gb
+    ax.bar(xs - 0.19, use_gb.mean(1), width=0.36, yerr=use_gb.std(1),
+           capsize=2.5, label="Useful deliveries", color="#55A868",
+           edgecolor="black", lw=0.4)
+    ax.bar(xs + 0.19, red_gb.mean(1), width=0.36, yerr=red_gb.std(1),
+           capsize=2.5, label="Redundant deliveries", color="#C44E52",
+           edgecolor="black", lw=0.4)
+    ax.set_ylabel("Communication volume (GB)")
+    ax.set_ylim(0, 42)                # headroom so bars clear the legend
+    ax.legend(fontsize=7.5, loc="upper right")
+    for i, ax_ in enumerate(axes):
+        ax_.set_xticks(xs)
+        ax_.set_xticklabels(labs, fontsize=7.2)
+        ax_.grid(True, axis="y", ls=":", alpha=0.5)
+        ax_.text(0.5, -0.30, f"({'ab'[i]})", transform=ax_.transAxes,
+                 ha="center", va="top", fontsize=11)
+    fig.tight_layout()
+    _save(fig, "fig_face_abl_2panel_sep")
+
+
 SVC_NPZ = "results/metrics_v2x_real_kitti_svc.npz"
 READY_FMT = "results/metrics_v2x_real_{}_ready.npz"
 ROUND_SEC = 10.2                       # Seoul trace step (s) per round
