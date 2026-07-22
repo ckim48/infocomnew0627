@@ -127,9 +127,10 @@ def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
     norm = Normalize(vmin=vmin, vmax=vmax)
 
     # two map rows are ~4.6 in of the 6.3 in height; shrink them by y_squeeze
-    # (slack grows with the squeeze so the width constraint keeps binding
-    # and panels retain full width -- otherwise titles overlap)
-    fig_h = 6.3 - 4.6 * (1.0 - y_squeeze) + 1.5 * (1.0 - y_squeeze)
+    # (slack keeps the width constraint binding so panels stay wide, but is
+    # capped -- the smaller squeezed-mode fonts absorb the residual narrowing)
+    fig_h = 6.3 - 4.6 * (1.0 - y_squeeze) \
+        + min(1.5 * (1.0 - y_squeeze), 0.25)
     fig, axgrid = plt.subplots(2, 2, figsize=(6.6, fig_h),
                                sharex=True, sharey=True)
     axes = axgrid.ravel()
@@ -161,9 +162,10 @@ def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
         # scheme name + cohort mean accuracy above the panel, off the map,
         # so the labels never occlude vehicles or roads
         name = MAP_LABELS.get(s, disp(s))
-        # strong squeezes narrow the panels; drop label sizes a step so
+        # strong squeezes narrow the panels; drop label sizes stepwise so
         # the longest title never collides with the mean-acc text
-        tf, af = (10.5, 9.5) if y_squeeze >= 0.8 else (9.5, 8.5)
+        tf, af = (10.5, 9.5) if y_squeeze >= 0.8 \
+            else (9.5, 8.5) if y_squeeze >= 0.7 else (8.5, 7.5)
         ax.text(0.0, 1.045, f"{name}", transform=ax.transAxes,
                 ha="left", va="bottom", fontsize=tf)
         ax.text(1.0, 1.045, f"{mean_label} {acc.mean():.3f}",
@@ -179,9 +181,14 @@ def _draw_map(vm, ang, accs, out_name, fig_dir, basemap="positron",
 
     fig.subplots_adjust(wspace=0.04, hspace=0.20)
     sm = ScalarMappable(norm=norm, cmap=cmap)
+    # squeezed variants also slim the colorbar block to save height
+    slim = y_squeeze < 0.8
     cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
-                        fraction=0.045, pad=0.04, aspect=45)
-    cbar.set_label(cbar_label)
+                        fraction=0.032 if slim else 0.045,
+                        pad=0.02 if slim else 0.04, aspect=55 if slim else 45)
+    cbar.set_label(cbar_label, fontsize=10 if slim else None)
+    if slim:
+        cbar.ax.tick_params(labelsize=9)
 
     out = os.path.join(fig_dir, out_name + ".png")
     for ext in ("png", "pdf"):
