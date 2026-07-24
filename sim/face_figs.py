@@ -56,7 +56,7 @@ def fig_abl_bars():
                            ha="right")
         ax.set_title(title, fontsize=10)
         ax.grid(True, axis="y", ls=":", alpha=0.5)
-    axes[0].set_ylabel("Final accuracy (%)")
+    axes[0].set_ylabel("Final statistical utility (%)")
     axes[0].legend(fontsize=8, loc="lower right")
     fig.tight_layout()
     _save(fig, "fig_face_abl_bars")
@@ -129,7 +129,7 @@ def fig_abl_2panel():
         a = np.stack([100 * d[f"{k}__{met}_all"][:, -1] for k in keys])
         ax.bar(xs + off, a.mean(1), width=0.36, yerr=a.std(1), capsize=2.5,
                label=lab, color=col, edgecolor="black", lw=0.4)
-    ax.set_ylabel("Final accuracy (%)")
+    ax.set_ylabel("Final statistical utility (%)")
     ax.set_ylim(35, 90)
     ax.set_yticks([40, 50, 60, 70, 80, 90])
     ax.legend(fontsize=7.5, loc="upper right")
@@ -178,7 +178,7 @@ def fig_abl_2panel_sep():
         a = np.stack([100 * d[f"{k}__{met}_all"][:, -1] for k in keys])
         ax.bar(xs + off, a.mean(1), width=0.36, yerr=a.std(1), capsize=2.5,
                label=lab, color=col, edgecolor="black", lw=0.4)
-    ax.set_ylabel("Final accuracy (%)")
+    ax.set_ylabel("Final statistical utility (%)")
     ax.set_ylim(35, 90)
     ax.set_yticks([40, 50, 60, 70, 80, 90])
     ax.legend(fontsize=7.5, loc="upper right")
@@ -331,7 +331,7 @@ def fig_sens():
             ax.set_xlabel(xlabel)
             ax.grid(True, ls="--", lw=0.6, alpha=0.5)
         for ax in axg[:, 0]:
-            ax.set_ylabel("Final accuracy (%)")
+            ax.set_ylabel("Final statistical utility (%)")
         for i, ax in enumerate(axg.ravel()):
             ax.text(0.5, -0.42, f"({'abcd'[i]})", transform=ax.transAxes,
                     ha="center", va="top", fontsize=11)
@@ -422,7 +422,7 @@ def fig_class():
         ax.set_ylim(30, 70)
         ax.set_yticks([30, 40, 50, 60, 70])
         ax.grid(True, axis="y", ls=":", alpha=0.5)
-    axes[0].set_ylabel("Final accuracy (%)")
+    axes[0].set_ylabel("Final statistical utility (%)")
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=6, fontsize=8,
                columnspacing=1.0, bbox_to_anchor=(0.5, 1.06))
