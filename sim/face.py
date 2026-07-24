@@ -81,13 +81,23 @@ class Zones:
 
 # ---------------------------------------------------------------- ridge gain
 class RidgeGain:
-    """Per-modality sliding-window ridge with optimism (Eq. 10)."""
+    """Per-modality sliding-window ridge with optimism (Eq. 10), followed
+    by an online prequential recalibration: raw ridge scores are mapped
+    through a monotone (isotonic-style) transform fitted on PAST
+    (prediction, realized-gain) pairs only, correcting the shrinkage
+    miscalibration of the linear model (low scores under-, high scores
+    over-predict) while preserving the ranking."""
     DIM = 6
+    RECAL_MIN = 200        # pairs before the recalibration map activates
+    RECAL_EVERY = 100      # refit period (in observed pairs)
+    RECAL_BINS = 10
 
     def __init__(self, cfg):
         self.cfg = cfg
         self.A = {}   # r -> [d,d]
         self.b = {}   # r -> [d]
+        self._obs = {}      # r -> [list preds, list realized, n_at_last_fit]
+        self._map = {}      # r -> (bin pred means, monotone realized means)
 
     def _get(self, r):
         if r not in self.A:
@@ -116,6 +126,34 @@ class RidgeGain:
             mu = mu + self.cfg.face_alpha_g * np.sqrt(
                 np.maximum(np.einsum("nd,dk,nk->n", Psi, Ainv, Psi), 0.0))
         return np.clip(mu, 0.0, 1.0)
+
+    def observe(self, r, pred, realized):
+        """Log an out-of-sample (prediction, realized) pair and refit the
+        monotone recalibration map periodically (prequential: the map only
+        ever uses pairs observed BEFORE the predictions it transforms)."""
+        o = self._obs.setdefault(r, [[], [], 0])
+        o[0].append(float(pred)); o[1].append(float(realized))
+        n = len(o[0])
+        if n >= self.RECAL_MIN and n - o[2] >= self.RECAL_EVERY:
+            p = np.asarray(o[0]); y = np.asarray(o[1])
+            qs = np.quantile(p, np.linspace(0, 1, self.RECAL_BINS + 1))
+            mp, my = [], []
+            for i in range(self.RECAL_BINS):
+                mm = (p >= qs[i]) & ((p < qs[i + 1])
+                                     if i < self.RECAL_BINS - 1
+                                     else (p <= qs[i + 1]))
+                if mm.any():
+                    mp.append(p[mm].mean()); my.append(y[mm].mean())
+            if len(mp) >= 2:
+                my = np.maximum.accumulate(my)      # enforce monotonicity
+                self._map[r] = (np.asarray(mp), np.asarray(my))
+            o[2] = n
+
+    def _recal(self, r, mu):
+        m = self._map.get(r)
+        if m is None:
+            return mu
+        return np.clip(np.interp(mu, m[0], m[1]), 0.0, 1.0)
 
 
 FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
@@ -426,6 +464,8 @@ class FACE:
                     # gain, logged before the ridge sees this sample
                     if self.flags["use_ridge"]:
                         g_pred = float(self.ridge.predict(r, psi[None])[0])
+                        g_pred = float(self.ridge._recal(r, g_pred))
+                        self.ridge.observe(r, g_pred, delta)
                     else:
                         n0, mu0 = self.gstat.get((v.src, r), (0, 1.0))
                         g_pred = mu0 if n0 else 1.0

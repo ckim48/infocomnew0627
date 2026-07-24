@@ -1356,3 +1356,102 @@ def fig_calib_bars(warmup=30, nbins=10):
             shutil.copy(os.path.join(HERE, f), os.path.join(ROOT, mirror, f))
     plt.close(fig)
     print("  saved fig_seoul_calib_bars")
+
+
+def _prequential_recal(c, warmup=0, min_n=200, every=100, nbins=10):
+    """Replay the recorded (seed, round, pred, realized) pairs in time order
+    per seed, mapping each prediction through a monotone recalibration map
+    fitted ONLY on that seed's earlier pairs (mirrors RidgeGain.observe)."""
+    out_p, out_r = [], []
+    for sd in np.unique(c[:, 0]):
+        cc = c[c[:, 0] == sd]
+        cc = cc[np.argsort(cc[:, 1], kind="stable")]
+        hp, hr, last_fit, mp, my = [], [], 0, None, None
+        for _, k, p, r in cc:
+            if mp is not None:
+                p_out = float(np.clip(np.interp(p, mp, my), 0.0, 1.0))
+            else:
+                p_out = p
+            if k >= warmup:
+                out_p.append(p_out); out_r.append(r)
+            hp.append(p); hr.append(r)
+            n = len(hp)
+            if n >= min_n and n - last_fit >= every:
+                ap, ar = np.asarray(hp), np.asarray(hr)
+                qs = np.quantile(ap, np.linspace(0, 1, nbins + 1))
+                bp, br = [], []
+                for i in range(nbins):
+                    mm = (ap >= qs[i]) & ((ap < qs[i + 1]) if i < nbins - 1
+                                          else (ap <= qs[i + 1]))
+                    if mm.any():
+                        bp.append(ap[mm].mean()); br.append(ar[mm].mean())
+                if len(bp) >= 2:
+                    mp, my = np.asarray(bp), np.maximum.accumulate(br)
+                last_fit = n
+    return np.asarray(out_p), np.asarray(out_r)
+
+
+def fig_calib_recal(warmup=30, nbins=10):
+    """fig_seoul_calib with the predictor's online prequential monotone
+    recalibration applied (reporting layer; ranking unchanged). Saves
+    fig_seoul_calib_recal."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY
+    datasets = _avail("results/metrics_v2x_real_{}_events.npz")
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_calib_recal: need both event runs")
+        return
+    fig, axs = plt.subplots(1, 2, figsize=(6.3, 3.0))
+    for col, (tag, label) in enumerate(datasets):
+        z = np.load(os.path.join(ROOT,
+                                 f"results/metrics_v2x_real_{tag}_events.npz"))
+        pred, real = _prequential_recal(z["Proposed__calib_all"],
+                                        warmup=warmup, nbins=nbins)
+        q = np.quantile(pred, np.linspace(0, 1, nbins + 1))
+        px, mu, sd = [], [], []
+        for i in range(nbins):
+            mm = (pred >= q[i]) & ((pred < q[i + 1]) if i < nbins - 1
+                                   else (pred <= q[i + 1]))
+            px.append(1e3 * pred[mm].mean())
+            mu.append(1e3 * real[mm].mean())
+            sd.append(1e3 * real[mm].std() / np.sqrt(mm.sum()))
+        px, mu = np.array(px), np.array(mu)
+        ax = axs[col]
+        lim = 1.12 * max(px.max(), mu.max())
+        ax.plot([0, lim], [0, lim], color="0.35", ls="--", lw=1.0,
+                label="Perfect calibration")
+        ax.errorbar(px, mu, yerr=sd, color=STY["Proposed"]["color"],
+                    marker="o", markersize=4.5, markerfacecolor="white",
+                    markeredgewidth=1.0, capsize=2.0, lw=1.6,
+                    label="Realized (decile mean)")
+        ax.text(0.05, 0.94, f"{mu[-1] / max(mu[0], 1e-9):.1f}$\\times$ lift",
+                transform=ax.transAxes, ha="left", va="top", fontsize=9)
+        ax.set_title(label, fontsize=12)
+        ax.set_xlim(0, lim); ax.set_ylim(0, lim)
+        ax.set_xlabel(r"Predicted gain $\widehat{v}_{i,x}$ ($\times 10^{-3}$)")
+        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)" if col == 0 else "")
+        if col == 0:
+            ax.legend(fontsize=7.5, loc="upper left",
+                      bbox_to_anchor=(0.0, 0.80))
+        ax.grid(True, ls="--", lw=0.6, alpha=0.5)
+        if col == 1:
+            ax.yaxis.tick_right()
+        ax.text(0.5, -0.40, f"({'ab'[col]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=12)
+    fig.tight_layout(w_pad=0.5)
+    fig.subplots_adjust(wspace=0.05)
+    for ext in ("png", "pdf"):
+        f = f"fig_seoul_calib_recal.{ext}"
+        fig.savefig(os.path.join(HERE, f), dpi=300, bbox_inches="tight")
+        for mirror in ("Figures", "new_result"):
+            shutil.copy(os.path.join(HERE, f), os.path.join(ROOT, mirror, f))
+    plt.close(fig)
+    print("  saved fig_seoul_calib_recal")
