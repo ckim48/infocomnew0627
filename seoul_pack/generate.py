@@ -1293,3 +1293,66 @@ if __name__ == "__main__":
     for f in sorted(os.listdir(HERE)):
         if f != "generate.py":
             print("  ", f)
+
+
+def fig_calib_bars(warmup=30, nbins=10):
+    """Rank-calibration presentation of the gain predictor: mean realized
+    gain per predicted-gain decile as bars (monotone rise = the predictor
+    ranks deliveries correctly). Absolute-error constants live in
+    fig_face_eps_pred. Saves fig_seoul_calib_bars."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "dejavuserif", "font.size": 12,
+        "axes.linewidth": 0.9, "lines.linewidth": 1.6,
+        "xtick.direction": "in", "ytick.direction": "in", "legend.frameon": False,
+    })
+    from sim.paper_figs import STY
+    datasets = _avail("results/metrics_v2x_real_{}_events.npz")
+    if len(datasets) < 2:
+        print("  [skip] fig_seoul_calib_bars: need both event runs")
+        return
+    fig, axs = plt.subplots(1, 2, figsize=(6.3, 2.9))
+    col_face = STY["Proposed"]["color"]
+    for col, (tag, label) in enumerate(datasets):
+        z = np.load(os.path.join(ROOT,
+                                 f"results/metrics_v2x_real_{tag}_events.npz"))
+        c = z["Proposed__calib_all"]
+        m = c[:, 1] >= warmup
+        pred, real = c[m, 2], c[m, 3]
+        q = np.quantile(pred, np.linspace(0, 1, nbins + 1))
+        mu, sd = [], []
+        for i in range(nbins):
+            mm = (pred >= q[i]) & ((pred < q[i + 1]) if i < nbins - 1
+                                   else (pred <= q[i + 1]))
+            mu.append(1e3 * real[mm].mean())
+            sd.append(1e3 * real[mm].std() / np.sqrt(mm.sum()))
+        mu, sd = np.array(mu), np.array(sd)
+        ax = axs[col]
+        xs = np.arange(1, nbins + 1)
+        ax.bar(xs, mu, width=0.72, yerr=sd, capsize=2.0, color=col_face,
+               alpha=0.85, edgecolor="black", lw=0.5)
+        ax.set_title(label, fontsize=12)
+        ax.set_xlabel("Predicted-gain decile")
+        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)"
+                      if col == 0 else "")
+        ax.set_xticks([1, 3, 5, 7, 9, 10])
+        ax.text(0.05, 0.93,
+                f"{mu[-1] / max(mu[0], 1e-9):.1f}$\\times$ lift",
+                transform=ax.transAxes, ha="left", va="top", fontsize=10)
+        ax.grid(True, axis="y", ls="--", lw=0.6, alpha=0.5)
+        if col == 1:
+            ax.yaxis.tick_right()
+        ax.text(0.5, -0.38, f"({'ab'[col]})", transform=ax.transAxes,
+                ha="center", va="top", fontsize=12)
+    fig.tight_layout(w_pad=0.5)
+    fig.subplots_adjust(wspace=0.05)
+    for ext in ("png", "pdf"):
+        f = f"fig_seoul_calib_bars.{ext}"
+        fig.savefig(os.path.join(HERE, f), dpi=300, bbox_inches="tight")
+        for mirror in ("Figures", "new_result"):
+            shutil.copy(os.path.join(HERE, f), os.path.join(ROOT, mirror, f))
+    plt.close(fig)
+    print("  saved fig_seoul_calib_bars")
