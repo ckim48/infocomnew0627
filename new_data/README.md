@@ -28,3 +28,11 @@ Per ablation variant: final accuracy (all / high-demand vehicles, %,
 mean±std over seeds) and communication volume split into useful vs
 redundant deliveries (GB, sum over 250 rounds). `variant_label` is the
 LaTeX-formatted x-tick label used in the figure.
+
+## seoul_map_utility.csv → fig_seoul_map (abstract backend)
+One row per vehicle (180): same positions/headings as
+seoul_map_realacc.csv, but `utility_*` columns hold the ACHIEVED
+STATISTICAL UTILITY q_eff of the abstract Seoul backend (best acquired
+encoder strength; local training contributes nothing in this model, so
+the map isolates pure propagation). Figure colormap: RdYlGn,
+vmin=0.2, vmax=1.0.

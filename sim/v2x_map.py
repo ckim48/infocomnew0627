@@ -221,8 +221,8 @@ def make_v2x_map_subfig(cfg=None, device="cpu", num_vehicles=180, snap_k=None,
         vm, ang, accs, snap_k = _compute(cfg, device, snap_k, cache)
     return _draw_map(vm, ang, accs, out_name, fig_dir, basemap=basemap,
                      y_squeeze=y_squeeze,
-                     cbar_label="Achieved encoder quality",
-                     mean_label="mean quality")
+                     cbar_label="Achieved statistical utility",
+                     mean_label="mean utility")
 
 
 def make_v2x_map_real(dataset="kitti", metric="accveh", out_name=None,

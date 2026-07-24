@@ -57,6 +57,27 @@ def export_map(npz="results/metrics_v2x_real_kitti_map400.npz"):
         "acc_LearningAware"], rows)
 
 
+def export_map_utility():
+    """fig_seoul_map (abstract backend): per-vehicle achieved statistical
+    utility (best acquired encoder strength, q_eff) per scheme, with the
+    same positions/headings as the accuracy map."""
+    from pyproj import Transformer
+    cache = np.load("results/v2x_map_cache.npz")
+    vm, ang = cache["vm"], cache["ang"]
+    inv = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+    lon, lat = inv.transform(vm[:, 0], vm[:, 1])
+    rows = []
+    for i in range(len(vm)):
+        rows.append([i, f"{lon[i]:.6f}", f"{lat[i]:.6f}",
+                     f"{vm[i, 0]:.1f}", f"{vm[i, 1]:.1f}",
+                     f"{np.degrees(ang[i]):.1f}"]
+                    + [f"{cache[f'acc_{s}'][i]:.4f}" for s in MAP_SCHEMES])
+    _w("seoul_map_utility.csv",
+       ["vehicle", "lon", "lat", "x_web_mercator", "y_web_mercator",
+        "heading_deg", "utility_FACE", "utility_CachedDFL", "utility_V2V",
+        "utility_LearningAware"], rows)
+
+
 def export_deadline():
     rows = []
     for tag in ("kitti", "nuscenes"):
@@ -136,6 +157,7 @@ def export_ablation():
 def main():
     os.makedirs(OUT, exist_ok=True)
     export_map()
+    export_map_utility()
     export_deadline()
     export_calib()
     export_ablation()
