@@ -169,7 +169,11 @@ FACE_FLAGS = dict(use_future=True,     # F continuation value (Eq. 16) in A_ijx
                                        # paper (v3 draft has the full text)
                   link_blind=False,    # schedule ignoring the V2V link quality
                   select=None,         # candidate rule: None|'mmfedmc'|'autofed'
+                                       #   |'prophet'|'spraywait'
+                  no_comm=False,       # lower bound: no V2V exchange at all
+                  ideal=False,         # upper bound: unconstrained delivery
                   refresh="knapsack")  # cache refresh: 'knapsack' | 'lru'
+                                       #   | 'lfu' | 'random'
 
 # All schemes run under the SAME system-model protocol (encoder versions,
 # copy tickets, evaluation-gated adoption, publication cadence, Sec. III);
@@ -197,6 +201,26 @@ SCHEME_FACE_FLAGS = {
     "AutoFed":          dict(use_relay=False, use_future=False,
                              use_coverage=False, refresh="lru",
                              select="autofed", use_recip=False),
+    # DTN-routing-inspired forwarding (encoder = bundle, demanders =
+    # destinations): PRoPHET delivery predictability / binary Spray-and-Wait
+    "PRoPHET":          dict(use_future=False, use_coverage=False,
+                             refresh="lru", use_recip=False,
+                             select="prophet"),
+    "SprayWait":        dict(use_future=False, use_coverage=False,
+                             refresh="lru", use_recip=False,
+                             select="spraywait"),
+    # cache-placement ablations of Cached-DFL: LRU -> LFU / random eviction
+    "Caching-LFU":      dict(use_demand=False, use_future=False,
+                             use_coverage=False, refresh="lfu",
+                             use_recip=False),
+    "Caching-rand":     dict(use_demand=False, use_future=False,
+                             use_coverage=False, refresh="random",
+                             use_recip=False),
+    # bounds: local-only training / unconstrained communication (both keep
+    # the evaluation-gated adoption protocol, N_ev and delta unchanged)
+    "NoComm":           dict(no_comm=True),
+    "FullContact":      dict(ideal=True, use_future=False,
+                             use_coverage=False, use_recip=False),
 }
 
 
@@ -227,6 +251,8 @@ class FACE:
         self.tickets = {i: {} for i in range(mfl.N)}   # i -> vid -> m_{i,x}
         self.own_pub = {}                   # (i,r) -> vid (latest, ell=1)
         self.lru = {i: {} for i in range(mfl.N)}
+        self.freq = {i: {} for i in range(mfl.N)}   # LFU access counts
+        self.Ppred = np.zeros((mfl.N, mfl.N))       # PRoPHET predictability
         self._vid = 0
         self._clock = 0
         self._evermet = set()
@@ -500,6 +526,8 @@ class FACE:
         self._clock = k
         self._n_beyond_adopt = 0
         A = mob.v2v_graph()
+        if self.flags["no_comm"]:           # lower bound: isolate every vehicle
+            A = np.zeros_like(A)
         zn = self._zone_now()
         # expiry (a vehicle's own latest publication lives in model storage,
         # ell=1, and never expires from the relay system)
@@ -527,6 +555,17 @@ class FACE:
             for j in mob.neighbors(A, i):
                 self._evermet.add((i, int(j)))
                 self._evermet.add((int(j), i))
+        if self.flags["select"] == "prophet":
+            # PRoPHET delivery predictability: aging, encounter reinforcement
+            # (P_init 0.75) and transitivity (beta 0.25), standard constants
+            self.Ppred *= 0.98
+            enc = [(i, int(j)) for i in range(mfl.N)
+                   for j in mob.neighbors(A, i)]
+            for i, j in enc:
+                self.Ppred[i, j] += (1.0 - self.Ppred[i, j]) * 0.75
+            for i, j in enc:
+                self.Ppred[i] = np.maximum(
+                    self.Ppred[i], 0.25 * self.Ppred[i, j] * self.Ppred[j])
 
         P = self._P_hat()
         # zone-mean receiver features per modality (for v-bar in Eq. 13)
@@ -649,7 +688,28 @@ class FACE:
                         c["gap_le0"] += 1
                 pk = pack(x)
                 # immediate predicted reward at j (Eq. 10)
-                if self.flags["select"] == "autofed":
+                if self.flags["select"] == "prophet":
+                    # PRoPHET: value = predictability of reaching a current
+                    # demander of this encoder (a demander itself scores 1)
+                    dem = v.compat & ~v.resolved & self._need_ok[v.r]
+                    if dem[j]:
+                        vhat = 0.1
+                    elif dem.any():
+                        vhat = 0.1 * float(self.Ppred[j, dem].max())
+                    else:
+                        vhat = 0.0
+                elif self.flags["select"] == "spraywait":
+                    # binary Spray-and-Wait: blind spray while holding more
+                    # than one ticket; with the last ticket, direct delivery
+                    # to a demander only
+                    if m > 1:
+                        vhat = 0.05 + 0.01 * self.rng.random()
+                    elif v.compat[j] and not v.resolved[j] \
+                            and self._need_ok[v.r][j]:
+                        vhat = 0.1
+                    else:
+                        vhat = 0.0
+                elif self.flags["select"] == "autofed":
                     # AutoFed: quality-ranked, demand-blind
                     vhat = (0.05 + 0.5 * v.s_meta) \
                         if (v.compat[j] and not v.resolved[j]) else 0.0
@@ -743,6 +803,10 @@ class FACE:
             evs = [e for e in evs if np.isfinite(e[0])]
             if self.flags["refresh"] == "lru":
                 evs.sort(key=lambda e: self.lru[j].get(e[2], -1))  # oldest first
+            elif self.flags["refresh"] == "lfu":
+                evs.sort(key=lambda e: self.freq[j].get(e[2], 0))  # rarest first
+            elif self.flags["refresh"] == "random":
+                self.rng.shuffle(evs)
             capf = int(np.ceil(cfg.cache_capacity_mb)) + 1
             nev = len(evs)
             EV = np.full((nev + 1, capf), np.inf)
@@ -793,9 +857,10 @@ class FACE:
         # exchanges form a matching on the contact graph and the greedy
         # 1/2-approximation guarantee of Prop. 2 applies.
         pairs = {}
-        for i in range(mfl.N):
-            for j in mob.neighbors(A, i):
-                pairs[(i, int(j))] = None
+        if not self.flags["ideal"]:         # ideal bound: no pairwise matching
+            for i in range(mfl.N):
+                for j in mob.neighbors(A, i):
+                    pairs[(i, int(j))] = None
         committed = []
         while True:
             best, bkey = 0.0, None
@@ -852,11 +917,14 @@ class FACE:
                     y = evq.pop(0)
                     self.tickets[j].pop(y, None)
                     self.lru[j].pop(y, None)
+                    self.freq[j].pop(y, None)
                 self.tickets[i][x] -= g     # value-weighted split (Eq. 7)
                 if self.tickets[i][x] <= 0:      # custody transferred away
                     del self.tickets[i][x]
                 self.tickets[j][x] = g
                 self.lru[j][x] = k
+                self.freq[j][x] = self.freq[j].get(x, 0) + 1
+                self.freq[i][x] = self.freq[i].get(x, 0) + 1
                 self._n_deliv += 1
                 recv.setdefault((j, v.r), []).append(v.s_meta)
                 # delivery reputation (Eq. rep_delivery): relayed versions
@@ -868,6 +936,28 @@ class FACE:
                     self._n_relay += 1
                 if (v.src, j) not in self._evermet and v.src != j:
                     self._n_beyond += 1
+        if self.flags["ideal"]:
+            # unconstrained-communication upper bound: every latest
+            # publication reaches every compatible unresolved receiver this
+            # round -- no matching, link loss, airtime budget, ticket or
+            # cache constraint; the evaluation-gated adoption protocol
+            # (N_ev, delta) is unchanged. Holdings are re-issued each round.
+            for jj in range(mfl.N):
+                self.tickets[jj] = {x: m for x, m in self.tickets[jj].items()
+                                    if self._is_own_pub(jj, x)}
+            for x in list(self.own_pub.values()):
+                v = self.versions[x]
+                for j in np.where(v.compat & ~v.resolved)[0]:
+                    j = int(j)
+                    if j == v.src:
+                        continue
+                    sched.append((v.src, j, v))
+                    self.tickets[j][x] = 1
+                    self.lru[j][x] = k
+                    self._n_tx += 1
+                    self._n_deliv += 1
+                    self.last_tx_mb += v.S
+                    recv.setdefault((j, v.r), []).append(v.s_meta)
         if self.oracle_log and k in self.value_table_rounds:
             self._snapshot_oracle_state(k, need)
         self._score_round(sched, recv, need, gamma_eval, zn)
@@ -882,7 +972,12 @@ class FACE:
             if not relay:
                 continue
             cap = cfg.cache_capacity_mb
-            if self.flags["refresh"] == "lru" or not self.flags["use_future"]:
+            if self.flags["refresh"] == "lfu":
+                ranked = sorted(relay, key=lambda x: -self.freq[i].get(x, 0))
+            elif self.flags["refresh"] == "random":
+                ranked = list(relay)
+                self.rng.shuffle(ranked)
+            elif self.flags["refresh"] == "lru" or not self.flags["use_future"]:
                 ranked = sorted(relay, key=lambda x: -self.lru[i].get(x, -1))
             else:
                 scored = []
@@ -909,6 +1004,7 @@ class FACE:
                 if x not in keep:           # eviction burns the copy tickets
                     self.tickets[i].pop(x, None)
                     self.lru[i].pop(x, None)
+                    self.freq[i].pop(x, None)
 
         # ---------- reputation update (Sec. III-E) ----------
         # storage contribution (Eq. rep_storage): caching others' versions is
@@ -937,12 +1033,16 @@ class FACE:
                               for (i, j, sel_g, _) in committed
                               for (x, _, _, _) in sel_g
                               if x in self.versions]
+        if self.flags["ideal"]:             # ideal deliveries bypass committed
+            self.last_selected = [(i, j, v.src, v.r) for (i, j, v) in sched]
         return self.last_selected
 
     def _split_tickets(self, m, Fi, Fj):
         """Value-weighted ticket split g_ijx (Eq. ticket_split): tickets move
         in proportion to the receiver's share of continuation value; a
         replicating sender always retains at least one ticket."""
+        if self.flags["select"] == "spraywait" and m > 1:
+            return m // 2                   # binary spray: hand over half
         if m <= 1:
             return max(m, 1)                # custody transfer
         if not self.flags["use_split"]:

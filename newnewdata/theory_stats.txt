@@ -1,0 +1,8 @@
+eps_pred (Table-I run, per-delivery predicted vs realized gain, n=20943):
+  mean|err|=0.0077  p95=0.0196  max=0.797
+  mean realized=0.0039  mean predicted=0.0043  (signed bias +0.0004 ~ 11% of mean gain)
+  NOTE: mean|err| ~= 2x mean per-event gain -> an absolute-eps triangle bound over
+  T|I| terms is VACUOUS; the signed bias (+10%) and decile-ranking calibration are not.
+eps_int (concurrent-delivery interaction probe, n=500):
+  mean|solo_sum-joint|=0.0575  p95=0.3862  (log headline: mean 0.0575, p95 0.3862)
+offline oracle (16 windows, ILP): FACE/oracle ratio mean=0.525 median=0.600 min=0.022 max=0.984

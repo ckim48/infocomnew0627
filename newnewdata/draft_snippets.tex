@@ -1,0 +1,131 @@
+% ======================================================================
+% Drop-in LaTeX drafts answering the four review risks (2026-07-24).
+% Every number below is measured from the repo (sources in comments).
+% ======================================================================
+
+% ----------------------------------------------------------------------
+% 1) REPRODUCIBILITY ADDENDUM  (append to Sec. Simulation Settings)
+% Facts: sim/real_fl.py (_prep_data, RealMFL.__init__, local_train,
+% _batch), sim/face.py (_adopt), sim/multimodal_model.py (FusionHead),
+% sim/run_v2x_real.py (round loop), sim/config.py.
+% [FIX] The current settings text says vehicles hold "80--600 local
+%       training objects": the code gives ~83 (data-rich) and 4--11
+%       (all others) on KITTI. Replace that sentence with the below.
+% [VERIFY] the nuScenes rich-vehicle share before quoting its number.
+% ----------------------------------------------------------------------
+\textbf{Data partition and training protocol.}
+Both datasets are class-balanced by downsampling every class to the
+smallest kept class (KITTI: $1{,}437$ objects per class over Car /
+Pedestrian / Cyclist; nuScenes: Car / Pedestrian after dropping classes
+with fewer than $800$ samples) and split $68/12/20\%$ into
+train/validation/test by a seeded permutation; validation and test sets
+are shared across vehicles and never corrupted. Each vehicle draws a
+disjoint local set from the training pool: the $15\%$ data-rich
+vehicles split the residual pool equally (${\approx}83$ objects each on
+KITTI), while every remaining vehicle holds only $4$--$11$ objects,
+freezes its encoders, and trains only its lightweight fusion head --
+its accuracy is therefore determined by the encoders it receives.
+Label distributions are uniform by construction; heterogeneity enters
+through data volume and sensing quality: data-rich vehicles draw a
+quality factor $Q\sim\mathcal U(0.8,1)$, the rest
+$Q\sim\mathcal U(0.1,0.3)$, and low-quality vehicles train on corrupted
+inputs (camera: additive noise $\sigma{=}0.25$ with $0.6\times$
+brightness; LiDAR: $60\%$ point dropout). Encoders are
+modality-specific networks producing fixed-width features, fused by a
+two-layer MLP head (concatenation $\to 64 \to$ classes). Each round
+executes (i)~one local epoch of Adam (lr $10^{-3}$, batch $\le 64$);
+(ii)~publication and V2V exchange (Sec.~III); (iii)~evaluation-gated
+adoption: each vehicle ranks received candidates by the optimistic gain
+estimate, evaluates the top $N_{\mathrm{ev}}{=}6$ on the shared
+validation split by temporarily swapping in the candidate encoder, and
+adopts the best iff the measured validation gain reaches
+$\delta{=}5\times10^{-3}$, merging via data-size-weighted
+FedAvg~\cite{fedavg}; (iv)~test evaluation. Results average three runs
+(seeds varying data assignment, modality availability, and matching);
+$\pm$ denotes the standard deviation over runs.
+
+% ----------------------------------------------------------------------
+% 2) HINDSIGHT-ORACLE COMPARISON  (add to Sec. Evaluation; discharges
+%    the twice-promised clairvoyant comparison)
+% Data: results/face_oracle.npz (sim/face_oracle.py, 16 ILP instances);
+% figure panel ready in sim/face_figs.py (~line 221).
+% ----------------------------------------------------------------------
+\textbf{Comparison with a clairvoyant oracle.}
+To position FACE against the best possible forwarding decisions, we
+extract $16$ small sub-instances ($18$-vehicle neighborhoods over short
+windows) of the Seoul trace and solve each offline as an integer
+program given full knowledge of all future contacts, link budgets, and
+realized encoder gains. Running causally with no future information,
+FACE attains $0.53\times$ the clairvoyant objective on average (median
+$0.60\times$), i.e., within a factor of two of hindsight-optimal. A
+clairvoyant variant with relaying disabled attains $0.96\times$,
+showing that on instances this small the oracle's advantage stems
+almost entirely from privileged scheduling knowledge rather than from
+any mechanism FACE lacks.
+% (caveat for rebuttals: relay value grows with instance size; the
+% 18-vehicle windows fit the ILP, so this understates ferrying gains.)
+
+% ----------------------------------------------------------------------
+% 3) SURROGATE FIDELITY  (reframe the theorem; option 2 of the review)
+% Data: newnewdata/theory_stats.txt --
+%   eps_pred over n=20,943 adoption evaluations (Table-I runs):
+%     mean |pred-realized| = 0.0077, p95 = 0.0196,
+%     mean realized gain 0.0039, mean predicted 0.0043 (bias +11%).
+%   eps_int over n=500 concurrent-delivery probes: 0.0575, p95 0.386.
+% Also: the manuscript references subsec:agg_train, which does not
+% exist -- restore the subsection or fix the label.
+% ----------------------------------------------------------------------
+We state the surrogate result as a \emph{fidelity lemma}, not a
+performance guarantee: it bounds the surrogate-to-realized-utility gap
+in terms of the prediction and interaction errors
+$\bar\epsilon_{\mathrm{pred}},\bar\epsilon_{\mathrm{int}}$, which we
+measure rather than assume. Over the $20{,}943$ adoption evaluations of
+the main runs, the per-event absolute prediction error is
+$\bar\epsilon_{\mathrm{pred}}{=}0.008$ (p95 $0.020$) against a mean
+realized gain of $0.004$; a worst-case accumulation over
+$T|\mathcal I|$ terms is therefore vacuous, and we do not claim it.
+What the deployment relies on -- and what the data support -- is that
+the errors are unbiased and rank-consistent: the signed bias is only
+$+11\%$ of the mean per-event gain, and the decile-level calibration of
+predicted against realized gains is monotone
+(Fig.~\ref{fig:calib}), so prediction errors cancel across events
+instead of compounding, and the measured interaction term
+($\bar\epsilon_{\mathrm{int}}{=}0.058$ over $500$ concurrent-delivery
+probes) remains an order of magnitude below the per-round utility.
+
+% ----------------------------------------------------------------------
+% 4) BASELINE FAIRNESS + NEW BENCHMARKS  (extend Sec. Benchmarks)
+% (a) budget-ordering clarification, (b) adaptation-scope honesty,
+% (c) descriptions of the six new baselines now in sim/face.py
+%     (results land in newnewdata/metrics_v2x_real_kitti_newbase.npz).
+% ----------------------------------------------------------------------
+% (a) append to the benchmark preamble:
+When a contact budget cannot carry all offered encoders, every scheme
+ranks its candidates by its own criterion and admits them greedily
+under the same per-contact airtime knapsack and half-duplex matching as
+FACE; demand-blind schemes (Cached-DFL, V2V) admit an arbitrary
+feasible subset, matching their demand-blind semantics.
+% (b) append after the mmFedMC/AutoFed items:
+mmFedMC and AutoFed are server-based multimodal FL frameworks; we adapt
+their \emph{selection principles} (contribution-per-communication-cost
+and source-quality ranking, respectively) to the decentralized setting
+and grant both the full Sec.~III protocol, so they differ from FACE
+only in the forwarding value. Their server-side components (global
+client sampling, cross-client imputation) have no decentralized
+counterpart and are not ported.
+% (c) additional benchmarks:
+(6)~\textbf{PRoPHET}~\cite{prophet}: DTN routing adapted to encoder
+forwarding -- per-pair delivery predictabilities with encounter
+reinforcement, aging, and transitivity
+($P_{\mathrm{init}}{=}0.75$, $\gamma{=}0.98$, $\beta{=}0.25$); an
+encoder is forwarded to neighbors by their predictability of reaching a
+current demander;
+(7)~\textbf{Spray-and-Wait}~\cite{spraywait}: binary spray of the $K_x$
+replication tickets (half the remaining tickets per encounter),
+followed by a direct-delivery wait phase;
+(8)~\textbf{Cached-DFL-LFU/-rand}: Cached-DFL with LFU / random cache
+placement instead of LRU;
+(9)~\textbf{No-comm} and \textbf{Full-contact}: local-training-only
+lower bound and an unconstrained-communication upper bound (every
+publication reaches every compatible receiver each round), both under
+the identical evaluation-gated adoption protocol.

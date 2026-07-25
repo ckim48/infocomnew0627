@@ -17,11 +17,20 @@ STYLE = {
     "Learning-aware":   dict(color="#7f7f7f", marker="d", ls=":"),
     "mmFedMC":          dict(color="#e8850c", marker="v", ls=(0, (5, 2))),
     "AutoFed":          dict(color="#8c2fbf", marker="P", ls=(0, (1, 1))),
+    "PRoPHET":          dict(color="#17becf", marker="<", ls=(0, (3, 1))),
+    "SprayWait":        dict(color="#bcbd22", marker=">", ls=(0, (4, 2))),
+    "Caching-LFU":      dict(color="#6b8ecf", marker="x", ls="--"),
+    "Caching-rand":     dict(color="#9edae5", marker="+", ls="--"),
+    "NoComm":           dict(color="#000000", marker=".", ls=":"),
+    "FullContact":      dict(color="#7f3f00", marker="*", ls="-"),
 }
 
 # Display name for each scheme in legends/labels (the proposed scheme is FACE).
 DISPLAY = {"Proposed": "FACE", "Caching-assisted": "Cached-DFL",
-           "V2V-aware": "V2V", "Learning-aware": "Learning"}
+           "V2V-aware": "V2V", "Learning-aware": "Learning",
+           "SprayWait": "Spray-and-Wait", "Caching-LFU": "Cached-DFL (LFU)",
+           "Caching-rand": "Cached-DFL (rand)", "NoComm": "No-comm",
+           "FullContact": "Full-contact"}
 
 
 def disp(scheme):

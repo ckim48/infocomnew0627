@@ -8,10 +8,14 @@
 We evaluate FACE on a real vehicular mobility trace of the
 Seoul--Gangnam district, the operating area of the robotaxi service in
 Sec.~II, reconstructed over the real road network (38{,}091 road
-segments) from open Seoul traffic data. The trace contains
-$|\mathcal I|=180$ vehicles sampled at $\Delta_{\mathrm{rd}}\approx10$\,s;
-training runs for $T=250$ rounds by replaying the trace window
-cyclically (steady-state traffic). Vehicles communicate within
+segments) from open Seoul traffic data. The trace is a $15$-minute
+live window ($89$ snapshots at $\Delta_{\mathrm{rd}}\approx10$\,s)
+with $|\mathcal I|=180$ vehicles present throughout; since encoder
+training converges over more rounds than one window, the $T=250$
+rounds replay the window cyclically ($\approx2.8$ passes,
+steady-state traffic), which keeps every per-round contact graph
+real while no scheme's decision horizon spans a cycle ($H=6$,
+version lifetime $15\ll89$ rounds). Vehicles communicate within
 $r_{\mathrm{V2V}}=150$\,m, a transmission succeeds with probability
 $1-(d_{ij}/r_{\mathrm{V2V}})^2$, and each contact provides a budget
 $\widehat B_{ij}$ of $1.6$\,s at an effective sidelink rate of
