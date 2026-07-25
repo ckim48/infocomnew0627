@@ -14,7 +14,8 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 NAME = sys.argv[1] if len(sys.argv) > 1 else "evening45"
-assert NAME in ("evening45", "night45"), NAME
+assert NAME in ("evening45", "night45",
+                "evening45_sat", "night45_sat"), NAME
 OUT = "newnewdata"
 RAW = f"data/gangnam/seoul_v2x_trace_{NAME}.npz"
 CACHE = os.path.join(OUT, f"v2x_seoul_trace_{NAME}.npz")
