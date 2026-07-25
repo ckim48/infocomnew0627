@@ -30,7 +30,7 @@ through data volume and sensing quality: data-rich vehicles draw a
 quality factor $Q\sim\mathcal U(0.8,1)$, the rest
 $Q\sim\mathcal U(0.1,0.3)$, and low-quality vehicles train on corrupted
 inputs (camera: additive noise $\sigma{=}0.25$ with $0.6\times$
-brightness; LiDAR: $60\%$ point dropout). Encoders are
+brightness; LiDAR: $40\%$ point dropout). Encoders are
 modality-specific networks producing fixed-width features, fused by a
 two-layer MLP head (concatenation $\to 64 \to$ classes). Each round
 executes (i)~one local epoch of Adam (lr $10^{-3}$, batch $\le 64$);
