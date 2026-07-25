@@ -1,0 +1,142 @@
+% ======================================================================
+% Simulation-settings detail subsubsections answering the five review
+% concerns (trace provenance, 89->250 replay, payload naming, per-round
+% compute feasibility, data partition). Every number is measured from
+% the repo; code pointers in comments. Drop into Sec. Simulation
+% Settings (or an appendix) after the existing run-in paragraphs.
+% ======================================================================
+
+% ---------------------------------------------------------------- (1)
+% sources: sim/seoul_v2x.py (collect_trace), sim/v2x_trace.py
+\subsubsection{Mobility Trace: Provenance and Reconstruction}
+The mobility input is a \emph{raw position trace}, not a synthetic
+reconstruction: we polled the Seoul Metropolitan Government's open V2X
+vehicle-status API (T-Data feed of commercial V2X terminals), which
+returns per-terminal WGS84 positions, every $10$\,s over a $15$-minute
+weekday evening-peak window, yielding $89$ snapshots at a median
+interval of $\Delta_{\mathrm{rd}}{=}10.2$\,s covering $1{,}042$
+distinct terminals. Trace processing is limited to map matching:
+positions are filtered to the central-Seoul road network (an
+OpenStreetMap import with $38{,}091$ directed segments), sub-window
+gaps of a terminal are linearly interpolated (clamped at the window
+ends), and each position is snapped to the nearest road segment via a
+KD-tree over points sampled every $10$\,m along every segment. There is
+\emph{no} route assignment and \emph{no} speed generation: speeds are
+finite differences of consecutive observed positions. Of the observed
+terminals, $890$ are present in $\ge 90\%$ of the snapshots; the
+$|\mathcal I|{=}180$ cohort is a seeded subsample of these persistent
+terminals. The contact graph is recomputed at every snapshot: vehicles
+within $r_{\mathrm{V2V}}{=}150$\,m are in contact, a transfer succeeds
+with probability $1-(d_{ij}/r_{\mathrm{V2V}})^2$, and each directed
+contact carries an airtime budget of $1.6$\,s.
+
+% ---------------------------------------------------------------- (2)
+% sources: sim/run_v2x_real.py (k % Krounds, warmup_rounds=40),
+% sim/hgat.py (train on 40-snapshot prefix), sim/face.py (RidgeGain
+% prequential recalibration)
+\subsubsection{Round-to-Trace Mapping}
+FL training runs for $T{=}250$ rounds, while the trace window has $89$
+snapshots; round $k$ uses snapshot $k \bmod 89$, i.e., the window is
+\emph{replayed cyclically} ($\approx 2.8$ passes, wrapping at rounds
+$89$ and $178$) under a steady-state traffic assumption. We neither
+interpolate between snapshots nor generate synthetic continuation
+trajectories -- every round's contact graph is an observed one. Replay
+cannot leak future-contact information into the predictors:
+(i)~the mobility predictor behind $\Gamma$ is trained once,
+self-supervised, on the \emph{first $40$ snapshots only} (a warm-up
+prefix of observed road-segment transitions) and afterwards maps the
+\emph{current} traffic state to transition scores -- it receives no
+future or cycle-index input, so an identical state simply reproduces an
+identical prediction; (ii)~the gain predictor is a sliding-window ridge
+whose recalibration is prequential (fitted only on pairs observed
+before the predictions it transforms); and (iii)~no decision horizon
+spans a cycle: the future-contact valuation uses $H{=}6$ rounds and
+encoder versions expire after $15$ rounds, both $\ll 89$. The two wrap
+discontinuities affect all schemes identically.
+
+% ---------------------------------------------------------------- (3)
+% sources: sim/face.py (Version payload = state_dict snapshot),
+% sim/real_fl.py (commit: FedAvg of state dicts), sim/config.py
+% (encoder_size). ACTION: replace every "encoded feature sizes" in the
+% manuscript with "encoder parameter sizes".
+\subsubsection{What Is Exchanged}
+Vehicles exchange \emph{encoder parameters}, never features: a
+published version is an immutable snapshot of the source's encoder
+weights, and an adopting receiver merges the snapshot into its own
+encoder by data-size-weighted FedAvg. The transmission sizes
+$S_x{=}12/18/6$\,MB (camera/LiDAR/radar) are therefore \emph{encoder
+parameter payload sizes}, chosen to represent production-scale
+perception backbones; the earlier wording ``encoded feature sizes'' was
+a misnomer and has been corrected. For tractability, the encoders
+\emph{trained} in simulation are compact proxies of such backbones
+(camera: 3-block CNN on $3{\times}32{\times}32$ crops, $27.7$k
+parameters; LiDAR: PointNet-style MLP with symmetric max pooling over
+in-box points, $18.8$k; radar: PointNet-style over sparse returns
+$[x,y,v_x,v_y,\mathrm{rcs}]$, $6.5$k; all to $64$-d features), while
+communication and caching are costed at the production-representative
+payload sizes above.
+
+% ---------------------------------------------------------------- (4)
+% sources: measured from newnewdata sweep logs (250-round FACE runs
+% incl. per-round test evaluation): N=90/135/180 -> 5.7/8.3/~11 min
+\subsubsection{Per-Round Computation}
+Rounds are logical protocol steps aligned to the $10.2$\,s snapshot
+cadence; within a round each vehicle performs (i)~one local epoch of
+Adam on a batch of $\le 64$ of its local objects, (ii)~the contact
+phase, whose per-contact scheduler solves a $0/1$ knapsack over at most
+$32$ airtime slots and a small eviction DP over the receiver's cached
+copies, and (iii)~evaluation-gated adoption: at most
+$N_{\mathrm{ev}}{=}6$ candidate encoders are validated by swapping them
+into the frozen fusion stack on the shared validation split, plus an
+$O(d^2)$ ridge update. With the compact proxy encoders this is
+milliseconds of device time: simulating the \emph{entire} $180$-vehicle
+cohort -- including the per-round test-set evaluation used only for
+reporting -- takes $1.4$--$2.6$\,s per round on one RTX~3080, i.e.,
+under ${\sim}15$\,ms of GPU time per vehicle per round, three orders of
+magnitude inside the $10.2$\,s budget (and the wall-clock scales
+linearly in the cohort size: $5.7/8.3/{\sim}11$ minutes per
+$250$-round run at $N{=}90/135/180$). We do not claim real-time
+feasibility for production-scale backbones; with heavier encoders,
+local training would proceed asynchronously across several
+communication rounds, and only the exchange protocol is tied to the
+snapshot cadence.
+
+% ---------------------------------------------------------------- (5)
+% sources: sim/kitti_dataset.py (build), sim/real_fl.py (_prep_data,
+% RealMFL.__init__, _batch), sim/multimodal_model.py, sim/config.py
+\subsubsection{Datasets, Partition, and Reporting}
+\emph{Object extraction.} KITTI: from each labeled frame we extract
+every Car/Pedestrian/Cyclist object with a 2D box of $\ge 20$\,px and
+$\ge 8$ LiDAR points inside its 3D box (calibrated
+camera--LiDAR transform); the camera modality is the box crop resized
+to $32{\times}32$, the LiDAR modality is the in-box point set. nuScenes
+is processed analogously with camera, LiDAR, and per-object radar
+returns; classes with fewer than $800$ objects (Cyclist) are dropped.
+\emph{Class balance.} Every retained class is downsampled to the
+smallest one (KITTI: $1{,}437$ per class over $3$ classes; nuScenes:
+$2{,}052$ per class over $2$), removing label imbalance by
+construction. A seeded permutation splits the pool $68/12/20\%$ into
+train/validation/test; validation and test are shared across vehicles
+and never corrupted.
+\emph{Per-vehicle partition (non-IID).} Local sets are disjoint draws
+from the training pool: the $15\%$ data-rich vehicles split the
+residual pool equally (${\approx}83$ objects each on KITTI,
+${\approx}76$ on nuScenes), while every remaining vehicle holds only
+$4$--$11$ objects, freezes its encoders, and trains its fusion head
+only. Label distributions are uniform; heterogeneity is in data volume,
+modality availability ($\Pr(\text{LiDAR}){=}0.85$,
+$\Pr(\text{radar}){=}0.7$), and sensing quality.
+\emph{Sensing quality.} Each vehicle--modality pair draws a quality
+factor ($\mathcal U(0.8,1)$ rich, $\mathcal U(0.1,0.3)$ otherwise);
+low-quality vehicles train on corrupted inputs -- camera: additive
+Gaussian noise ($\sigma{=}0.25$) with $0.6\times$ brightness; LiDAR:
+$60\%$ random point dropout; radar: additive noise -- applied to
+training data only.
+\emph{Fusion.} Modality features ($64$-d each) are concatenated and
+classified by a per-vehicle two-layer MLP head
+($\mathrm{concat}\!\to\!64\!\to\!\text{classes}$, $8.5$k parameters).
+\emph{Runs.} All reported numbers average \emph{three} independent
+runs with seeds $\{2026, 2027, 2028\}$, which re-draw the data
+assignment, modality availability, architecture families, and matching
+randomness; $\pm$ is the standard deviation over these runs (an
+eight-seed replication of the KITTI comparison shows the same ordering).
