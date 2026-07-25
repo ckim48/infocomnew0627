@@ -1,37 +1,35 @@
-"""Third mobility window: Monday MORNING-peak Seoul V2X trace + full 6-scheme
-real-backend comparison. Fired by cron on 2026-07-27 08:30 KST; self-guarding,
-so a re-fire (cron matches the date every year) is a no-op once done.
+"""45-minute NO-REPLAY window runner: collect ~265 snapshots (>= T=250, so
+every FL round uses a distinct observed snapshot) and run the full 6-scheme
+x 3-seed comparison on BOTH datasets.
 
-Collects 45 minutes (~265 snapshots at 10 s), so K >= T=250 and the FL run
-uses every snapshot exactly once -- NO cyclic replay. Comparing this
-full-horizon window against the replayed evening/night windows empirically
-answers the "does replay distort mobility realism" concern."""
+Fired by cron on Mon 2026-07-27 (weekday, matching the original windows):
+  18:42 KST  ->  python3 newnewdata/window45.py evening45   (evening peak)
+  23:36 KST  ->  python3 newnewdata/window45.py night45     (late-night off-peak)
+
+Self-guarding per output file, so re-fires are no-ops once done."""
 import os, sys, time, traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
+NAME = sys.argv[1] if len(sys.argv) > 1 else "evening45"
+assert NAME in ("evening45", "night45"), NAME
 OUT = "newnewdata"
-RAW = "data/gangnam/seoul_v2x_trace_mon_morning.npz"
-CACHE = os.path.join(OUT, "v2x_seoul_trace_morning.npz")
-OUT_NPZS = [os.path.join(OUT, f"metrics_v2x_real_{ds}_morning.npz")
-            for ds in ("kitti", "nuscenes")]
+RAW = f"data/gangnam/seoul_v2x_trace_{NAME}.npz"
+CACHE = os.path.join(OUT, f"v2x_seoul_trace_{NAME}.npz")
 
 
 def log(msg):
-    print(f"[{time.strftime('%m-%d %H:%M:%S')}] {msg}", flush=True)
+    print(f"[{time.strftime('%m-%d %H:%M:%S')}] [{NAME}] {msg}", flush=True)
 
-
-if all(os.path.exists(p) for p in OUT_NPZS):
-    log("morning metrics exist, nothing to do")
-    sys.exit(0)
 
 try:
     if not os.path.exists(RAW):
         from sim.seoul_v2x import collect_trace
-        log("collecting Monday morning-peak V2X window (2700 s, no-replay run)")
+        log("collecting 2700 s (~265 snapshots, no-replay horizon)")
         collect_trace(duration_s=2700, interval_s=10, out=RAW)
+
     import numpy as np
     from sim.config import Config
     from sim.v2x_trace import build_v2x_trace
@@ -40,16 +38,17 @@ try:
     cfg = Config(); cfg.results_dir = OUT
     tr = build_v2x_trace(cfg, cache=CACHE, v2x_file=RAW)
     n = tr["veh_xy"].shape[1]
-    log(f"morning trace: N={n}, K={tr['veh_seg'].shape[0]}")
-    if n < 60:
+    log(f"trace: N={n}, K={tr['veh_seg'].shape[0]}")
+    if n < 60:                       # strict 45-min presence: relax coverage
         os.remove(CACHE)
         tr = build_v2x_trace(cfg, cache=CACHE, v2x_file=RAW, min_cov=0.7)
         n = tr["veh_xy"].shape[1]
-        log(f"morning trace rebuilt with min_cov=0.7: N={n}")
+        log(f"trace rebuilt with min_cov=0.7: N={n}")
     R.build_v2x_trace = lambda c: build_v2x_trace(
         c, cache=CACHE, v2x_file=RAW, verbose=False)
+
     for ds in ("kitti", "nuscenes"):
-        out_npz = os.path.join(OUT, f"metrics_v2x_real_{ds}_morning.npz")
+        out_npz = os.path.join(OUT, f"metrics_v2x_real_{ds}_{NAME}.npz")
         if os.path.exists(out_npz):
             log(f"{ds}: metrics exist, skipping")
             continue
@@ -57,7 +56,7 @@ try:
         t0 = time.time()
         R.run(cfg=cfg2, seeds=[2026, 2027, 2028], dataset=ds, rounds=250,
               num_vehicles=min(180, n), merge=True,
-              out_name=f"metrics_v2x_real_{ds}_morning.npz")
+              out_name=f"metrics_v2x_real_{ds}_{NAME}.npz")
         log(f"{ds}: done in {(time.time() - t0) / 60:.0f} min")
 except Exception:
     log(f"FAILED\n{traceback.format_exc()}")
