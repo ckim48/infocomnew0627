@@ -1,6 +1,11 @@
 """Third mobility window: Monday MORNING-peak Seoul V2X trace + full 6-scheme
 real-backend comparison. Fired by cron on 2026-07-27 08:30 KST; self-guarding,
-so a re-fire (cron matches the date every year) is a no-op once done."""
+so a re-fire (cron matches the date every year) is a no-op once done.
+
+Collects 45 minutes (~265 snapshots at 10 s), so K >= T=250 and the FL run
+uses every snapshot exactly once -- NO cyclic replay. Comparing this
+full-horizon window against the replayed evening/night windows empirically
+answers the "does replay distort mobility realism" concern."""
 import os, sys, time, traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,8 +29,8 @@ if os.path.exists(OUT_NPZ):
 try:
     if not os.path.exists(RAW):
         from sim.seoul_v2x import collect_trace
-        log("collecting Monday morning-peak V2X window (900 s)")
-        collect_trace(duration_s=900, interval_s=10, out=RAW)
+        log("collecting Monday morning-peak V2X window (2700 s, no-replay run)")
+        collect_trace(duration_s=2700, interval_s=10, out=RAW)
     import numpy as np
     from sim.config import Config
     from sim.v2x_trace import build_v2x_trace
