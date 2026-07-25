@@ -130,7 +130,7 @@ $\Pr(\text{radar}){=}0.7$), and sensing quality.
 factor ($\mathcal U(0.8,1)$ rich, $\mathcal U(0.1,0.3)$ otherwise);
 low-quality vehicles train on corrupted inputs -- camera: additive
 Gaussian noise ($\sigma{=}0.25$) with $0.6\times$ brightness; LiDAR:
-$60\%$ random point dropout; radar: additive noise -- applied to
+$40\%$ random point dropout; radar: additive noise -- applied to
 training data only.
 \emph{Fusion.} Modality features ($64$-d each) are concatenated and
 classified by a per-vehicle two-layer MLP head
