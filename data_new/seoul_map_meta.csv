@@ -1,0 +1,26 @@
+key,value
+crs,EPSG:3857 (Web Mercator); lon/lat are WGS84
+xlim_min,14132097.3
+xlim_max,14154030.2
+ylim_min,4499655.3
+ylim_max,4517620.9
+pad_m,400
+basemap_provider,CartoDB Positron
+basemap_tile_url,https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
+basemap_zoom,15
+panel_order,FACE|Cached-DFL|V2V-aware|Learning-aware (2x2)
+colormap,RdYlGn
+utility_vmin,0.2
+utility_vmax,1.0
+realacc_vmin,0.05
+realacc_vmax,0.95
+car_length_m,522.2
+car_length_rule,(xlim_max - xlim_min) / 42
+halo,"scatter s=80, alpha=0.20, same colormap"
+car_body_style,"facecolor=cmap(norm(value)), edge black lw 0.4"
+car_cabin_style,"facecolor black, alpha 0.35"
+proposed_border,#1f77b4 lw 2.2 (other panels: grey 0.45 lw 0.8)
+colorbar,"horizontal, fraction 0.045, pad 0.04, aspect 45"
+figsize_in,6.6 x 6.3
+utility_source,"results/v2x_map_cache.npz (abstract q_eff, seed 2026)"
+realacc_source,results/metrics_v2x_real_kitti_map400.npz (400-round real run)
