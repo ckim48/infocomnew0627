@@ -19,6 +19,12 @@ assert NAME in ("evening45", "night45",
 OUT = "newnewdata"
 RAW = f"data/gangnam/seoul_v2x_trace_{NAME}.npz"
 CACHE = os.path.join(OUT, f"v2x_seoul_trace_{NAME}.npz")
+# Weekday (Monday) windows: 90 min so a 400-round no-replay run has
+# convergence headroom under sparse-cohort conditions (the Saturday
+# 45-min probes showed curves still rising at round 250).
+LONG = NAME in ("evening45", "night45")
+DUR = 5400 if LONG else 2700
+ROUNDS = 400 if LONG else 250
 
 
 def log(msg):
@@ -28,8 +34,8 @@ def log(msg):
 try:
     if not os.path.exists(RAW):
         from sim.seoul_v2x import collect_trace
-        log("collecting 2700 s (~265 snapshots, no-replay horizon)")
-        collect_trace(duration_s=2700, interval_s=10, out=RAW)
+        log(f"collecting {DUR} s (~{DUR // 10} snapshots, no-replay horizon)")
+        collect_trace(duration_s=DUR, interval_s=10, out=RAW)
 
     import numpy as np
     from sim.config import Config
@@ -54,10 +60,11 @@ try:
             log(f"{ds}: metrics exist, skipping")
             continue
         cfg2 = Config(); cfg2.results_dir = OUT
+        T = min(ROUNDS, tr["veh_seg"].shape[0])   # keep the run replay-free
         t0 = time.time()
-        R.run(cfg=cfg2, seeds=[2026, 2027, 2028], dataset=ds, rounds=250,
+        R.run(cfg=cfg2, seeds=[2026, 2027, 2028], dataset=ds, rounds=T,
               num_vehicles=min(180, n), merge=True,
               out_name=f"metrics_v2x_real_{ds}_{NAME}.npz")
-        log(f"{ds}: done in {(time.time() - t0) / 60:.0f} min")
+        log(f"{ds}: T={T} rounds, done in {(time.time() - t0) / 60:.0f} min")
 except Exception:
     log(f"FAILED\n{traceback.format_exc()}")
