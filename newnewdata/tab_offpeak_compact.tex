@@ -12,13 +12,13 @@
         & \multirow{2}{*}{\textsc{Accuracy}}
         & \multirow{2}{*}{\textsc{Loss}}
         & \textsc{Rounds.}
-        & \textsc{Comm.} \\
+        & \shortstack{\textsc{Delivery}\\@$d{=}20$ (\%)} \\
 
         &
         &
         &
         & @$\tau$ $\downarrow$
-        & @$\tau$ (GB) $\downarrow$ \\
+        & $\uparrow$ \\
         \midrule
 
         \multirow{6}{*}{\textsc{KITTI}}
@@ -26,37 +26,37 @@
         & $50.1 \pm 1.8$
         & 0.283
         & \textsc{N/R}
-        & $>50.6$ \\
+        & 41.3 \\
 
         & \textsc{V2V}
         & $50.2 \pm 1.5$
         & 0.280
         & \textsc{N/R}
-        & $>48.7$ \\
+        & 39.2 \\
 
         & \textsc{Learning}
         & $51.9 \pm 2.6$
         & 0.269
-        & \textsc{N/R}
-        & $>31.4$ \\[1pt]
+        & 243
+        & 37.6 \\[1pt]
 
         & \textsc{mmFedMC}
         & $50.4 \pm 1.3$
         & 0.277
         & \textsc{N/R}
-        & $>41.6$ \\
+        & 45.8 \\
 
         & \textsc{AutoFed}
         & $50.4 \pm 1.7$
         & 0.278
         & \textsc{N/R}
-        & $>48.7$ \\[1pt]
+        & 46.6 \\[1pt]
 
         & \textsc{FACE}
         & $\mathbf{53.5 \pm 1.8}$
         & \textbf{0.256}
-        & \textbf{186}
-        & \textbf{33.7} \\
+        & \textbf{212}
+        & \textbf{51.5} \\
 
         \midrule
 
@@ -65,41 +65,44 @@
         & $67.9 \pm 2.8$
         & 0.133
         & \textsc{N/R}
-        & $>51.3$ \\
+        & 40.0 \\
 
         & \textsc{V2V}
         & $67.3 \pm 2.6$
         & 0.137
         & \textsc{N/R}
-        & $>49.9$ \\
+        & 34.7 \\
 
         & \textsc{Learning}
         & $68.1 \pm 2.3$
         & 0.133
-        & 181
-        & \textbf{23.8} \\[1pt]
+        & 246
+        & 36.8 \\[1pt]
 
         & \textsc{mmFedMC}
         & $67.7 \pm 3.2$
         & 0.134
         & \textsc{N/R}
-        & $>20.7$ \\
+        & 33.4 \\
 
         & \textsc{AutoFed}
         & $67.5 \pm 3.2$
         & 0.135
         & \textsc{N/R}
-        & $>50.6$ \\[1pt]
+        & 43.6 \\[1pt]
 
         & \textsc{FACE}
         & $\mathbf{68.6 \pm 2.5}$
         & \textbf{0.130}
-        & \textbf{170}
-        & 29.7 \\
+        & \textbf{235}
+        & \textbf{51.2} \\
 
         \bottomrule
         \multicolumn{6}{l}{
-            \scriptsize $\tau$: target accuracy; N/R: target accuracy not reached.
+            \scriptsize $\tau$: the strongest baseline's final accuracy, reached when the seed-averaged curve first attains it;
+        }\\
+        \multicolumn{6}{l}{
+            \scriptsize N/R: never attained. Delivery@$d{=}20$: $P$(useful delivery to a high-demand vehicle within $20$ rounds).
         }
     \end{tabular}
 \end{table}
