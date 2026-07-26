@@ -895,16 +895,16 @@ def fig_deadline_calib_2x2(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
             px.append(1e3 * pred[mm].mean())
             mu.append(1e3 * real[mm].mean())
             sd.append(1e3 * real[mm].std() / np.sqrt(mm.sum()))
+            _CAL_CSV.append((label, i + 1, f"{px[-1]:.4f}", f"{mu[-1]:.4f}",
+                             f"{sd[-1]:.4f}", int(mm.sum())))
         px, mu = np.array(px), np.array(mu)
         lim = 1.08 * max(px.max(), mu.max())
         ax.plot([0, lim], [0, lim], color="0.35", ls="--", lw=1.0,
                 label="Perfect calibration")
-        ax.fill_between(px, mu - sd, mu + sd,
-                        color=STY["Proposed"]["color"], alpha=0.15, lw=0)
-        ax.plot(px, mu, color=STY["Proposed"]["color"], marker="o",
-                markersize=3.5, markerfacecolor="white",
-                markeredgewidth=0.9, markevery=2, lw=1.7,
-                label="Realized (rolling mean)")
+        ax.errorbar(px, mu, yerr=sd, color=STY["Proposed"]["color"],
+                    marker="o", markersize=4.5, markerfacecolor="white",
+                    markeredgewidth=1.0, capsize=2.0, lw=1.6,
+                    label="Realized (equal-count bin mean)")
         ax.text(0.05, 0.94, f"{mu[-1] / max(mu[0], 1e-9):.1f}$\\times$ lift",
                 transform=ax.transAxes, ha="left", va="top", fontsize=9)
         ax.set_xlim(0, lim)
@@ -1037,16 +1037,16 @@ def fig_deadline_calib_split(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
             px.append(1e3 * pred[mm].mean())
             mu.append(1e3 * real[mm].mean())
             sd.append(1e3 * real[mm].std() / np.sqrt(mm.sum()))
+            _CAL_CSV.append((label, i + 1, f"{px[-1]:.4f}", f"{mu[-1]:.4f}",
+                             f"{sd[-1]:.4f}", int(mm.sum())))
         px, mu = np.array(px), np.array(mu)
         lim = 1.08 * max(px.max(), mu.max())
         ax.plot([0, lim], [0, lim], color="0.35", ls="--", lw=1.0,
                 label="Perfect calibration")
-        ax.fill_between(px, mu - sd, mu + sd,
-                        color=STY["Proposed"]["color"], alpha=0.15, lw=0)
-        ax.plot(px, mu, color=STY["Proposed"]["color"], marker="o",
-                markersize=3.5, markerfacecolor="white",
-                markeredgewidth=0.9, markevery=2, lw=1.7,
-                label="Realized (rolling mean)")
+        ax.errorbar(px, mu, yerr=sd, color=STY["Proposed"]["color"],
+                    marker="o", markersize=4.5, markerfacecolor="white",
+                    markeredgewidth=1.0, capsize=2.0, lw=1.6,
+                    label="Realized (equal-count bin mean)")
         ax.text(0.05, 0.94, f"{mu[-1] / max(mu[0], 1e-9):.1f}$\\times$ lift",
                 transform=ax.transAxes, ha="left", va="top", fontsize=9)
         ax.set_title(label, fontsize=12)
@@ -1398,7 +1398,7 @@ def _prequential_recal(c, warmup=0, min_n=200, every=100, nbins=10):
 _CAL_CSV = []
 
 
-def fig_calib_recal(warmup=30, nbins=10):
+def fig_calib_recal(warmup=30, nbins=6):
     """fig_seoul_calib with the predictor's online prequential monotone
     recalibration applied (reporting layer; ranking unchanged). Saves
     fig_seoul_calib_recal."""
@@ -1422,35 +1422,25 @@ def fig_calib_recal(warmup=30, nbins=10):
                                  f"results/metrics_v2x_real_{tag}_events.npz"))
         pred, real = _prequential_recal(z["Proposed__calib_all"],
                                         warmup=warmup, nbins=nbins)
-        # rolling quantile windows (30% of pairs, 15 centers): overlapping
-        # bins smooth the bin-noise wiggle of fixed deciles while keeping
-        # the equal-count calibration view
-        order = np.argsort(pred)
-        ps, rs = pred[order], real[order]
-        n = len(ps)
-        WIN, STEPS = 0.30, 15
-        px, mu, sd, cq, nn = [], [], [], [], []
-        for lo in np.linspace(0.0, 1.0 - WIN, STEPS):
-            a, b = int(lo * n), max(int((lo + WIN) * n), int(lo * n) + 1)
-            px.append(1e3 * ps[a:b].mean())
-            mu.append(1e3 * rs[a:b].mean())
-            sd.append(1e3 * rs[a:b].std() / np.sqrt(b - a))
-            cq.append(lo + WIN / 2)
-            nn.append(b - a)
-        px, mu, sd = np.array(px), np.array(mu), np.array(sd)
-        _CAL_CSV.extend([(label, f"{c:.3f}", f"{x:.4f}", f"{m:.4f}",
-                          f"{s:.4f}", num)
-                         for c, x, m, s, num in zip(cq, px, mu, sd, nn)])
+        q = np.quantile(pred, np.linspace(0, 1, nbins + 1))
+        px, mu, sd = [], [], []
+        for i in range(nbins):
+            mm = (pred >= q[i]) & ((pred < q[i + 1]) if i < nbins - 1
+                                   else (pred <= q[i + 1]))
+            px.append(1e3 * pred[mm].mean())
+            mu.append(1e3 * real[mm].mean())
+            sd.append(1e3 * real[mm].std() / np.sqrt(mm.sum()))
+            _CAL_CSV.append((label, i + 1, f"{px[-1]:.4f}", f"{mu[-1]:.4f}",
+                             f"{sd[-1]:.4f}", int(mm.sum())))
+        px, mu = np.array(px), np.array(mu)
         ax = axs[col]
         lim = 1.12 * max(px.max(), mu.max())
         ax.plot([0, lim], [0, lim], color="0.35", ls="--", lw=1.0,
                 label="Perfect calibration")
-        ax.fill_between(px, mu - sd, mu + sd,
-                        color=STY["Proposed"]["color"], alpha=0.15, lw=0)
-        ax.plot(px, mu, color=STY["Proposed"]["color"], marker="o",
-                markersize=3.5, markerfacecolor="white",
-                markeredgewidth=0.9, markevery=2, lw=1.7,
-                label="Realized (rolling mean)")
+        ax.errorbar(px, mu, yerr=sd, color=STY["Proposed"]["color"],
+                    marker="o", markersize=4.5, markerfacecolor="white",
+                    markeredgewidth=1.0, capsize=2.0, lw=1.6,
+                    label="Realized (equal-count bin mean)")
         ax.text(0.05, 0.94, f"{mu[-1] / max(mu[0], 1e-9):.1f}$\\times$ lift",
                 transform=ax.transAxes, ha="left", va="top", fontsize=9)
         ax.set_title(label, fontsize=12)
@@ -1477,7 +1467,7 @@ def fig_calib_recal(warmup=30, nbins=10):
     with open(os.path.join(ROOT, "data_new", "data0726_predict.csv"),
               "w", newline="") as f:
         w = _csv.writer(f)
-        w.writerow(["dataset", "center_quantile", "pred_gain_x1e3",
+        w.writerow(["dataset", "bin", "pred_gain_x1e3",
                     "realized_gain_x1e3", "sem_x1e3", "n_pairs"])
         w.writerows(_CAL_CSV)
     print("  saved fig_seoul_calib_recal + data_new/data0726_predict.csv")
