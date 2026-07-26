@@ -47,7 +47,8 @@ def stats(npz, tau_mode, want_delivery):
                  sd=A[:, -TAIL:].mean(1).std(),
                  loss=L[:, -TAIL:].mean(1).mean(),
                  rounds=np.mean(rr) if len(rr) == A.shape[0] else None,
-                 gb=np.mean(gg) if len(rr) == A.shape[0] else None)
+                 gb=np.mean(gg) if len(rr) == A.shape[0] else None,
+                 totalgb=float(M.sum(1).mean()) / 1024.0)
         if want_delivery:
             v["ud"] = 100 * d[f"{s}__usat_all"].mean()
             U = d[f"{s}__udeliv_all"]; pm = d[f"{s}__pmask_all"]
@@ -109,7 +110,7 @@ def emit(nk, nn, caption, label, mode, out_path):
                 loss = f"\\textbf{{{loss}}}"
             if hdr_tau:
                 if v["rounds"] is None:
-                    c4, c5 = r"\textsc{N/R}", "---"
+                    c4, c5 = r"\textsc{N/R}", f"$>{v['totalgb']:.1f}$"
                 else:
                     c4 = f"{v['rounds']:.0f}"; c5 = f"{v['gb']:.1f}"
                     if v["rounds"] == br:
@@ -133,7 +134,8 @@ def emit(nk, nn, caption, label, mode, out_path):
     a(r"        \multicolumn{6}{l}{")
     if hdr_tau:
         a(r"            \scriptsize $\tau$: final accuracy of the strongest"
-          r" baseline; N/R: not reached; ---: not applicable.")
+          r" baseline; N/R: not reached ($>$: traffic spent without"
+          r" reaching $\tau$).")
     else:
         a(r"            \scriptsize Useful-delivery ratio and windowed"
           r" $P$(useful delivery within $20$ rounds), high-demand vehicles.")
