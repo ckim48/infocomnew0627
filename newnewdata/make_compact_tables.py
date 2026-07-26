@@ -62,7 +62,7 @@ def stats(npz, tau_mode, want_delivery):
     return out, tau
 
 
-def emit(nk, nn, caption, label, mode, out_path):
+def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline"):
     hdr_tau = mode == "tau"
     L = []; a = L.append
     a(r"\begin{table}[t]"); a(r"    \centering")
@@ -86,7 +86,7 @@ def emit(nk, nn, caption, label, mode, out_path):
         a(r"        & $\uparrow$"); a(r"        & $\uparrow$ \\")
     a(r"        \midrule")
     for bi, (ds, npz) in enumerate([("KITTI", nk), ("nuScenes", nn)]):
-        st, tau = stats(npz, "bestbaseline" if hdr_tau else "best95",
+        st, tau = stats(npz, tau_mode if hdr_tau else "best95",
                         not hdr_tau)
         a("")
         a(f"        \\multirow{{{len(st)}}}{{*}}{{\\textsc{{{ds}}}}}")
@@ -132,10 +132,13 @@ def emit(nk, nn, caption, label, mode, out_path):
         print(f"  [{label}/{ds}] tau={tau:.4f}")
     a(r"        \bottomrule")
     a(r"        \multicolumn{6}{l}{")
-    if hdr_tau:
+    if hdr_tau and tau_mode == "bestbaseline":
         a(r"            \scriptsize $\tau$: final accuracy of the strongest"
           r" baseline; N/R: not reached ($>$: traffic spent without"
           r" reaching $\tau$).")
+    elif hdr_tau:
+        a(r"            \scriptsize $\tau$: target accuracy; N/R: target"
+          r" accuracy not reached.")
     else:
         a(r"            \scriptsize Useful-delivery ratio and windowed"
           r" $P$(useful delivery within $20$ rounds), high-demand vehicles.")
@@ -155,4 +158,5 @@ emit("newnewdata/metrics_v2x_real_kitti_night.npz",
      "newnewdata/metrics_v2x_real_nuscenes_night.npz",
      "Performance comparison on the Seoul V2X trace during late-night"
      " off-peak hours.",
-     "tab:seoul_night", "delivery", "newnewdata/tab_offpeak_compact.tex")
+     "tab:seoul_night", "tau", "newnewdata/tab_offpeak_compact.tex",
+     tau_mode="best95")
