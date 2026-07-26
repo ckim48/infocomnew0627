@@ -110,7 +110,7 @@ def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline"):
                 loss = f"\\textbf{{{loss}}}"
             if hdr_tau:
                 if v["rounds"] is None:
-                    c4, c5 = r"\textsc{N/R}", f"$>{v['totalgb']:.1f}$"
+                    c4, c5 = "$>250$", f"$>{v['totalgb']:.1f}$"
                 else:
                     c4 = f"{v['rounds']:.0f}"; c5 = f"{v['gb']:.1f}"
                     if v["rounds"] == br:
@@ -134,11 +134,11 @@ def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline"):
     a(r"        \multicolumn{6}{l}{")
     if hdr_tau and tau_mode == "bestbaseline":
         a(r"            \scriptsize $\tau$: final accuracy of the strongest"
-          r" baseline; N/R: not reached ($>$: traffic spent without"
-          r" reaching $\tau$).")
+          r" baseline; $>$: not reached within the $250$-round horizon"
+          r" (lower bounds).")
     elif hdr_tau:
-        a(r"            \scriptsize $\tau$: target accuracy; N/R: target"
-          r" accuracy not reached.")
+        a(r"            \scriptsize $\tau$: target accuracy; $>$: not"
+          r" reached within the $250$-round horizon (lower bounds).")
     else:
         a(r"            \scriptsize Useful-delivery ratio and windowed"
           r" $P$(useful delivery within $20$ rounds), high-demand vehicles.")
