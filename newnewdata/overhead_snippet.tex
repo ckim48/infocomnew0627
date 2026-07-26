@@ -1,0 +1,27 @@
+% Control-plane & computational overhead of FACE — measured 2026-07-26
+% (metadata model + trace contact counts; DP microbench at the code's
+% exact shapes; untrained-forward GAT timing on CPU; state accounting).
+% Sources: results/v2x_seoul_trace.npz (E=115 contacts/round),
+% sim/face.py DP shapes (cap 32 slots / 46 MB), sim/hgat.py HierGAT.
+\subsubsection{Control-Plane and Computational Overhead}
+FACE's coordination metadata is negligible relative to encoder
+payloads: a contact exchanges version headers (${\sim}24$\,B for each
+of the ${\sim}6$ held versions), per-modality demand and strength
+vectors, and the identity-free zone-mean reputation --
+${\approx}368$\,B per contact pair -- which over $250$ rounds at the
+measured $115$ contacts per round totals $10.6$\,MB, i.e., $0.012\%$
+of the $89$\,GB encoder traffic. Zone statistics are maintained
+locally as exponentially decayed counts (decay $0.97$) from each
+vehicle's own observations; versions carry immutable identifiers, so
+duplicated metadata is idempotent, staleness is bounded by the
+version lifetime, and the $\Gamma$-noise sweep bounds the impact of
+inconsistent statistics ($\le 2$\,pp at $1.0\sigma$ noise).
+Computation is equally light: the mobility predictor has $14$k
+parameters ($0.06$\,MB) and computing $\Gamma$ costs $1.5$\,ms per
+vehicle per round on a CPU; the per-contact airtime knapsack and
+eviction DP take $20$--$65\,\mu$s and $220\,\mu$s; per-vehicle state
+(zone statistics over $|\mathcal Z|{=}558$ cells) occupies $1.3$\,MB.
+End-to-end, simulating the entire $180$-vehicle fleet takes
+$1.4$--$2.6$\,s per round on one GPU and scales linearly in the
+cohort size ($5.7/8.3/{\sim}11$ minutes per $250$-round run at
+$N{=}90/135/180$).
