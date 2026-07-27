@@ -50,9 +50,11 @@ VALS = {
 VMIN, VMAX = 0.05, 0.95   # realacc3 colour scale (seoul_map_meta.csv)
 
 
-def draw(panels, nrows, ncols, out_name, slim=False):
+def draw(panels, nrows, ncols, out_name, slim=False, vmin=VMIN, vmax=VMAX,
+         cbar_label="Per-vehicle test accuracy (real data, 3 seeds)",
+         mean_label="mean acc"):
     import contextily as cx
-    cmap = plt.get_cmap("RdYlGn"); norm = Normalize(VMIN, VMAX)
+    cmap = plt.get_cmap("RdYlGn"); norm = Normalize(vmin, vmax)
     pad = 400
     xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
     ylim = (vm[:, 1].min() - pad, vm[:, 1].max() + pad)
@@ -81,7 +83,7 @@ def draw(panels, nrows, ncols, out_name, slim=False):
             alpha=0.35, edgecolors="none", zorder=5))
         ax.text(0.0, 1.045, name, transform=ax.transAxes,
                 ha="left", va="bottom", fontsize=10.5)
-        ax.text(1.0, 1.045, f"mean acc {acc.mean():.3f}",
+        ax.text(1.0, 1.045, f"{mean_label} {acc.mean():.3f}",
                 transform=ax.transAxes, ha="right", va="bottom", fontsize=9.5)
         for sp in ax.spines.values():
             if name == "FACE":
@@ -93,7 +95,7 @@ def draw(panels, nrows, ncols, out_name, slim=False):
     cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
                         fraction=0.045 if nrows > 1 else 0.06,
                         pad=0.04, aspect=45)
-    cbar.set_label("Per-vehicle test accuracy (real data, 3 seeds)")
+    cbar.set_label(cbar_label)
     out = os.path.join("Figures", out_name + ".png")
     for ext in ("png", "pdf"):
         fig.savefig(out.replace(".png", "." + ext), dpi=220,
@@ -103,6 +105,10 @@ def draw(panels, nrows, ncols, out_name, slim=False):
           " ".join(f"{n}={VALS[n].mean():.3f}" for n in panels))
 
 
-draw(["mmFedMC", "AutoFed"], 1, 2, "fig_seoul_map_newbase", slim=True)
-draw(["FACE", "Cached-DFL", "V2V-aware", "Learning-aware",
-      "mmFedMC", "AutoFed"], 3, 2, "fig_seoul_map_realacc6")
+if __name__ == "__main__":
+    # 1x2 accuracy variant kept under _realacc; the plain fig_seoul_map_newbase
+    # name is owned by the utility-metric version (make_map_newbase_util.py)
+    draw(["mmFedMC", "AutoFed"], 1, 2, "fig_seoul_map_newbase_realacc",
+         slim=True)
+    draw(["FACE", "Cached-DFL", "V2V-aware", "Learning-aware",
+          "mmFedMC", "AutoFed"], 3, 2, "fig_seoul_map_realacc6")
