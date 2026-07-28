@@ -14,7 +14,7 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 NAME = sys.argv[1] if len(sys.argv) > 1 else "evening45"
-assert NAME in ("evening45", "night45",
+assert NAME in ("evening45", "night45", "night45b",
                 "evening45_sat", "night45_sat"), NAME
 OUT = "newnewdata"
 RAW = f"data/gangnam/seoul_v2x_trace_{NAME}.npz"
@@ -22,7 +22,7 @@ CACHE = os.path.join(OUT, f"v2x_seoul_trace_{NAME}.npz")
 # Weekday (Monday) windows: 90 min so a 400-round no-replay run has
 # convergence headroom under sparse-cohort conditions (the Saturday
 # 45-min probes showed curves still rising at round 250).
-LONG = NAME in ("evening45", "night45")
+LONG = NAME in ("evening45", "night45", "night45b")
 DUR = 5400 if LONG else 2700
 ROUNDS = 400 if LONG else 250
 
