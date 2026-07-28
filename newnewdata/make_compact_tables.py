@@ -26,9 +26,10 @@ GROUP_END = {"Learning-aware", "AutoFed"}
 TAIL = 20
 
 
-def stats(npz, tau_mode, want_delivery, tau_fixed=None):
+def stats(npz, tau_mode, want_delivery, tau_fixed=None, exclude=()):
     d = np.load(npz)
-    ss = [s for s, _ in ORDER if f"{s}__acc_all" in d.files]
+    ss = [s for s, _ in ORDER
+          if f"{s}__acc_all" in d.files and s not in exclude]
     if tau_mode == "fixed":
         tau = tau_fixed
     elif tau_mode == "bestbaseline":
@@ -77,7 +78,7 @@ def stats(npz, tau_mode, want_delivery, tau_fixed=None):
 
 
 def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline",
-         taus=None):
+         taus=None, exclude=()):
     for p in (nk, nn):
         if not os.path.exists(p):
             print(f"  [{label}] SKIP: {p} not found yet")
@@ -108,7 +109,11 @@ def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline",
     for bi, (ds, npz) in enumerate([("KITTI", nk), ("nuScenes", nn)]):
         st, tau, horizon = stats(npz, tau_mode if hdr_tau else "best95",
                                  not hdr_tau,
-                                 tau_fixed=(taus or {}).get(ds))
+                                 tau_fixed=(taus or {}).get(ds),
+                                 exclude=exclude)
+        group_end = {"AutoFed",
+                     "Learning-aware" if "Learning-aware" in st
+                     else "V2V-aware"}
         a("")
         a(f"        \\multirow{{{len(st)}}}{{*}}{{\\textsc{{{ds}}}}}")
         ba = max(v["acc"] for v in st.values())
@@ -146,7 +151,7 @@ def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline",
                     c5 = f"\\textbf{{{c5}}}"
             a(f"        & \\textsc{{{disp}}}"); a(f"        & {acc}")
             a(f"        & {loss}"); a(f"        & {c4}")
-            a(f"        & {c5}" + (r" \\[1pt]" if s in GROUP_END else r" \\"))
+            a(f"        & {c5}" + (r" \\[1pt]" if s in group_end else r" \\"))
             a("")
         if bi == 0:
             a(r"        \midrule")
@@ -198,10 +203,10 @@ emit("newnewdata/metrics_v2x_real_kitti_evening45.npz",
      "Performance comparison on the Seoul V2X trace during the evening"
      " rush-hour peak (90-min replay-free window).",
      "tab:seoul_results", "tau", "newnewdata/tab_peak_fixedtau.tex",
-     tau_mode="fixed", taus=FIXED_TAUS)
+     tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
 emit("newnewdata/metrics_v2x_real_kitti_night45.npz",
      "newnewdata/metrics_v2x_real_nuscenes_night45.npz",
      "Performance comparison on the Seoul V2X trace during late-night"
      " off-peak hours (90-min replay-free window).",
      "tab:seoul_night", "tau", "newnewdata/tab_offpeak_fixedtau.tex",
-     tau_mode="fixed", taus=FIXED_TAUS)
+     tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
