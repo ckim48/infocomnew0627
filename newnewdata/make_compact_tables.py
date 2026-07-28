@@ -20,7 +20,7 @@ os.chdir(ROOT)
 import numpy as np
 
 ORDER = [("Caching-assisted", "Cached-DFL"), ("V2V-aware", "V2V"),
-         ("Learning-aware", "Learning"), ("mmFedMC", "mmFedMC"),
+         ("Learning-aware", "Learning"), ("mmFedMC", "MFedMC"),
          ("AutoFed", "AutoFed"), ("Proposed", "FACE")]
 GROUP_END = {"Learning-aware", "AutoFed"}
 TAIL = 20
