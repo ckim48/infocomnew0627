@@ -143,6 +143,8 @@ def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline",
                         c4 = f"\\textbf{{{c4}}}"
                     if v["gb"] == bg:
                         c5 = f"\\textbf{{{c5}}}"
+                        if tau_mode == "fixed" and s != "Proposed":
+                            c5 += r"$^{\dagger}$"
             else:
                 c4 = f"{v['ud']:.1f}"; c5 = f"{v['d20']:.1f}"
                 if abs(v["ud"] - bu) < 1e-9:
@@ -163,7 +165,8 @@ def emit(nk, nn, caption, label, mode, out_path, tau_mode="bestbaseline",
                       for ds in ("KITTI", "nuScenes"))
         a(f"            \\scriptsize $\\tau$: pre-specified target accuracy"
           f" ({tt}); $>$: not reached within the ${horizon}$-round horizon"
-          f" (lower bounds).")
+          f" (lower bounds). $\\dagger$: sends one encoder per contact --"
+          f" fewest bytes, but lowest accuracy and latest arrival.")
     elif hdr_tau and tau_mode == "bestbaseline":
         a(r"            \scriptsize $\tau$: final accuracy of the strongest"
           r" baseline; $>$: not reached within the $%d$-round horizon"
