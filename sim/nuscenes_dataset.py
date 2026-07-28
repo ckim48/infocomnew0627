@@ -26,7 +26,26 @@ RADARS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT",
 NRAD = 16                     # radar returns kept per object (zero-padded)
 
 
+# NUSC_FINE=1 switches to the fine-grained vehicle split: Car (cars only) vs
+# Heavy (truck/bus/construction/trailer) vs Pedestrian. Distinguishing cars
+# from heavy vehicles is a harder task than the default car-vs-pedestrian
+# while keeping ~600 samples per balanced class (vs 320 with Cyclist).
+FINE = os.environ.get("NUSC_FINE") == "1"
+if FINE:
+    CLASSES = ["Car", "Heavy", "Pedestrian"]
+    CLS_IDX = {c: i for i, c in enumerate(CLASSES)}
+
+
 def _map_class(cat):
+    if FINE:
+        if cat.startswith("vehicle.car") or cat.startswith("vehicle.van"):
+            return CLS_IDX["Car"]
+        if cat.startswith(("vehicle.truck", "vehicle.bus",
+                           "vehicle.construction", "vehicle.trailer")):
+            return CLS_IDX["Heavy"]
+        if cat.startswith("human.pedestrian"):
+            return CLS_IDX["Pedestrian"]
+        return None
     if cat.startswith("vehicle.car") or cat.startswith("vehicle.truck") \
             or cat.startswith("vehicle.van"):
         return CLS_IDX["Car"]
@@ -85,7 +104,8 @@ def _radar_points(nusc, sample, ann_token, scale=1.6):
     return q[idx].astype(np.float32)
 
 
-def build(cache="results/nuscenes_mm.npz", min_pts=5, min_box=12,
+def build(cache="results/nuscenes_mm_fine.npz" if FINE
+          else "results/nuscenes_mm.npz", min_pts=5, min_box=12,
           with_radar=False):
     if with_radar:
         cache = cache.replace(".npz", "3.npz")
