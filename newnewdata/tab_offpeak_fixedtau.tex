@@ -1,0 +1,105 @@
+\begin{table}[t]
+    \centering
+\caption{Performance comparison on the Seoul V2X trace during late-night off-peak hours (90-min replay-free window).}
+    \label{tab:seoul_night}
+    \footnotesize
+    \renewcommand{\arraystretch}{1.0}
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{c|c|c|c|c|c}
+        \toprule
+        \multirow{2}{*}{\textsc{Dataset}}
+        & \multirow{2}{*}{\textsc{Method}}
+        & \multirow{2}{*}{\textsc{Accuracy}}
+        & \multirow{2}{*}{\textsc{Loss}}
+        & \textsc{Rounds.}
+        & \textsc{Comm.} \\
+
+        &
+        &
+        &
+        & @$\tau$ $\downarrow$
+        & @$\tau$ (GB) $\downarrow$ \\
+        \midrule
+
+        \multirow{6}{*}{\textsc{KITTI}}
+        & \textsc{Cached-DFL}
+        & $\mathbf{49.4 \pm 4.1}$
+        & \textbf{0.291}
+        & $>204$
+        & $>4.1$ \\
+
+        & \textsc{V2V}
+        & $49.2 \pm 4.3$
+        & 0.294
+        & $>204$
+        & $>4.0$ \\
+
+        & \textsc{Learning}
+        & $49.0 \pm 4.3$
+        & 0.296
+        & $>204$
+        & $>2.9$ \\[1pt]
+
+        & \textsc{mmFedMC}
+        & $48.6 \pm 3.8$
+        & 0.299
+        & $>204$
+        & $>3.5$ \\
+
+        & \textsc{AutoFed}
+        & $48.8 \pm 3.8$
+        & 0.299
+        & $>204$
+        & $>4.0$ \\[1pt]
+
+        & \textsc{FACE}
+        & $48.9 \pm 4.1$
+        & 0.297
+        & $>204$
+        & $>3.6$ \\
+
+        \midrule
+
+        \multirow{6}{*}{\textsc{nuScenes}}
+        & \textsc{Cached-DFL}
+        & $66.5 \pm 1.7$
+        & 0.140
+        & $>204$
+        & $>4.0$ \\
+
+        & \textsc{V2V}
+        & $67.4 \pm 2.0$
+        & 0.134
+        & $>204$
+        & $>3.9$ \\
+
+        & \textsc{Learning}
+        & $66.9 \pm 1.3$
+        & 0.137
+        & $>204$
+        & $>2.9$ \\[1pt]
+
+        & \textsc{mmFedMC}
+        & $67.1 \pm 1.5$
+        & 0.136
+        & $>204$
+        & $>1.6$ \\
+
+        & \textsc{AutoFed}
+        & $\mathbf{67.5 \pm 1.6}$
+        & \textbf{0.132}
+        & $>204$
+        & $>3.8$ \\[1pt]
+
+        & \textsc{FACE}
+        & $67.1 \pm 1.6$
+        & 0.137
+        & $>204$
+        & $>2.9$ \\
+
+        \bottomrule
+        \multicolumn{6}{l}{
+            \scriptsize $\tau$: pre-specified target accuracy (55\%/69\%); $>$: not reached within the $204$-round horizon (lower bounds).
+        }
+    \end{tabular}
+\end{table}
