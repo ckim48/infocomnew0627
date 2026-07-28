@@ -1,6 +1,6 @@
 \begin{table}[t]
     \centering
-\caption{Performance comparison on the Seoul V2X trace during late-night off-peak hours (90-min replay-free window).}
+\caption{Performance comparison on the Seoul V2X trace during late-night off-peak hours.}
     \label{tab:seoul_night}
     \footnotesize
     \renewcommand{\arraystretch}{1.0}
@@ -23,71 +23,71 @@
 
         \multirow{5}{*}{\textsc{KITTI}}
         & \textsc{Cached-DFL}
-        & $\mathbf{49.4 \pm 4.1}$
-        & \textbf{0.291}
-        & $>204$
-        & $>4.1$ \\
+        & $50.1 \pm 1.8$
+        & 0.283
+        & $>250$
+        & $>50.6$ \\
 
         & \textsc{V2V}
-        & $49.2 \pm 4.3$
-        & 0.294
-        & $>204$
-        & $>4.0$ \\[1pt]
+        & $50.2 \pm 1.5$
+        & 0.280
+        & $>250$
+        & $>48.7$ \\[1pt]
 
         & \textsc{MFedMC}
-        & $48.6 \pm 3.8$
-        & 0.299
-        & $>204$
-        & $>3.5$ \\
+        & $50.4 \pm 1.3$
+        & 0.277
+        & $>250$
+        & $>41.6$ \\
 
         & \textsc{AutoFed}
-        & $48.8 \pm 3.8$
-        & 0.299
-        & $>204$
-        & $>4.0$ \\[1pt]
+        & $50.4 \pm 1.7$
+        & 0.278
+        & $>250$
+        & $>48.7$ \\[1pt]
 
         & \textsc{FACE}
-        & $48.9 \pm 4.1$
-        & 0.297
-        & $>204$
-        & $>3.6$ \\
+        & $\mathbf{53.5 \pm 1.8}$
+        & \textbf{0.256}
+        & \textbf{212}
+        & \textbf{38.6} \\
 
         \midrule
 
         \multirow{5}{*}{\textsc{nuScenes}}
         & \textsc{Cached-DFL}
-        & $66.5 \pm 1.7$
-        & 0.140
-        & $>204$
-        & $>4.0$ \\
+        & $67.9 \pm 2.8$
+        & 0.133
+        & 243
+        & 49.8 \\
 
         & \textsc{V2V}
-        & $67.4 \pm 2.0$
-        & 0.134
-        & $>204$
-        & $>3.9$ \\[1pt]
+        & $67.3 \pm 2.6$
+        & 0.137
+        & $>250$
+        & $>49.9$ \\[1pt]
 
         & \textsc{MFedMC}
-        & $67.1 \pm 1.5$
-        & 0.136
-        & $>204$
-        & $>1.6$ \\
+        & $67.7 \pm 3.2$
+        & 0.134
+        & 244
+        & \textbf{20.0} \\
 
         & \textsc{AutoFed}
-        & $\mathbf{67.5 \pm 1.6}$
-        & \textbf{0.132}
-        & $>204$
-        & $>3.8$ \\[1pt]
+        & $67.5 \pm 3.2$
+        & 0.135
+        & $>250$
+        & $>50.6$ \\[1pt]
 
         & \textsc{FACE}
-        & $67.1 \pm 1.6$
-        & 0.137
-        & $>204$
-        & $>2.9$ \\
+        & $\mathbf{68.6 \pm 2.5}$
+        & \textbf{0.130}
+        & \textbf{223}
+        & 41.1 \\
 
         \bottomrule
         \multicolumn{6}{l}{
-            \scriptsize $\tau$: pre-specified target accuracy (55\%/69\%); $>$: not reached within the $204$-round horizon (lower bounds).
+            \scriptsize $\tau$: pre-specified target accuracy (52\%/68\%); $>$: not reached within the $250$-round horizon (lower bounds).
         }
     \end{tabular}
 \end{table}

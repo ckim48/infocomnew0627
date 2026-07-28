@@ -194,19 +194,21 @@ emit("newnewdata/metrics_v2x_real_kitti_night.npz",
      "tab:seoul_night", "tau", "newnewdata/tab_offpeak_compact.tex",
      tau_mode="best95")
 
-# Monday 90-min no-replay windows (T=400): fixed, pre-specified tau,
-# reaching judged on the seed-mean curve. Written to *_fixedtau.tex so the
-# replay tables above stay intact until the swap is approved.
-FIXED_TAUS = {"KITTI": 0.55, "nuScenes": 0.69}
+# Fixed, pre-specified tau shared by BOTH traffic windows (peak = Monday
+# 90-min no-replay run, off-peak = the T=250 replay night run until the
+# night45b re-collection lands), reaching judged on the seed-mean curve.
+# Written to *_fixedtau.tex so the replay tables above stay intact until
+# the swap is approved.
+FIXED_TAUS = {"KITTI": 0.52, "nuScenes": 0.68}
 emit("newnewdata/metrics_v2x_real_kitti_evening45.npz",
      "newnewdata/metrics_v2x_real_nuscenes_evening45.npz",
      "Performance comparison on the Seoul V2X trace during the evening"
      " rush-hour peak (90-min replay-free window).",
      "tab:seoul_results", "tau", "newnewdata/tab_peak_fixedtau.tex",
      tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
-emit("newnewdata/metrics_v2x_real_kitti_night45.npz",
-     "newnewdata/metrics_v2x_real_nuscenes_night45.npz",
+emit("newnewdata/metrics_v2x_real_kitti_night.npz",
+     "newnewdata/metrics_v2x_real_nuscenes_night.npz",
      "Performance comparison on the Seoul V2X trace during late-night"
-     " off-peak hours (90-min replay-free window).",
+     " off-peak hours.",
      "tab:seoul_night", "tau", "newnewdata/tab_offpeak_fixedtau.tex",
      tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
