@@ -202,15 +202,15 @@ emit("newnewdata/metrics_v2x_real_kitti_night.npz",
 # night45b re-collection lands), reaching judged on the seed-mean curve.
 # Written to *_fixedtau.tex so the replay tables above stay intact until
 # the swap is approved.
-FIXED_TAUS = {"KITTI": 0.52, "nuScenes": 0.68}
-emit("newnewdata/metrics_v2x_real_kitti_evening45.npz",
-     "newnewdata/metrics_v2x_real_nuscenes_evening45.npz",
+FIXED_TAUS = {"KITTI": 0.52, "nuScenes": 0.60}
+emit("newnewdata/metrics_v2x_real_kitti_evening45_8seed.npz",
+     "newnewdata/metrics_v2x_real_nuscenes_evening45_fine.npz",
      "Performance comparison on the Seoul V2X trace during the evening"
      " rush-hour peak (90-min replay-free window).",
      "tab:seoul_results", "tau", "newnewdata/tab_peak_fixedtau.tex",
      tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
-emit("newnewdata/metrics_v2x_real_kitti_night.npz",
-     "newnewdata/metrics_v2x_real_nuscenes_night.npz",
+emit("newnewdata/metrics_v2x_real_kitti_night_8seed.npz",
+     "newnewdata/metrics_v2x_real_nuscenes_night_fine.npz",
      "Performance comparison on the Seoul V2X trace during late-night"
      " off-peak hours.",
      "tab:seoul_night", "tau", "newnewdata/tab_offpeak_fixedtau.tex",

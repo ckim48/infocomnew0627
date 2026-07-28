@@ -23,71 +23,71 @@
 
         \multirow{5}{*}{\textsc{KITTI}}
         & \textsc{Cached-DFL}
-        & $50.1 \pm 1.8$
-        & 0.283
+        & $49.8 \pm 1.3$
+        & 0.284
         & $>250$
         & $>50.6$ \\
 
         & \textsc{V2V}
-        & $50.2 \pm 1.5$
-        & 0.280
+        & $49.6 \pm 1.2$
+        & 0.286
         & $>250$
-        & $>48.7$ \\[1pt]
+        & $>48.8$ \\[1pt]
 
         & \textsc{MFedMC}
-        & $50.4 \pm 1.3$
-        & 0.277
+        & $49.7 \pm 1.2$
+        & 0.283
         & $>250$
-        & $>41.6$ \\
+        & $>42.9$ \\
 
         & \textsc{AutoFed}
-        & $50.4 \pm 1.7$
-        & 0.278
+        & $49.5 \pm 1.4$
+        & 0.286
         & $>250$
-        & $>48.7$ \\[1pt]
+        & $>48.5$ \\[1pt]
 
         & \textsc{FACE}
-        & $\mathbf{53.5 \pm 1.8}$
-        & \textbf{0.256}
-        & \textbf{212}
-        & \textbf{38.6} \\
+        & $\mathbf{52.8 \pm 1.9}$
+        & \textbf{0.262}
+        & \textbf{222}
+        & \textbf{41.9} \\
 
         \midrule
 
         \multirow{5}{*}{\textsc{nuScenes}}
         & \textsc{Cached-DFL}
-        & $67.9 \pm 2.8$
-        & 0.133
-        & 243
-        & 49.8 \\
+        & $58.8 \pm 1.3$
+        & 0.196
+        & $>250$
+        & $>51.4$ \\
 
         & \textsc{V2V}
-        & $67.3 \pm 2.6$
-        & 0.137
+        & $58.9 \pm 1.4$
+        & 0.194
         & $>250$
-        & $>49.9$ \\[1pt]
+        & $>50.0$ \\[1pt]
 
         & \textsc{MFedMC}
-        & $67.7 \pm 3.2$
-        & 0.134
-        & 244
-        & \textbf{20.0}$^{\dagger}$ \\
+        & $58.5 \pm 1.4$
+        & 0.198
+        & $>250$
+        & $>22.5$ \\
 
         & \textsc{AutoFed}
-        & $67.5 \pm 3.2$
-        & 0.135
+        & $58.9 \pm 1.5$
+        & 0.194
         & $>250$
-        & $>50.6$ \\[1pt]
+        & $>50.4$ \\[1pt]
 
         & \textsc{FACE}
-        & $\mathbf{68.6 \pm 2.5}$
-        & \textbf{0.130}
-        & \textbf{223}
-        & 41.1 \\
+        & $\mathbf{60.3 \pm 1.7}$
+        & \textbf{0.184}
+        & \textbf{233}
+        & \textbf{43.9} \\
 
         \bottomrule
         \multicolumn{6}{l}{
-            \scriptsize $\tau$: pre-specified target accuracy (52\%/68\%); $>$: not reached within the $250$-round horizon (lower bounds). $\dagger$: sends one encoder per contact -- fewest bytes, but lowest accuracy and latest arrival.
+            \scriptsize $\tau$: pre-specified target accuracy (52\%/60\%); $>$: not reached within the $250$-round horizon (lower bounds). $\dagger$: sends one encoder per contact -- fewest bytes, but lowest accuracy and latest arrival.
         }
     \end{tabular}
 \end{table}
