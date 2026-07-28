@@ -486,6 +486,11 @@ def _prep_data(cfg, seed, dataset="kitti", per_class=None, min_class_count=0,
     counts = np.bincount(y, minlength=NCLS)
     use_classes = [c for c in range(NCLS) if counts[c] >= max(min_class_count, 1)]
     cap = per_class if per_class else int(min(counts[c] for c in use_classes))
+    if os.environ.get("NUSC_KEEPALL") == "1" and dataset == "nuscenes":
+        # no class balancing: keep every sample of every retained class, so a
+        # harder fine-grained split does not shrink the data pool (preserves
+        # the rich-source asymmetry the encoder-exchange schemes rely on)
+        cap = int(max(counts[c] for c in use_classes))
     keep = []
     for c in use_classes:
         ci = np.where(y == c)[0]

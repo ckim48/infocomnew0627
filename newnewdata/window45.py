@@ -9,6 +9,11 @@ Fired by cron on Mon 2026-07-27 (weekday, matching the original windows):
 Self-guarding per output file, so re-fires are no-ops once done."""
 import os, sys, time, traceback
 
+# nuScenes runs use the fine-grained 3-class task (Car/Heavy/Pedestrian,
+# no class balancing) -- see sim/nuscenes_dataset.py NUSC_FINE.
+os.environ["NUSC_FINE"] = "1"
+os.environ["NUSC_KEEPALL"] = "1"
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
