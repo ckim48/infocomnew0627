@@ -1,0 +1,93 @@
+\begin{table}[t]
+    \centering
+\caption{Performance comparison on the Seoul V2X trace during late-night off-peak hours (90-min replay-free window).}
+    \label{tab:seoul_night}
+    \footnotesize
+    \renewcommand{\arraystretch}{1.0}
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{c|c|c|c|c|c}
+        \toprule
+        \multirow{2}{*}{\textsc{Dataset}}
+        & \multirow{2}{*}{\textsc{Method}}
+        & \multirow{2}{*}{\textsc{Accuracy}}
+        & \multirow{2}{*}{\textsc{Loss}}
+        & \textsc{Rounds.}
+        & \textsc{Comm.} \\
+
+        &
+        &
+        &
+        & @$\tau$ $\downarrow$
+        & @$\tau$ (GB) $\downarrow$ \\
+        \midrule
+
+        \multirow{5}{*}{\textsc{KITTI}}
+        & \textsc{Cached-DFL}
+        & $55.1 \pm 1.5$
+        & 0.236
+        & 281
+        & 29.8 \\
+
+        & \textsc{V2V}
+        & $55.2 \pm 1.2$
+        & 0.234
+        & 271
+        & 27.9 \\[1pt]
+
+        & \textsc{MFedMC}
+        & $54.3 \pm 1.3$
+        & 0.242
+        & 306
+        & 27.5 \\
+
+        & \textsc{AutoFed}
+        & $54.4 \pm 1.4$
+        & 0.241
+        & 302
+        & 30.6 \\[1pt]
+
+        & \textsc{FACE}
+        & $\mathbf{58.5 \pm 2.4}$
+        & \textbf{0.214}
+        & \textbf{227}
+        & \textbf{20.6} \\
+
+        \midrule
+
+        \multirow{5}{*}{\textsc{nuScenes}}
+        & \textsc{Cached-DFL}
+        & $62.7 \pm 1.7$
+        & 0.165
+        & 247
+        & 26.4 \\
+
+        & \textsc{V2V}
+        & $63.3 \pm 1.6$
+        & 0.160
+        & 239
+        & 25.2 \\[1pt]
+
+        & \textsc{MFedMC}
+        & $62.6 \pm 1.5$
+        & 0.165
+        & 262
+        & \textbf{12.2}$^{\dagger}$ \\
+
+        & \textsc{AutoFed}
+        & $63.3 \pm 2.0$
+        & \textbf{0.159}
+        & 241
+        & 25.4 \\[1pt]
+
+        & \textsc{FACE}
+        & $\mathbf{63.5 \pm 2.2}$
+        & 0.161
+        & \textbf{228}
+        & 20.2 \\
+
+        \bottomrule
+        \multicolumn{6}{l}{
+            \scriptsize $\tau$: pre-specified target accuracy (52\%/60\%); $>$: not reached within the $400$-round horizon (lower bounds). $\dagger$: sends one encoder per contact -- fewest bytes, but lowest accuracy and latest arrival.
+        }
+    \end{tabular}
+\end{table}
