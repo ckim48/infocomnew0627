@@ -29,6 +29,15 @@ try:
         collect_trace(duration_s=DUR, interval_s=10, out=RAW)
     else:
         log("raw exists, skipping collection")
+    import numpy as np
+    _d = np.load(RAW, allow_pickle=True)
+    _keep = ~np.isnan(_d["pos"][:, :, 0]).all(axis=1)
+    if (~_keep).sum():
+        log(f"trimming {int((~_keep).sum())}/{len(_keep)} empty snapshots")
+        np.savez_compressed(RAW, ids=_d["ids"], pos=_d["pos"][_keep],
+                            times=_d["times"][_keep])
+        if os.path.exists(CACHE):
+            os.remove(CACHE)
     from sim.config import Config
     from sim.v2x_trace import build_v2x_trace
     cfg = Config(); cfg.results_dir = "newnewdata"
