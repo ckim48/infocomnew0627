@@ -1,0 +1,13 @@
+window,observed_rounds,observed_min,contact_prob_top3_pct,contact_prob_top1_pct,blind_guess_pct,n_movers
+Rush-hour peak,15,2.5,39.08,19.19,37.5,7261
+Rush-hour peak,30,5.0,45.87,27.32,37.5,7261
+Rush-hour peak,60,10.0,57.83,37.5,37.5,7261
+Rush-hour peak,120,20.0,65.61,43.88,37.5,7261
+Rush-hour peak,180,30.0,66.89,45.28,37.5,7261
+Rush-hour peak,240,40.0,67.1,45.91,37.5,7261
+Late-night off-peak,15,2.5,40.08,22.18,37.5,9103
+Late-night off-peak,30,5.0,48.8,30.85,37.5,9103
+Late-night off-peak,60,10.0,57.98,38.99,37.5,9103
+Late-night off-peak,120,20.0,64.93,43.94,37.5,9103
+Late-night off-peak,180,30.0,72.86,48.01,37.5,9103
+Late-night off-peak,240,40.0,74.04,49.03,37.5,9103

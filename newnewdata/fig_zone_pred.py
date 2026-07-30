@@ -54,6 +54,7 @@ fig, axs = plt.subplots(1, 2, figsize=(6.9, 2.9))
 # --- (a) contact probability vs prediction horizon ---
 ax = axs[0]
 ax.axvspan(0, 60, color="#55A868", alpha=0.10)
+ax.text(56, 82.5, "$h{=}6$", ha="right", fontsize=8.5, color="#2E6E45")
 for win, c, mk in ((WINS[0], C_PK, "o"), (WINS[1], C_NG, "s")):
     ax.plot(SEC, col(win, "M3", "top1"), color=c, marker=mk, markersize=4.4,
             markerfacecolor="white", label=win)
@@ -79,9 +80,6 @@ ax.plot(mins, lcol(WINS[1], "top3"), color=C_NG, marker="s",
 ax.axhline(37.5, color="0.25", ls=":", lw=1.4)
 ax.text(41.0, 34.6, "blind guess (3 of 8 zones)", ha="right", fontsize=7,
         color="0.3")
-ax.text(0.03, 0.965, "top-3, 60 s ahead",
-        transform=ax.transAxes, ha="left", va="top", fontsize=8,
-        color="0.15")
 ax.set_xlabel("Observed statistics (minutes)")
 ax.set_ylabel("Contact probability (%)")
 ax.set_xlim(0, 42); ax.set_ylim(30, 80)
