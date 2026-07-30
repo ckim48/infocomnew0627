@@ -1,0 +1,17 @@
+window,horizon,markov_top1,markov_top3,uniform8,n_movers
+Rush-hour peak,1,0.3551,0.7623,0.1250,1918
+Rush-hour peak,2,0.3200,0.7183,0.1250,3450
+Rush-hour peak,3,0.2881,0.6524,0.1250,4658
+Rush-hour peak,6,0.2293,0.5300,0.1250,7044
+Rush-hour peak,12,0.1724,0.3880,0.1250,8954
+Rush-hour peak,18,0.1214,0.2760,0.1250,9062
+Rush-hour peak,24,0.0644,0.1729,0.1250,8931
+Rush-hour peak,30,0.0411,0.1256,0.1250,8656
+Late-night off-peak,1,0.4529,0.8377,0.1250,2453
+Late-night off-peak,2,0.4402,0.8056,0.1250,4414
+Late-night off-peak,3,0.3953,0.7318,0.1250,5861
+Late-night off-peak,6,0.2936,0.5939,0.1250,8399
+Late-night off-peak,12,0.1846,0.3968,0.1250,10116
+Late-night off-peak,18,0.1113,0.2766,0.1250,10101
+Late-night off-peak,24,0.0780,0.1922,0.1250,10014
+Late-night off-peak,30,0.0632,0.1455,0.1250,9760
