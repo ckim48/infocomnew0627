@@ -1,0 +1,7 @@
+window,model,top1,top3,n
+Rush-hour peak,M1,0.2293,0.5301,7044
+Rush-hour peak,M2,0.2605,0.7439,7044
+Rush-hour peak,M3,0.4893,0.9041,6943
+Late-night off-peak,M1,0.2936,0.5950,8399
+Late-night off-peak,M2,0.3259,0.7170,8399
+Late-night off-peak,M3,0.5441,0.9231,8286

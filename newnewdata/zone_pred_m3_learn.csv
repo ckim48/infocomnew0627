@@ -1,0 +1,13 @@
+window,L_rounds,top1,top3,n
+Rush-hour peak,15,0.1919,0.3908,7261
+Rush-hour peak,30,0.2732,0.4587,7261
+Rush-hour peak,60,0.3750,0.5783,7261
+Rush-hour peak,120,0.4388,0.6561,7261
+Rush-hour peak,180,0.4528,0.6689,7261
+Rush-hour peak,240,0.4591,0.6710,7261
+Late-night off-peak,15,0.2218,0.4008,9103
+Late-night off-peak,30,0.3085,0.4880,9103
+Late-night off-peak,60,0.3899,0.5798,9103
+Late-night off-peak,120,0.4394,0.6493,9103
+Late-night off-peak,180,0.4801,0.7286,9103
+Late-night off-peak,240,0.4903,0.7404,9103
