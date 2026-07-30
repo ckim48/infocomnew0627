@@ -29,7 +29,8 @@ K_RSU = 4
 R_V2I = 300.0                     # V2I range (m)
 device = _device()
 
-tr = np.load("newnewdata/v2x_seoul_trace_evening45.npz", allow_pickle=True)
+WINDOW = os.environ.get("CFL_WINDOW", "evening45")
+tr = np.load(f"newnewdata/v2x_seoul_trace_{WINDOW}.npz", allow_pickle=True)
 XY = tr["veh_xy"]                                  # rounds x N x 2 (m)
 KR, NV = XY.shape[0], XY.shape[1]
 
@@ -67,7 +68,7 @@ def run_one(scheme, ds, seed):
     mfl = RealMFL(cfg, np.random.default_rng(seed), avail, data, device=device)
     mfl.arch = arch
     n_top = max(int(SEL * mfl.N), 1)
-    acc_h, mb_h = [], []
+    acc_h, mb_h, vl_h = [], [], []
     for k in range(ROUNDS):
         cov = COVER[k % KR]
         mfl.local_train()
@@ -97,7 +98,9 @@ def run_one(scheme, ds, seed):
                 if r in mfl.avail[i] and cov[i]:            # covered only
                     mfl.enc[i][r].load_state_dict(
                         {kk: v.to(device) for kk, v in g.items()})
-        acc_h.append(float(mfl.evaluate("test").mean()))
+        accs = mfl.evaluate("test")
+        acc_h.append(float(accs.mean()))
+        vl_h.append(float(np.mean((1.0 - accs) ** 2)))
         mb_h.append(mb)
     pm = mfl.poor_mask()
     poor = float(mfl.evaluate("test")[pm].mean())
@@ -106,21 +109,22 @@ def run_one(scheme, ds, seed):
     del mfl
     if device == "cuda":
         torch.cuda.empty_cache()
-    return np.array(acc_h), np.array(mb_h), poor
+    return np.array(acc_h), np.array(mb_h), np.array(vl_h), poor
 
 
-for scheme in ("mmfedmc", "autofed"):
-    out_path = f"newnewdata/metrics_cfl_edge_{scheme}.npz"
+for scheme in os.environ.get("CFL_SCHEMES", "mmfedmc,autofed").split(","):
+    out_path = f"newnewdata/metrics_cfl_edge_{scheme}_{WINDOW}.npz"
     if os.path.exists(out_path):
         print(f"{out_path} exists, skipping"); continue
     out = {}
     for ds in ("kitti", "nuscenes"):
-        A, M, P = [], [], []
+        A, M, V, P = [], [], [], []
         for sd in SEEDS:
-            a, m, p = run_one(scheme, ds, sd)
-            A.append(a); M.append(m); P.append(p)
+            a, m, v, p = run_one(scheme, ds, sd)
+            A.append(a); M.append(m); V.append(v); P.append(p)
         out[f"{ds}__acc_all"] = np.stack(A)
         out[f"{ds}__mb_all"] = np.stack(M)
+        out[f"{ds}__vloss_all"] = np.stack(V)
         out[f"{ds}__poor"] = np.array(P)
     np.savez_compressed(out_path, **out)
     print("saved", out_path, flush=True)
