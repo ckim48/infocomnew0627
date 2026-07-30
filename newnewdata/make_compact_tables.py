@@ -209,9 +209,9 @@ emit("newnewdata/metrics_v2x_real_kitti_evening45_8seed.npz",
      " rush-hour peak (90-min replay-free window).",
      "tab:seoul_results", "tau", "newnewdata/tab_peak_fixedtau.tex",
      tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
-emit("newnewdata/metrics_v2x_real_kitti_night_8seed.npz",
-     "newnewdata/metrics_v2x_real_nuscenes_night_fine.npz",
+emit("newnewdata/metrics_v2x_real_kitti_nightw23.npz",
+     "newnewdata/metrics_v2x_real_nuscenes_nightw23_fine.npz",
      "Performance comparison on the Seoul V2X trace during late-night"
-     " off-peak hours.",
+     " off-peak hours (90-min replay-free window).",
      "tab:seoul_night", "tau", "newnewdata/tab_offpeak_fixedtau.tex",
      tau_mode="fixed", taus=FIXED_TAUS, exclude=("Learning-aware",))
