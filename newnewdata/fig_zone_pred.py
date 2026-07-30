@@ -55,19 +55,12 @@ fig, axs = plt.subplots(1, 2, figsize=(6.9, 2.9))
 ax = axs[0]
 ax.axvspan(0, 60, color="#55A868", alpha=0.10)
 for win, c, mk in ((WINS[0], C_PK, "o"), (WINS[1], C_NG, "s")):
-    ax.plot(SEC, col(win, "M1", "top1"), color=c, ls="--", lw=1.2, alpha=0.75)
     ax.plot(SEC, col(win, "M3", "top1"), color=c, marker=mk, markersize=4.4,
             markerfacecolor="white", label=win)
 ax.axhline(BASE, color="0.25", ls=":", lw=1.4)
 ax.text(303, BASE + 1.5, "blind guess (adjacent zone)", ha="right",
         fontsize=7, color="0.3")
-leg1 = ax.legend(fontsize=7.5, loc="upper right")
-ax.legend(handles=[Line2D([], [], color="0.2", lw=1.6,
-                          label="direction-conditioned"),
-                   Line2D([], [], color="0.2", ls="--", lw=1.2,
-                          label="memoryless (1st-order)")],
-          fontsize=7.5, loc="center right", bbox_to_anchor=(1.0, 0.56))
-ax.add_artist(leg1)
+ax.legend(fontsize=7.5, loc="upper right")
 ax.set_xlabel("Prediction horizon (s)")
 ax.set_ylabel("Contact probability (%)")
 ax.set_xlim(0, 310); ax.set_ylim(0, 88)
