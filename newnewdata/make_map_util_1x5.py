@@ -56,6 +56,10 @@ print("wrote", csv_path)
 
 # ---- 1x5 figure ----
 import contextily as cx
+BASEMAP = os.environ.get("BASEMAP", "positron")   # positron | satellite
+TILES = (cx.providers.Esri.WorldImagery if BASEMAP == "satellite"
+         else cx.providers.CartoDB.Positron)
+SUFFIX = "_sat" if BASEMAP == "satellite" else ""
 cmap = plt.get_cmap("RdYlGn"); norm = Normalize(VMIN, VMAX)
 pad = 400
 xlim = (vm[:, 0].min() - pad, vm[:, 0].max() + pad)
@@ -72,7 +76,8 @@ for ax, (name, vals) in zip(axes, PANELS):
     ax.set_xlim(*xlim); ax.set_ylim(*ylim)
     ax.set_aspect(1.0); ax.set_xticks([]); ax.set_yticks([])
     cx.add_basemap(ax, crs="EPSG:3857",
-                   source=cx.providers.CartoDB.Positron, zoom=15,
+                   source=TILES, zoom=15,
+                   attribution=False if BASEMAP == "satellite" else None,
                    attribution_size=2)
     ax.scatter(vm[:, 0], vm[:, 1], c=acc, cmap=cmap, norm=norm,
                s=26, lw=0, alpha=0.20, zorder=3)
@@ -98,7 +103,7 @@ cbar = fig.colorbar(sm, ax=axes.tolist(), orientation="horizontal",
 cbar.set_label("Achieved statistical utility (mean above each panel)",
                fontsize=7.5)
 cbar.ax.tick_params(labelsize=7)
-out = "Figures/fig_seoul_map_util_1x5.png"
+out = f"Figures/fig_seoul_map_util_1x5{SUFFIX}.png"
 for ext in ("png", "pdf"):
     fig.savefig(out.replace(".png", "." + ext), dpi=260,
                 bbox_inches="tight")
