@@ -1,0 +1,31 @@
+    [v2x-trace] loading cached newnewdata/v2x_seoul_trace_evening45.npz
+[1/3] Building real Seoul V2X mobility + GAT ...
+      Seoul V2X: |V|=38091, N=75, K=444
+    [HGAT] epoch   0  CE-loss 0.2678
+    [HGAT] epoch  30  CE-loss 0.2046
+    [HGAT] epoch  60  CE-loss 0.2039
+    [HGAT] epoch  90  CE-loss 0.2035
+    [HGAT] epoch 119  CE-loss 0.2033
+      running 800 FL rounds (trace K=444, replayed cyclically)
+[2/3] Loading real KITTI multimodal data ...
+  [nusc] loading cached dataset results/nuscenes_mm_fine3.npz
+  [data] balanced classes [3758  912 2052]  train 4572 val 806 test 1344
+[3/3] REAL FL over seeds [2026, 2027, 2028] ...
+  [seed 2026] Proposed         acc 0.663 poor 0.649 tx/round 13.3
+  [seed 2026] Caching-assisted acc 0.658 poor 0.643 tx/round 15.6
+  [seed 2026] NoComm           acc 0.638 poor 0.622 tx/round 0.0
+  [seed 2026] FullContact      acc 0.736 poor 0.725 tx/round 12072.0
+  [seed 2027] Proposed         acc 0.681 poor 0.641 tx/round 13.1
+  [seed 2027] Caching-assisted acc 0.674 poor 0.634 tx/round 14.9
+  [seed 2027] NoComm           acc 0.651 poor 0.604 tx/round 0.0
+  [seed 2027] FullContact      acc 0.739 poor 0.716 tx/round 12338.0
+  [seed 2028] Proposed         acc 0.670 poor 0.625 tx/round 13.9
+  [seed 2028] Caching-assisted acc 0.668 poor 0.623 tx/round 15.3
+  [seed 2028] NoComm           acc 0.647 poor 0.597 tx/round 0.0
+  [seed 2028] FullContact      acc 0.749 poor 0.717 tx/round 12624.0
+=== REAL FL on Seoul V2X — final ===
+  FACE             acc 0.671  poor 0.638
+  Cached-DFL       acc 0.667  poor 0.633
+  No-comm          acc 0.645  poor 0.608
+  Full-contact     acc 0.741  poor 0.720
+[T800] done in 266 min
