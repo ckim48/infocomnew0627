@@ -1004,16 +1004,17 @@ def fig_deadline_calib_split(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
                                      for t in range(K - dl + 1)]).mean()
                            for dl in deadlines])
             ys = np.array(ys)
-            ax.errorbar(deadlines, ys.mean(0), yerr=ys.std(0),
+            secs = [10 * d for d in deadlines]      # 1 round ~= 10 s
+            ax.errorbar(secs, ys.mean(0), yerr=ys.std(0),
                         label=DISPLAY.get(sn, sn), markersize=4.5,
                         markerfacecolor="white", markeredgewidth=1.0,
                         capsize=2.0, **STY[sn])
         ax.set_title(label, fontsize=12)
         ax.set_xscale("log")
-        ax.set_xticks(deadlines)
-        ax.set_xticklabels([str(x) for x in deadlines])
+        ax.set_xticks([10 * d for d in deadlines])
+        ax.set_xticklabels([str(10 * d) for d in deadlines])
         ax.minorticks_off()
-        ax.set_xlabel("Delivery deadline $d$ (rounds)")
+        ax.set_xlabel("Delivery deadline (s)")
         ax.set_ylabel("Delivery success" if col == 0 else "")
         ax.set_ylim(0, 0.8)
         ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
