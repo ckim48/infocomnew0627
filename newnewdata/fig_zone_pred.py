@@ -73,16 +73,25 @@ ax.text(0.5, -0.35, "(a)", transform=ax.transAxes, ha="center",
 # --- (b) contact probability as the statistics accumulate ---
 ax = axs[1]
 mins = np.array(LS) / 6.0
-ax.plot(mins, lcol(WINS[0], "top3"), color=C_PK, marker="o",
-        markersize=4.5, markerfacecolor="white")
-ax.plot(mins, lcol(WINS[1], "top3"), color=C_NG, marker="s",
-        markersize=4.2, markerfacecolor="white")
+# curves start at the adjacency-prior (blind) level with zero history
+for win, c, mk, ms in ((WINS[0], C_PK, "o", 4.5), (WINS[1], C_NG, "s", 4.2)):
+    for key, base, ls in (("top3", 37.5, "-"), ("top1", 12.5, "--")):
+        y = lcol(win, key)
+        ax.plot(np.r_[0, mins], np.r_[base, y], color=c, ls=ls,
+                lw=1.8 if ls == "-" else 1.3)
+        ax.plot(mins, y, color=c, ls="none", marker=mk, markersize=ms,
+                markerfacecolor="white")
 ax.axhline(37.5, color="0.25", ls=":", lw=1.4)
-ax.text(41.0, 34.6, "blind guess (3 of 8 zones)", ha="right", fontsize=7,
+ax.axhline(12.5, color="0.25", ls=":", lw=1.4)
+ax.text(20.5, 33.6, "blind guess (top-3)", ha="center", fontsize=7,
         color="0.3")
+ax.text(20.5, 8.6, "blind guess (top-1)", ha="center", fontsize=7,
+        color="0.3")
+ax.text(41.0, 77.0, "top-3", ha="right", fontsize=8, color="0.15")
+ax.text(41.0, 52.0, "top-1", ha="right", fontsize=8, color="0.15")
 ax.set_xlabel("Observed statistics (minutes)")
 ax.set_ylabel("Prediction accuracy (%)")
-ax.set_xlim(0, 42); ax.set_ylim(30, 80)
+ax.set_xlim(0, 42); ax.set_ylim(0, 82)
 ax.grid(True, ls="--", lw=0.6, alpha=0.45)
 ax.text(0.5, -0.35, "(b)", transform=ax.transAxes, ha="center",
         va="top", fontsize=12)
