@@ -1014,7 +1014,7 @@ def fig_deadline_calib_split(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
         ax.set_xticks([10 * d for d in deadlines])
         ax.set_xticklabels([str(10 * d) for d in deadlines])
         ax.minorticks_off()
-        ax.set_xlabel("Delivery deadline (s)")
+        ax.set_xlabel("Elapsed time (s)")
         ax.set_ylabel("Delivery success" if col == 0 else "")
         ax.set_ylim(0, 0.8)
         ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
