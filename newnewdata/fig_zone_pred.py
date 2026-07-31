@@ -63,7 +63,7 @@ ax.text(303, BASE + 1.5, "blind guess (adjacent zone)", ha="right",
         fontsize=7, color="0.3")
 ax.legend(fontsize=7.5, loc="upper right")
 ax.set_xlabel("Prediction horizon (s)")
-ax.set_ylabel("Contact probability (%)")
+ax.set_ylabel("Prediction accuracy (%)")
 ax.set_xlim(0, 310); ax.set_ylim(0, 88)
 ax.set_xticks([0, 60, 120, 180, 240, 300])
 ax.grid(True, ls="--", lw=0.6, alpha=0.45)
@@ -81,7 +81,7 @@ ax.axhline(37.5, color="0.25", ls=":", lw=1.4)
 ax.text(41.0, 34.6, "blind guess (3 of 8 zones)", ha="right", fontsize=7,
         color="0.3")
 ax.set_xlabel("Observed statistics (minutes)")
-ax.set_ylabel("Contact probability (%)")
+ax.set_ylabel("Prediction accuracy (%)")
 ax.set_xlim(0, 42); ax.set_ylim(30, 80)
 ax.grid(True, ls="--", lw=0.6, alpha=0.45)
 ax.text(0.5, -0.35, "(b)", transform=ax.transAxes, ha="center",
