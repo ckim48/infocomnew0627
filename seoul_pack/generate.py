@@ -909,8 +909,8 @@ def fig_deadline_calib_2x2(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
                 transform=ax.transAxes, ha="left", va="top", fontsize=9)
         ax.set_xlim(0, lim)
         ax.set_ylim(0, lim)
-        ax.set_xlabel(r"Predicted gain $\widehat{v}_{i,x}$ ($\times 10^{-3}$)")
-        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)"
+        ax.set_xlabel(r"Predicted gain $\widetilde{v}_{j,x}$ ($\times 10^{-3}$)")
+        ax.set_ylabel(r"Realized gain $v_{j,x}$ ($\times 10^{-3}$)"
                       if col == 0 else "")
         if col == 0:
             ax.legend(fontsize=7.5, loc="upper left",
@@ -1053,8 +1053,8 @@ def fig_deadline_calib_split(deadlines=(1, 2, 3, 5, 10, 20), warmup=30,
         ax.set_title(label, fontsize=12)
         ax.set_xlim(0, lim)
         ax.set_ylim(0, lim)
-        ax.set_xlabel(r"Predicted gain $\widehat{v}_{i,x}$ ($\times 10^{-3}$)")
-        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)"
+        ax.set_xlabel(r"Predicted gain $\widetilde{v}_{j,x}$ ($\times 10^{-3}$)")
+        ax.set_ylabel(r"Realized gain $v_{j,x}$ ($\times 10^{-3}$)"
                       if col == 0 else "")
         if col == 0:
             ax.legend(fontsize=7.5, loc="upper left",
@@ -1341,7 +1341,7 @@ def fig_calib_bars(warmup=30, nbins=10):
                alpha=0.85, edgecolor="black", lw=0.5)
         ax.set_title(label, fontsize=12)
         ax.set_xlabel("Predicted-gain decile")
-        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)"
+        ax.set_ylabel(r"Realized gain $v_{j,x}$ ($\times 10^{-3}$)"
                       if col == 0 else "")
         ax.set_xticks([1, 3, 5, 7, 9, 10])
         ax.text(0.05, 0.93,
@@ -1446,8 +1446,8 @@ def fig_calib_recal(warmup=30, nbins=6):
                 transform=ax.transAxes, ha="left", va="top", fontsize=9)
         ax.set_title(label, fontsize=12)
         ax.set_xlim(0, lim); ax.set_ylim(0, lim)
-        ax.set_xlabel(r"Predicted gain $\widehat{v}_{i,x}$ ($\times 10^{-3}$)")
-        ax.set_ylabel(r"Realized gain ($\times 10^{-3}$)" if col == 0 else "")
+        ax.set_xlabel(r"Predicted gain $\widetilde{v}_{j,x}$ ($\times 10^{-3}$)")
+        ax.set_ylabel(r"Realized gain $v_{j,x}$ ($\times 10^{-3}$)" if col == 0 else "")
         if col == 0:
             ax.legend(fontsize=7.5, loc="upper left",
                       bbox_to_anchor=(0.0, 0.80))
